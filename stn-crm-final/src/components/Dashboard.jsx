@@ -205,8 +205,8 @@ export default function Dashboard({ session }) {
         {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
-        {view==='projects' && <ProjectsView projects={projects} clientName={clientName} showView={showView} onRefresh={loadAll} />}
-        {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clientName={clientName} showView={showView} onRefresh={loadAll} />}
+        {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
+        {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} />}
       </div>
@@ -465,23 +465,25 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
   )
 }
 
-function ProjectsView({ projects, clientName, showView, onRefresh }) {
+function ProjectsView({ projects, clients, clientName, showView, onRefresh }) {
   const [q, setQ] = useState('')
   const filtered = projects.filter(p => !q||p.name.toLowerCase().includes(q.toLowerCase())||clientName(p.client_id).toLowerCase().includes(q.toLowerCase()))
   return (
     <div>
-      <div className="topbar"><h2>Projecten</h2><div className="topbar-right"><div className="search-wrap"><span className="search-icon">⌕</span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div><ProjectModal clients={[]} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Nieuw project</button>} /></div></div>
+      <div className="topbar"><h2>Projecten</h2><div className="topbar-right"><div className="search-wrap"><span className="search-icon">⌕</span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div><ProjectModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Nieuw project</button>} /></div></div>
       <div className="content">
         <div className="sc" style={{padding:0}}>
           <div className="pl-header"><div>Project</div><div>Klant</div><div>Deadline</div><div>Status</div><div>Info</div></div>
           {!filtered.length ? <div className="empty">Geen projecten</div> : filtered.map(p => {
             const dd=p.deadline?daysN(p.deadline):null; const dC=dd!=null?(dd<0?'var(--red-text)':dd<=7?'var(--amber-text)':'var(--text-muted)'):'var(--text-muted)'
             return <div key={p.id} className="pl-row" onClick={()=>showView('project-detail',p.id)}>
-              <div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:10,height:10,borderRadius:'50%',background:p.color,flexShrink:0}}></div><div style={{fontWeight:500,fontSize:14}}>{p.name}</div></div>
+              <div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:10,height:10,borderRadius:'50%',background:p.color,flexShrink:0}}></div><div><div style={{fontWeight:500,fontSize:14}}>{p.name}</div>{p.url&&<div style={{fontSize:11,color:'var(--blue-text)'}}>{p.url.replace('https://','').replace('http://','')}</div>}</div></div>
               <div style={{fontSize:13,color:'var(--text-muted)'}}>{clientName(p.client_id)||'—'}</div>
               <div style={{fontSize:13,color:dC}}>{p.deadline?fdate(p.deadline):'—'}</div>
               <div><Badge s={p.status} /></div>
-              <div style={{fontSize:12,color:'var(--text-muted)'}}>{p.url?<a href={p.url} target="_blank" rel="noreferrer" style={{color:'var(--blue-text)'}} onClick={e=>e.stopPropagation()}>{p.url.replace('https://','')}</a>:'—'}</div>
+              <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                {p.url&&<a href={p.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>↗ Open</a>}
+              </div>
             </div>
           })}
         </div>
@@ -490,7 +492,7 @@ function ProjectsView({ projects, clientName, showView, onRefresh }) {
   )
 }
 
-function ProjectDetailView({ project, clientName, showView, onRefresh }) {
+function ProjectDetailView({ project, clients, clientName, showView, onRefresh }) {
   const [tasks, setTasks] = useState([])
   useEffect(() => { db.getTasks(project.id).then(setTasks) }, [project.id])
   const refreshTasks = () => db.getTasks(project.id).then(setTasks)
@@ -507,7 +509,7 @@ function ProjectDetailView({ project, clientName, showView, onRefresh }) {
     <div>
       <div className="topbar">
         <div className="bc"><span className="crumb" onClick={()=>showView('projects')}>Projecten</span><span className="sep">›</span><span className="bactive">{project.name}</span></div>
-        <div className="topbar-right"><ProjectModal project={project} clients={[]} onSave={onRefresh} trigger={<button className="btn btn-ghost btn-sm">Bewerken</button>} /><button className="btn btn-danger btn-sm" onClick={delProject}>Verwijderen</button></div>
+        <div className="topbar-right"><ProjectModal project={project} clients={clients} onSave={onRefresh} trigger={<button className="btn btn-ghost btn-sm">Bewerken</button>} /><button className="btn btn-danger btn-sm" onClick={delProject}>Verwijderen</button></div>
       </div>
       <div className="content">
         <div className="detail-grid">
@@ -532,7 +534,7 @@ function ProjectDetailView({ project, clientName, showView, onRefresh }) {
                 <Badge s={project.status} />
                 <div style={{marginTop:12}}>
                   {cn&&<div className="info-row"><span className="info-label">Klant</span><span className="info-val" style={{cursor:'pointer',color:'var(--blue-text)'}} onClick={()=>showView('client-detail',project.client_id)}>{cn}</span></div>}
-                  {project.url&&<div className="info-row"><span className="info-label">URL</span><a href={project.url} target="_blank" rel="noreferrer" style={{color:'var(--blue-text)',fontSize:13}}>{project.url}</a></div>}
+                  {project.url&&<div className="info-row"><span className="info-label">URL</span><div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><a href={project.url} target="_blank" rel="noreferrer" style={{color:'var(--blue-text)',fontSize:13,flex:1}}>{project.url}</a><a href={project.url} target="_blank" rel="noreferrer" className="btn btn-primary btn-xs" style={{textDecoration:'none',flexShrink:0}}>↗ Open site</a></div></div>}
                   {project.start_date&&<div className="info-row"><span className="info-label">Startdatum</span><span className="info-val">{fdate(project.start_date)}</span></div>}
                   {project.deadline&&<div className="info-row"><span className="info-label">Deadline</span><span className="info-val">{fdate(project.deadline)}</span></div>}
                 </div>
