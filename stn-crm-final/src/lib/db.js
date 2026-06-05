@@ -197,3 +197,31 @@ export function calcMRR(recurringList) {
     .filter(r => r.status === 'actief')
     .reduce((s, r) => s + Number(r.amount) / (FREQ_MONTHS[r.freq] || 1), 0)
 }
+
+// ── Hosting ────────────────────────────────────────────────────────────────────
+export async function getAllHosting() {
+  const { data, error } = await supabase
+    .from('hosting').select('*, clients(fname, lname, company)').order('domain_expires', { ascending: true, nullsFirst: false })
+  if (error) throw error
+  return data
+}
+export async function getHostingForClient(clientId) {
+  const { data, error } = await supabase
+    .from('hosting').select('*').eq('client_id', clientId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createHosting(item) {
+  const { data, error } = await supabase.from('hosting').insert([item]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateHosting(id, updates) {
+  const { data, error } = await supabase.from('hosting').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteHosting(id) {
+  const { error } = await supabase.from('hosting').delete().eq('id', id)
+  if (error) throw error
+}
