@@ -1,0 +1,199 @@
+import { supabase } from './supabase'
+
+// ── Clients ────────────────────────────────────────────────────────────────────
+export async function getClients() {
+  const { data, error } = await supabase
+    .from('clients').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createClient(client) {
+  const { data, error } = await supabase.from('clients').insert([client]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateClient(id, updates) {
+  const { data, error } = await supabase.from('clients').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteClient(id) {
+  const { error } = await supabase.from('clients').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Projects ───────────────────────────────────────────────────────────────────
+export async function getProjects() {
+  const { data, error } = await supabase
+    .from('projects').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createProject(project) {
+  const { data, error } = await supabase.from('projects').insert([project]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateProject(id, updates) {
+  const { data, error } = await supabase.from('projects').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteProject(id) {
+  const { error } = await supabase.from('projects').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Tasks ──────────────────────────────────────────────────────────────────────
+export async function getTasks(projectId) {
+  const { data, error } = await supabase
+    .from('tasks').select('*').eq('project_id', projectId).order('created_at', { ascending: true })
+  if (error) throw error
+  return data
+}
+export async function getAllTasks() {
+  const { data, error } = await supabase
+    .from('tasks').select('*, projects(id, name, color, client_id)').order('created_at', { ascending: true })
+  if (error) throw error
+  return data
+}
+export async function createTask(task) {
+  const { data, error } = await supabase.from('tasks').insert([task]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateTask(id, updates) {
+  const { data, error } = await supabase.from('tasks').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteTask(id) {
+  const { error } = await supabase.from('tasks').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Invoices ───────────────────────────────────────────────────────────────────
+export async function getInvoices(clientId) {
+  const { data, error } = await supabase
+    .from('invoices').select('*').eq('client_id', clientId).order('date', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function getAllInvoices() {
+  const { data, error } = await supabase
+    .from('invoices').select('*, clients(fname, lname, company)').order('date', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createInvoice(invoice) {
+  const { data, error } = await supabase.from('invoices').insert([invoice]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateInvoice(id, updates) {
+  const { data, error } = await supabase.from('invoices').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteInvoice(id) {
+  const { error } = await supabase.from('invoices').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Recurring ──────────────────────────────────────────────────────────────────
+export async function getRecurring(clientId) {
+  const { data, error } = await supabase
+    .from('recurring').select('*').eq('client_id', clientId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function getAllRecurring() {
+  const { data, error } = await supabase
+    .from('recurring').select('*, clients(fname, lname)').order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createRecurring(rec) {
+  const { data, error } = await supabase.from('recurring').insert([rec]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateRecurring(id, updates) {
+  const { data, error } = await supabase.from('recurring').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteRecurring(id) {
+  const { error } = await supabase.from('recurring').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Notes ──────────────────────────────────────────────────────────────────────
+export async function getNotes(clientId) {
+  const { data, error } = await supabase
+    .from('notes').select('*').eq('client_id', clientId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createNote(note) {
+  const { data, error } = await supabase.from('notes').insert([note]).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteNote(id) {
+  const { error } = await supabase.from('notes').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Recurring invoice processing ───────────────────────────────────────────────
+const FREQ_MONTHS = { maandelijks: 1, kwartaallijks: 3, jaarlijks: 12 }
+
+function addMonths(dateStr, n) {
+  const d = new Date(dateStr)
+  d.setMonth(d.getMonth() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+export function nextDueDate(r) {
+  if (r.status === 'gestopt') return null
+  const step = FREQ_MONTHS[r.freq] || 1
+  let d = r.start_date
+  const today = new Date().toISOString().slice(0, 10)
+  while (d <= today) d = addMonths(d, step)
+  if (r.end_date && d > r.end_date) return null
+  return d
+}
+
+export async function processRecurringForClient(clientId) {
+  const recurring = await getRecurring(clientId)
+  const invoices = await getInvoices(clientId)
+  const today = new Date().toISOString().slice(0, 10)
+
+  for (const r of recurring) {
+    if (r.status === 'gestopt') continue
+    const step = FREQ_MONTHS[r.freq] || 1
+    let d = r.start_date
+    const endDate = r.end_date || today
+    while (d <= endDate) {
+      const already = invoices.some(i => i.recurring_id === r.id && i.date === d)
+      if (!already) {
+        await createInvoice({
+          client_id: clientId,
+          description: r.description + ' (' + r.freq + ')',
+          amount: r.amount,
+          date: d,
+          due_date: addMonths(d, 1),
+          status: 'verzonden',
+          recurring_id: r.id
+        })
+      }
+      d = addMonths(d, step)
+    }
+  }
+}
+
+export function calcMRR(recurringList) {
+  return recurringList
+    .filter(r => r.status === 'actief')
+    .reduce((s, r) => s + Number(r.amount) / (FREQ_MONTHS[r.freq] || 1), 0)
+}
