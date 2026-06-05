@@ -697,8 +697,15 @@ function ClientModal({ client, onSave, trigger }) {
   async function save() {
     if(!form.fname&&!form.lname) return alert('Vul een naam in.')
     setSaving(true)
-    if(client) await db.updateClient(client.id,form); else await db.createClient(form)
-    setSaving(false); setOpen(false); onSave()
+    try {
+      if(client) await db.updateClient(client.id, form)
+      else await db.createClient(form)
+      setOpen(false); onSave()
+    } catch(e) {
+      alert('Fout bij opslaan: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
   }
   return <>
     {React.cloneElement(trigger,{onClick:openModal})}
@@ -724,9 +731,25 @@ function ProjectModal({ project, clients, defaultClientId, onSave, trigger }) {
   async function save() {
     if(!form.name.trim()) return alert('Vul een projectnaam in.')
     setSaving(true)
-    const data={...form,client_id:form.client_id||null,color}
-    if(project) await db.updateProject(project.id,data); else await db.createProject(data)
-    setSaving(false); setOpen(false); onSave()
+    try {
+      const data={
+        name: form.name.trim(),
+        client_id: form.client_id || null,
+        url: form.url || null,
+        start_date: form.start_date || null,
+        deadline: form.deadline || null,
+        status: form.status,
+        color
+      }
+      if(project) await db.updateProject(project.id, data)
+      else await db.createProject(data)
+      setOpen(false)
+      onSave()
+    } catch(e) {
+      alert('Fout bij opslaan: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
   }
   return <>
     {React.cloneElement(trigger,{onClick:openModal})}
@@ -750,8 +773,14 @@ function TaskModal({ projectId, onSave, trigger }) {
   async function save() {
     if(!form.description.trim()) return
     setSaving(true)
-    await db.createTask({ project_id: projectId, description: form.description.trim(), due_date: form.due_date||null, priority: form.priority, done: false })
-    setSaving(false); setOpen(false); onSave()
+    try {
+      await db.createTask({ project_id: projectId, description: form.description.trim(), due_date: form.due_date||null, priority: form.priority, done: false })
+      setOpen(false); onSave()
+    } catch(e) {
+      alert('Fout bij opslaan: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
   }
   return <>
     {React.cloneElement(trigger,{onClick:()=>{setForm({description:'',due_date:'',priority:'normaal'});setOpen(true)}})}
@@ -771,8 +800,14 @@ function InvoiceModal({ clientId, onSave, trigger }) {
   async function save() {
     if(!form.description.trim()||!form.amount) return
     setSaving(true)
-    await db.createInvoice({ client_id: clientId, description: form.description, amount: parseFloat(form.amount), date: form.date, due_date: form.due_date||null, status: form.status })
-    setSaving(false); setOpen(false); onSave()
+    try {
+      await db.createInvoice({ client_id: clientId, description: form.description, amount: parseFloat(form.amount), date: form.date, due_date: form.due_date||null, status: form.status })
+      setOpen(false); onSave()
+    } catch(e) {
+      alert('Fout bij opslaan: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
   }
   return <>
     {React.cloneElement(trigger,{onClick:()=>{setForm({description:'',amount:'',date:today(),due_date:'',status:'concept'});setOpen(true)}})}
@@ -793,8 +828,14 @@ function RecurringModal({ clientId, onSave, trigger }) {
   async function save() {
     if(!form.description.trim()||!form.amount) return alert('Vul omschrijving en bedrag in.')
     setSaving(true)
-    await db.createRecurring({ client_id: clientId, description: form.description, amount: parseFloat(form.amount), freq: form.freq, start_date: form.start_date||today(), end_date: form.end_date||null, status: form.status })
-    setSaving(false); setOpen(false); onSave()
+    try {
+      await db.createRecurring({ client_id: clientId, description: form.description, amount: parseFloat(form.amount), freq: form.freq, start_date: form.start_date||today(), end_date: form.end_date||null, status: form.status })
+      setOpen(false); onSave()
+    } catch(e) {
+      alert('Fout bij opslaan: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
   }
   return <>
     {React.cloneElement(trigger,{onClick:()=>{setForm({description:'',amount:'',freq:'maandelijks',start_date:today(),end_date:'',status:'actief'});setOpen(true)}})}
