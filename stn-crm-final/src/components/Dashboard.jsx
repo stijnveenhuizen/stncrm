@@ -46,14 +46,15 @@ export default function Dashboard({ session }) {
   const [allTasks, setAllTasks] = useState([])
   const [allInvoices, setAllInvoices] = useState([])
   const [allRecurring, setAllRecurring] = useState([])
+  const [allHosting, setAllHosting] = useState([])
   const [loading, setLoading] = useState(true)
 
   const loadAll = useCallback(async () => {
     try {
-      const [c, p, i, r, t] = await Promise.all([
-        db.getClients(), db.getProjects(), db.getAllInvoices(), db.getAllRecurring(), db.getAllTasks()
+      const [c, p, i, r, t, h] = await Promise.all([
+        db.getClients(), db.getProjects(), db.getAllInvoices(), db.getAllRecurring(), db.getAllTasks(), db.getAllHosting()
       ])
-      setClients(c); setProjects(p); setAllInvoices(i); setAllRecurring(r)
+      setClients(c); setProjects(p); setAllInvoices(i); setAllRecurring(r); setAllHosting(h)
       setAllTasks(t.map(task => ({ ...task, project: task.projects })))
     } catch(e) { console.error(e) }
     setLoading(false)
@@ -195,6 +196,7 @@ export default function Dashboard({ session }) {
           <button className={`nav-item${['projects','project-detail'].includes(view)?' active':''}`} onClick={() => showView('projects')}>▣ &nbsp;Projecten</button>
           <button className={`nav-item${view==='tasks'?' active':''}`} onClick={() => showView('tasks')}>◻ &nbsp;Alle taken</button>
           <button className={`nav-item${view==='finance'?' active':''}`} onClick={() => showView('finance')}>◇ &nbsp;Financiën</button>
+          <button className={`nav-item${view==='hosting'?' active':''}`} onClick={() => showView('hosting')}>⬡ &nbsp;Hosting</button>
         </div>
         <div className="sb-footer">
           <div style={{fontSize:11,color:'var(--text-faint)',marginBottom:6,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{session.user.email}</div>
@@ -209,6 +211,7 @@ export default function Dashboard({ session }) {
         {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} />}
+        {view==='hosting' && <HostingView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} />}
       </div>
     </div>
   )
@@ -346,7 +349,7 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
           <div>
             <div className="sc">
               <div className="client-tabs">
-                {[['projects','Projecten'],['tasks','Taken'],['invoices','Facturen'],['recurring','Terugkerend'],['notes','Notities']].map(([tab,label]) => (
+                {[['projects','Projecten'],['tasks','Taken'],['invoices','Facturen'],['recurring','Terugkerend'],['hosting','Hosting'],['notes','Notities']].map(([tab,label]) => (
                   <button key={tab} className={`client-tab${activeTab===tab?' active':''}`} onClick={()=>setActiveTab(tab)}>{label}</button>
                 ))}
               </div>
@@ -419,6 +422,9 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
                   </div>
                   <div className="total-bar"><span style={{color:'var(--text-muted)'}}>MRR <strong style={{color:'var(--teal-text)'}}>{money(mrr)}</strong></span><span>Jaarlijks <strong>{money(mrr*12)}</strong></span></div>
                 </div>
+              )}
+              {activeTab==='hosting' && (
+                <ClientHostingTab clientId={client.id} onRefresh={loadAll} />
               )}
               {activeTab==='notes' && (
                 <div>
@@ -863,6 +869,264 @@ function NoteModal({ clientId, onSave, trigger }) {
     {React.cloneElement(trigger,{onClick:()=>{setContent('');setOpen(true)}})}
     <Modal open={open} onClose={()=>setOpen(false)} title="Nieuwe notitie">
       <FG label="Notitie"><textarea value={content} onChange={e=>setContent(e.target.value)} rows={5} autoFocus /></FG>
+      <ModalActions onCancel={()=>setOpen(false)} onSave={save} saving={saving} />
+    </Modal>
+  </>
+}
+
+// ── Hosting View ───────────────────────────────────────────────────────────────
+function HostingView({ allHosting, clients, showView, onRefresh }) {
+  const [q, setQ] = useState('')
+  const today_str = today()
+
+  const filtered = allHosting.filter(h => {
+    if (!q) return true
+    const cn = h.clients ? h.clients.fname + ' ' + h.clients.lname + ' ' + (h.clients.company||'') : ''
+    return (h.site_name + h.domain + h.hoster + cn).toLowerCase().includes(q.toLowerCase())
+  })
+
+  const expiringSoon = allHosting.filter(h => {
+    if (!h.domain_expires) return false
+    const d = daysN(h.domain_expires)
+    return d !== null && d <= 30
+  })
+  const sslWarn = allHosting.filter(h => {
+    if (!h.ssl_expires) return false
+    const d = daysN(h.ssl_expires)
+    return d !== null && d <= 30
+  })
+
+  function expiryColor(dateStr) {
+    if (!dateStr) return 'var(--text-faint)'
+    const d = daysN(dateStr)
+    if (d < 0) return 'var(--red-text)'
+    if (d <= 14) return 'var(--red-text)'
+    if (d <= 30) return 'var(--amber-text)'
+    return 'var(--text-muted)'
+  }
+
+  return (
+    <div>
+      <div className="topbar">
+        <h2>Hosting & domeinen</h2>
+        <div className="topbar-right">
+          <div className="search-wrap"><span className="search-icon">⌕</span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div>
+          <HostingModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Site toevoegen</button>} />
+        </div>
+      </div>
+      <div className="content">
+
+        {(expiringSoon.length > 0 || sslWarn.length > 0) && (
+          <div style={{background:'#fffbeb',border:'1px solid #fcd34d',borderRadius:'var(--r)',padding:'14px 18px',marginBottom:18}}>
+            <div style={{fontWeight:600,fontSize:13,color:'#b45309',marginBottom:8}}>⚠ Actie vereist</div>
+            {expiringSoon.map(h => {
+              const d = daysN(h.domain_expires)
+              return <div key={h.id} style={{fontSize:13,color:'#92400e',marginBottom:4}}>
+                Domein <strong>{h.domain}</strong> verloopt {d <= 0 ? 'al' : 'over ' + d + ' dagen'} — {h.clients?.fname} {h.clients?.lname}
+              </div>
+            })}
+            {sslWarn.map(h => {
+              const d = daysN(h.ssl_expires)
+              return <div key={h.id+'-ssl'} style={{fontSize:13,color:'#92400e',marginBottom:4}}>
+                SSL van <strong>{h.site_name}</strong> verloopt {d <= 0 ? 'al' : 'over ' + d + ' dagen'} — {h.clients?.fname} {h.clients?.lname}
+              </div>
+            })}
+          </div>
+        )}
+
+        <div className="sc" style={{padding:0}}>
+          <div style={{display:'grid',gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr 120px',padding:'8px 18px',background:'var(--bg)',borderBottom:'1px solid var(--border)',fontSize:10,fontWeight:600,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'.06em'}}>
+            <div>Site</div><div>Klant</div><div>Hoster</div><div>Domein verloopt</div><div>SSL verloopt</div><div></div>
+          </div>
+          {!filtered.length ? <div className="empty">Geen sites toegevoegd</div> : filtered.map(h => (
+            <div key={h.id} style={{display:'grid',gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr 120px',padding:'12px 18px',borderBottom:'1px solid var(--border)',alignItems:'center',fontSize:13}}>
+              <div>
+                <div style={{fontWeight:500}}>{h.site_name}</div>
+                <div style={{fontSize:11,color:'var(--text-muted)'}}>{h.cms}{h.cms&&h.hoster?' · ':''}</div>
+                {h.url && <a href={h.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:11,color:'var(--blue-text)'}}>{h.url.replace('https://','').replace('http://','')}</a>}
+              </div>
+              <div style={{fontSize:13,color:'var(--text-muted)'}} onClick={()=>h.clients&&showView('client-detail',h.client_id)} style={{cursor:h.client_id?'pointer':'default',color:'var(--text-muted)',fontSize:13}}>
+                {h.clients ? h.clients.fname+' '+h.clients.lname : '—'}
+                {h.clients?.company && <div style={{fontSize:11,color:'var(--text-faint)'}}>{h.clients.company}</div>}
+              </div>
+              <div style={{fontSize:13,color:'var(--text-muted)'}}>{h.hoster||'—'}</div>
+              <div style={{fontSize:13,color:expiryColor(h.domain_expires),fontWeight:daysN(h.domain_expires)<=30?500:400}}>{h.domain_expires?fdate(h.domain_expires):'—'}</div>
+              <div style={{fontSize:13,color:expiryColor(h.ssl_expires),fontWeight:daysN(h.ssl_expires)<=30?500:400}}>{h.ssl_expires?fdate(h.ssl_expires):'—'}</div>
+              <div style={{display:'flex',gap:5,justifyContent:'flex-end'}}>
+                {h.url && <a href={h.url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none'}} onClick={e=>e.stopPropagation()}>↗</a>}
+                {h.hosting_login_url && <a href={h.hosting_login_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none'}} title="Open hostingpaneel" onClick={e=>e.stopPropagation()}>⚙</a>}
+                <HostingModal hosting={h} clients={clients} onSave={onRefresh} trigger={<button className="btn btn-ghost btn-xs">✎</button>} />
+                <button className="btn btn-ghost btn-xs" style={{color:'var(--red-text)'}} onClick={()=>{if(confirm('Verwijderen?'))db.deleteHosting(h.id).then(onRefresh)}}>×</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Client Hosting Tab ─────────────────────────────────────────────────────────
+function ClientHostingTab({ clientId, onRefresh }) {
+  const [hosting, setHosting] = useState([])
+  const [clients, setClients] = useState([])
+
+  useEffect(() => {
+    db.getHostingForClient(clientId).then(setHosting)
+    db.getClients().then(setClients)
+  }, [clientId])
+
+  const refresh = () => db.getHostingForClient(clientId).then(setHosting)
+
+  function expiryColor(dateStr) {
+    if (!dateStr) return 'var(--text-faint)'
+    const d = daysN(dateStr)
+    if (d < 0) return 'var(--red-text)'
+    if (d <= 14) return 'var(--red-text)'
+    if (d <= 30) return 'var(--amber-text)'
+    return 'var(--text-muted)'
+  }
+
+  return (
+    <div>
+      <div style={{padding:'12px 16px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'flex-end'}}>
+        <HostingModal clients={clients} defaultClientId={clientId} onSave={refresh} trigger={<button className="btn btn-ghost btn-sm">+ Site toevoegen</button>} />
+      </div>
+      <div className="sc-body">
+        {!hosting.length ? <div className="empty">Geen sites gekoppeld</div> : hosting.map(h => (
+          <div key={h.id} style={{padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+              <div>
+                <div style={{fontWeight:500,fontSize:14}}>{h.site_name}</div>
+                {h.url && <a href={h.url} target="_blank" rel="noreferrer" style={{fontSize:12,color:'var(--blue-text)'}}>{h.url}</a>}
+              </div>
+              <div style={{display:'flex',gap:5}}>
+                {h.url && <a href={h.url} target="_blank" rel="noreferrer" className="btn btn-primary btn-xs" style={{textDecoration:'none'}}>↗ Open site</a>}
+                {h.hosting_login_url && <a href={h.hosting_login_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>⚙ Hostingpaneel</a>}
+                <HostingModal hosting={h} clients={clients} defaultClientId={clientId} onSave={refresh} trigger={<button className="btn btn-ghost btn-xs">✎</button>} />
+                <button className="btn btn-ghost btn-xs" style={{color:'var(--red-text)'}} onClick={()=>{if(confirm('Verwijderen?'))db.deleteHosting(h.id).then(refresh)}}>×</button>
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+              {h.cms && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>CMS</span><span className="info-val">{h.cms}</span></div>}
+              {h.hoster && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>Hoster</span><span className="info-val">{h.hoster}</span></div>}
+              {h.domain && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>Domein</span><span className="info-val">{h.domain}</span></div>}
+              {h.domain_expires && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>Domein exp.</span><span className="info-val" style={{color:expiryColor(h.domain_expires),fontWeight:daysN(h.domain_expires)<=30?500:400}}>{fdate(h.domain_expires)}</span></div>}
+              {h.ssl_expires && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>SSL exp.</span><span className="info-val" style={{color:expiryColor(h.ssl_expires),fontWeight:daysN(h.ssl_expires)<=30?500:400}}>{fdate(h.ssl_expires)}</span></div>}
+              {h.monthly_cost && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>Kosten</span><span className="info-val" style={{fontFamily:'DM Mono'}}>{money(h.monthly_cost)}/mnd</span></div>}
+            </div>
+            {h.hosting_username && (
+              <div style={{marginTop:8,background:'var(--bg)',borderRadius:'var(--rsm)',padding:'8px 12px',fontSize:12}}>
+                <div style={{color:'var(--text-muted)',marginBottom:4,fontWeight:600,fontSize:11,textTransform:'uppercase',letterSpacing:'.04em'}}>Inloggegevens</div>
+                <div style={{display:'flex',gap:16'}}>
+                  {h.hosting_username && <span>Gebruiker: <strong>{h.hosting_username}</strong></span>}
+                  {h.hosting_password && <span style={{marginLeft:12}}>Wachtwoord: <strong>{h.hosting_password}</strong></span>}
+                </div>
+              </div>
+            )}
+            {h.notes && <div style={{marginTop:8,fontSize:12,color:'var(--text-muted)',fontStyle:'italic'}}>{h.notes}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Hosting Modal ──────────────────────────────────────────────────────────────
+const CMS_OPTIONS = ['WordPress','Webflow','Shopify','Wix','Squarespace','Framer','Joomla','Drupal','Custom','Anders']
+const HOSTER_OPTIONS = ['Antagonist','Mijn.host','TransIP','Hostnet','WP Engine','Kinsta','SiteGround','Cloudways','Vercel','Netlify','Anders']
+
+function HostingModal({ hosting, clients, defaultClientId, onSave, trigger }) {
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const init = { client_id: defaultClientId||'', site_name:'', url:'', cms:'', hoster:'', hosting_login_url:'', hosting_username:'', hosting_password:'', domain:'', domain_expires:'', ssl_expires:'', monthly_cost:'', notes:'' }
+  const [form, setForm] = useState(init)
+  const f = k => e => setForm(p=>({...p,[k]:e.target.value}))
+
+  function openModal() {
+    setForm(hosting ? {
+      client_id: hosting.client_id||'',
+      site_name: hosting.site_name||'',
+      url: hosting.url||'',
+      cms: hosting.cms||'',
+      hoster: hosting.hoster||'',
+      hosting_login_url: hosting.hosting_login_url||'',
+      hosting_username: hosting.hosting_username||'',
+      hosting_password: hosting.hosting_password||'',
+      domain: hosting.domain||'',
+      domain_expires: hosting.domain_expires||'',
+      ssl_expires: hosting.ssl_expires||'',
+      monthly_cost: hosting.monthly_cost||'',
+      notes: hosting.notes||''
+    } : {...init, client_id: defaultClientId||''})
+    setOpen(true)
+  }
+
+  async function save() {
+    if(!form.site_name.trim()) return alert('Vul een sitenaam in.')
+    setSaving(true)
+    try {
+      const data = {
+        client_id: form.client_id || null,
+        site_name: form.site_name.trim(),
+        url: form.url || null,
+        cms: form.cms || null,
+        hoster: form.hoster || null,
+        hosting_login_url: form.hosting_login_url || null,
+        hosting_username: form.hosting_username || null,
+        hosting_password: form.hosting_password || null,
+        domain: form.domain || null,
+        domain_expires: form.domain_expires || null,
+        ssl_expires: form.ssl_expires || null,
+        monthly_cost: form.monthly_cost ? parseFloat(form.monthly_cost) : null,
+        notes: form.notes || null
+      }
+      if(hosting) await db.updateHosting(hosting.id, data)
+      else await db.createHosting(data)
+      setOpen(false); onSave()
+    } catch(e) {
+      alert('Fout bij opslaan: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <>
+    {React.cloneElement(trigger, {onClick: openModal})}
+    <Modal open={open} onClose={()=>setOpen(false)} title={hosting?'Site bewerken':'Site toevoegen'}>
+      <FR>
+        <FG label="Sitenaam"><input value={form.site_name} onChange={f('site_name')} placeholder="Bijv. Website Klant BV" autoFocus /></FG>
+        <FG label="Klant"><select value={form.client_id} onChange={f('client_id')}><option value="">— Geen klant —</option>{(clients||[]).map(c=><option key={c.id} value={c.id}>{c.fname} {c.lname}{c.company?' ('+c.company+')':''}</option>)}</select></FG>
+      </FR>
+      <FG label="Website URL"><input value={form.url} onChange={f('url')} placeholder="https://" type="url" /></FG>
+      <FR>
+        <FG label="CMS">
+          <select value={form.cms} onChange={f('cms')}>
+            <option value="">— Kies CMS —</option>
+            {CMS_OPTIONS.map(o=><option key={o} value={o}>{o}</option>)}
+          </select>
+        </FG>
+        <FG label="Hoster">
+          <select value={form.hoster} onChange={f('hoster')}>
+            <option value="">— Kies hoster —</option>
+            {HOSTER_OPTIONS.map(o=><option key={o} value={o}>{o}</option>)}
+          </select>
+        </FG>
+      </FR>
+      <FG label="Hostingpaneel URL"><input value={form.hosting_login_url} onChange={f('hosting_login_url')} placeholder="https://mijn.host/login" type="url" /></FG>
+      <FR>
+        <FG label="Gebruikersnaam hosting"><input value={form.hosting_username} onChange={f('hosting_username')} /></FG>
+        <FG label="Wachtwoord hosting"><input value={form.hosting_password} onChange={f('hosting_password')} /></FG>
+      </FR>
+      <FR>
+        <FG label="Domeinnaam"><input value={form.domain} onChange={f('domain')} placeholder="klant.nl" /></FG>
+        <FG label="Maandelijkse kosten (€)"><input value={form.monthly_cost} onChange={f('monthly_cost')} type="number" step="0.01" min="0" /></FG>
+      </FR>
+      <FR>
+        <FG label="Domein verloopt"><input value={form.domain_expires} onChange={f('domain_expires')} type="date" /></FG>
+        <FG label="SSL verloopt"><input value={form.ssl_expires} onChange={f('ssl_expires')} type="date" /></FG>
+      </FR>
+      <FG label="Notities"><textarea value={form.notes} onChange={f('notes')} rows={2} placeholder="Extra info, bijzonderheden…" /></FG>
       <ModalActions onCancel={()=>setOpen(false)} onSave={save} saving={saving} />
     </Modal>
   </>
