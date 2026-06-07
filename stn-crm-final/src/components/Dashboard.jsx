@@ -1026,7 +1026,7 @@ function HostingView({ allHosting, clients, showView, onRefresh }) {
                 <div style={{fontSize:11,color:'var(--text-muted)'}}>{h.cms}{h.cms&&h.hoster?' · ':''}</div>
                 {h.url && <a href={h.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:11,color:'var(--blue-text)'}}>{h.url.replace('https://','').replace('http://','')}</a>}
               </div>
-              <div style={{fontSize:13,color:'var(--text-muted)'}} onClick={()=>h.clients&&showView('client-detail',h.client_id)} style={{cursor:h.client_id?'pointer':'default',color:'var(--text-muted)',fontSize:13}}>
+              <div style={{fontSize:13,color:'var(--text-muted)',cursor:h.client_id?'pointer':'default'}} onClick={()=>h.clients&&showView('client-detail',h.client_id)}>
                 {h.clients ? h.clients.fname+' '+h.clients.lname : '—'}
                 {h.clients?.company && <div style={{fontSize:11,color:'var(--text-faint)'}}>{h.clients.company}</div>}
               </div>
