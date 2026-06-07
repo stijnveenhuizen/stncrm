@@ -225,3 +225,38 @@ export async function deleteHosting(id) {
   const { error } = await supabase.from('hosting').delete().eq('id', id)
   if (error) throw error
 }
+
+// ── Profiles ───────────────────────────────────────────────────────────────────
+export async function getProfile(userId) {
+  const { data, error } = await supabase
+    .from('profiles').select('*').eq('id', userId).single()
+  if (error && error.code !== 'PGRST116') throw error
+  return data
+}
+export async function upsertProfile(userId, updates) {
+  const { data, error } = await supabase
+    .from('profiles').upsert({ id: userId, ...updates, updated_at: new Date().toISOString() }).select().single()
+  if (error) throw error
+  return data
+}
+export async function uploadAvatar(userId, file) {
+  const ext = file.name.split('.').pop()
+  const path = `${userId}/avatar.${ext}`
+  const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+  if (error) throw error
+  const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+  return data.publicUrl + '?t=' + Date.now()
+}
+
+// ── Invite user ────────────────────────────────────────────────────────────────
+export async function inviteUser(email) {
+  const { data, error } = await supabase.auth.admin.inviteUserByEmail(email)
+  if (error) throw error
+  return data
+}
+
+export async function listUsers() {
+  const { data, error } = await supabase.auth.admin.listUsers()
+  if (error) throw error
+  return data.users
+}
