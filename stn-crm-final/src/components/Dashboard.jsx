@@ -50,6 +50,7 @@ export default function Dashboard({ session }) {
   const [allInvoices, setAllInvoices] = useState([])
   const [allRecurring, setAllRecurring] = useState([])
   const [allHosting, setAllHosting] = useState([])
+  const [allMeetings, setAllMeetings] = useState([])
   const [loading, setLoading] = useState(true)
 
   function applyProfileTheme(p) {
@@ -67,10 +68,10 @@ export default function Dashboard({ session }) {
 
   const loadAll = useCallback(async () => {
     try {
-      const [c, p, i, r, t, h] = await Promise.all([
-        db.getClients(), db.getProjects(), db.getAllInvoices(), db.getAllRecurring(), db.getAllTasks(), db.getAllHosting()
+      const [c, p, i, r, t, h, m] = await Promise.all([
+        db.getClients(), db.getProjects(), db.getAllInvoices(), db.getAllRecurring(), db.getAllTasks(), db.getAllHosting(), db.getAllMeetings()
       ])
-      setClients(c); setProjects(p); setAllInvoices(i); setAllRecurring(r); setAllHosting(h)
+      setClients(c); setProjects(p); setAllInvoices(i); setAllRecurring(r); setAllHosting(h); setAllMeetings(m)
       setAllTasks(t.map(task => ({ ...task, project: task.projects })))
     } catch(e) { console.error(e) }
     setLoading(false)
@@ -284,7 +285,7 @@ export default function Dashboard({ session }) {
         </div>
       </nav>
       <div className="main">
-        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} />}
+        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
@@ -298,7 +299,7 @@ export default function Dashboard({ session }) {
   )
 }
 
-function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, totalPaid, totalOpen, totalMRR, showView, onRefresh }) {
+function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, totalPaid, totalOpen, totalMRR, showView, onRefresh }) {
   const openTasks = allTasks.filter(t => !t.done)
   const pDL = projects.filter(p => p.deadline && p.status !== 'afgerond').map(p => ({ name: p.name, deadline: p.deadline, sub: 'Project', tv: 'project-detail', tid: p.id, color: p.color }))
   const tDL = allTasks.filter(t => !t.done && t.due_date).map(t => ({ name: t.description, deadline: t.due_date, sub: t.project?.name || '', tv: 'project-detail', tid: t.project_id, color: t.project?.color || '#888' }))
@@ -339,6 +340,31 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
             </div>
           </div>
         </div>
+        {/* Meetings widget */}
+        {allMeetings && allMeetings.filter(m => m.status === 'gepland' && m.meeting_date >= today()).length > 0 && (
+          <div className="sc" style={{marginBottom:16}}>
+            <div className="sc-head"><span className="sc-title">Aankomende meetings</span></div>
+            <div className="sc-body">
+              {allMeetings.filter(m => m.status === 'gepland' && m.meeting_date >= today()).slice(0,4).map(m => {
+                const dd = daysN(m.meeting_date)
+                const typeIcon = m.type === 'videocall' ? '📹' : m.type === 'bel' ? '📞' : '📍'
+                const cn = m.clients ? m.clients.fname + ' ' + m.clients.lname : ''
+                return (
+                  <div key={m.id} className="dl-item">
+                    <div className="dl-dot" style={{background: dd === 0 ? 'var(--accent)' : dd <= 3 ? 'var(--amber)' : 'var(--border-strong)'}}></div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:500}}>{typeIcon} {m.title}</div>
+                      <div style={{fontSize:11,color:'var(--text-faint)'}}>{cn}{m.meeting_time ? ' · ' + m.meeting_time.slice(0,5) : ''}</div>
+                    </div>
+                    <div style={{fontSize:12,color: dd===0?'var(--accent-text)':dd<=3?'var(--amber-text)':'var(--text-faint)',whiteSpace:'nowrap',fontWeight:dd<=3?500:400}}>
+                      {dd === 0 ? 'Vandaag' : dd === 1 ? 'Morgen' : fdate(m.meeting_date)}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
         <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:16}}>
           <div className="sc">
             <div className="sc-head"><span className="sc-title">Omzet per klant (betaald)</span></div>
@@ -430,7 +456,7 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
           <div>
             <div className="sc">
               <div className="client-tabs">
-                {[['projects','Projecten'],['tasks','Taken'],['invoices','Facturen'],['recurring','Terugkerend'],['hosting','Hosting'],['notes','Notities']].map(([tab,label]) => (
+                {[['projects','Projecten'],['tasks','Taken'],['invoices','Facturen'],['recurring','Terugkerend'],['hosting','Hosting'],['meetings','Meetings'],['notes','Notities']].map(([tab,label]) => (
                   <button key={tab} className={`client-tab${activeTab===tab?' active':''}`} onClick={()=>setActiveTab(tab)}>{label}</button>
                 ))}
               </div>
@@ -506,6 +532,9 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
               )}
               {activeTab==='hosting' && (
                 <ClientHostingTab clientId={client.id} onRefresh={loadAll} />
+              )}
+              {activeTab==='meetings' && (
+                <ClientMeetingsTab client={client} onRefresh={loadAll} />
               )}
               {activeTab==='notes' && (
                 <div>
@@ -1211,4 +1240,184 @@ function HostingModal({ hosting, clients, defaultClientId, onSave, trigger }) {
       <ModalActions onCancel={()=>setOpen(false)} onSave={save} saving={saving} />
     </Modal>
   </>
+}
+
+// ── Client Meetings Tab ────────────────────────────────────────────────────────
+function ClientMeetingsTab({ client, onRefresh }) {
+  const [meetings, setMeetings] = useState([])
+  const [showModal, setShowModal] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ title:'', meeting_date:'', meeting_time:'', duration_minutes:60, type:'videocall', location:'', notes:'', status:'gepland' })
+  const f = k => e => setForm(p => ({...p, [k]: e.target.value}))
+
+  useEffect(() => { db.getMeetings(client.id).then(setMeetings) }, [client.id])
+  const refresh = () => db.getMeetings(client.id).then(setMeetings)
+
+  const TYPE_ICONS = { videocall: '📹', bel: '📞', locatie: '📍', overig: '📅' }
+  const TYPE_LABELS = { videocall: 'Videocall', bel: 'Telefoongesprek', locatie: 'Op locatie', overig: 'Overig' }
+
+  function buildCalendarUrl(m) {
+    const base = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+    const title = encodeURIComponent(m.title + ' — ' + client.fname + ' ' + client.lname)
+    const date = m.meeting_date.replace(/-/g, '')
+    let dates = ''
+    if (m.meeting_time) {
+      const [h, min] = m.meeting_time.split(':')
+      const start = date + 'T' + h.padStart(2,'0') + min.padStart(2,'0') + '00'
+      const endMin = parseInt(min) + (m.duration_minutes % 60)
+      const endH = parseInt(h) + Math.floor(m.duration_minutes / 60) + Math.floor(endMin / 60)
+      const end = date + 'T' + String(endH).padStart(2,'0') + String(endMin % 60).padStart(2,'0') + '00'
+      dates = `&dates=${start}/${end}`
+    } else {
+      dates = `&dates=${date}/${date}`
+    }
+    const details = encodeURIComponent([
+      m.notes || '',
+      m.location ? 'Locatie: ' + m.location : '',
+      'Klant: ' + client.fname + ' ' + client.lname,
+      client.email ? 'Email: ' + client.email : '',
+      client.phone ? 'Tel: ' + client.phone : ''
+    ].filter(Boolean).join('\n'))
+    const location = m.location ? '&location=' + encodeURIComponent(m.location) : ''
+    return `${base}&text=${title}${dates}&details=${details}${location}`
+  }
+
+  async function saveMeeting() {
+    if (!form.title.trim() || !form.meeting_date) return alert('Vul een titel en datum in.')
+    setSaving(true)
+    try {
+      await db.createMeeting({ client_id: client.id, ...form, duration_minutes: parseInt(form.duration_minutes) || 60 })
+      setShowModal(false)
+      setForm({ title:'', meeting_date:'', meeting_time:'', duration_minutes:60, type:'videocall', location:'', notes:'', status:'gepland' })
+      refresh()
+    } catch(e) { alert('Fout: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  async function toggleStatus(m) {
+    const newStatus = m.status === 'gepland' ? 'geweest' : 'gepland'
+    await db.updateMeeting(m.id, { status: newStatus })
+    refresh()
+  }
+
+  const upcoming = meetings.filter(m => m.status === 'gepland').sort((a,b) => a.meeting_date.localeCompare(b.meeting_date))
+  const past = meetings.filter(m => m.status === 'geweest').sort((a,b) => b.meeting_date.localeCompare(a.meeting_date))
+
+  return (
+    <div>
+      <div style={{padding:'12px 16px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'flex-end'}}>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowModal(true)}>+ Meeting</button>
+      </div>
+      <div className="sc-body">
+        {!meetings.length ? (
+          <div className="empty">Geen meetings gepland</div>
+        ) : (
+          <>
+            {upcoming.length > 0 && (
+              <div style={{marginBottom:18}}>
+                <div style={{fontSize:11,fontWeight:600,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>Gepland</div>
+                {upcoming.map(m => <MeetingRow key={m.id} m={m} onToggle={() => toggleStatus(m)} onDelete={() => db.deleteMeeting(m.id).then(refresh)} calUrl={buildCalendarUrl(m)} />)}
+              </div>
+            )}
+            {past.length > 0 && (
+              <div>
+                <div style={{fontSize:11,fontWeight:600,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>Geweest</div>
+                {past.map(m => <MeetingRow key={m.id} m={m} past onToggle={() => toggleStatus(m)} onDelete={() => db.deleteMeeting(m.id).then(refresh)} calUrl={buildCalendarUrl(m)} />)}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {showModal && (
+        <div className="modal-bg open" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
+          <div className="modal">
+            <h3>Meeting plannen</h3>
+            <div className="form-group"><label>Titel</label><input value={form.title} onChange={f('title')} placeholder="Bijv. Kennismaking, Website bespreking…" autoFocus /></div>
+            <div className="form-row">
+              <div className="form-group"><label>Datum</label><input type="date" value={form.meeting_date} onChange={f('meeting_date')} /></div>
+              <div className="form-group"><label>Tijd</label><input type="time" value={form.meeting_time} onChange={f('meeting_time')} /></div>
+            </div>
+            <div className="form-row">
+              <div className="form-group"><label>Duur (minuten)</label><input type="number" value={form.duration_minutes} onChange={f('duration_minutes')} min="15" step="15" /></div>
+              <div className="form-group"><label>Type</label>
+                <select value={form.type} onChange={f('type')}>
+                  <option value="videocall">📹 Videocall</option>
+                  <option value="bel">📞 Telefoongesprek</option>
+                  <option value="locatie">📍 Op locatie</option>
+                  <option value="overig">📅 Overig</option>
+                </select>
+              </div>
+            </div>
+            <div className="form-group"><label>Locatie / link</label><input value={form.location} onChange={f('location')} placeholder="Bijv. https://meet.google.com/… of adres" /></div>
+            <div className="form-group"><label>Notities</label><textarea value={form.notes} onChange={f('notes')} rows={3} placeholder="Agendapunten, voorbereiding…" /></div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setShowModal(false)}>Annuleren</button>
+              <button className="btn btn-primary" onClick={saveMeeting} disabled={saving}>{saving ? 'Opslaan…' : 'Opslaan'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MeetingRow({ m, past, onToggle, onDelete, calUrl }) {
+  const TYPE_ICONS = { videocall: '📹', bel: '📞', locatie: '📍', overig: '📅' }
+  const dd = daysN(m.meeting_date)
+  const isToday = dd === 0
+  const isTomorrow = dd === 1
+
+  return (
+    <div style={{
+      display:'flex', alignItems:'flex-start', gap:12, padding:'12px 0',
+      borderBottom:'1px solid var(--border)', opacity: past ? 0.65 : 1
+    }}>
+      <div style={{
+        width:40, height:40, borderRadius:'var(--rsm)', flexShrink:0,
+        background: isToday ? 'var(--accent)' : 'var(--bg2)',
+        display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+        border:'1px solid var(--border)'
+      }}>
+        <div style={{fontSize:9,fontWeight:600,color: isToday ? '#fff' : 'var(--text-faint)',textTransform:'uppercase'}}>
+          {new Date(m.meeting_date).toLocaleDateString('nl-NL',{month:'short'})}
+        </div>
+        <div style={{fontSize:16,fontWeight:700,color: isToday ? '#fff' : 'var(--text)',fontFamily:'var(--heading-font)',lineHeight:1}}>
+          {new Date(m.meeting_date).getDate()}
+        </div>
+      </div>
+      <div style={{flex:1, minWidth:0}}>
+        <div style={{fontWeight:500,fontSize:13,display:'flex',alignItems:'center',gap:6}}>
+          {TYPE_ICONS[m.type] || '📅'} {m.title}
+          {isToday && <span className="badge bg-green" style={{fontSize:10}}>Vandaag</span>}
+          {isTomorrow && <span className="badge bg-amber" style={{fontSize:10}}>Morgen</span>}
+        </div>
+        <div style={{fontSize:11,color:'var(--text-faint)',marginTop:2}}>
+          {m.meeting_time ? m.meeting_time.slice(0,5) + ' · ' : ''}{m.duration_minutes} min
+          {m.location ? ' · ' + m.location : ''}
+        </div>
+        {m.notes && <div style={{fontSize:12,color:'var(--text-muted)',marginTop:4,lineHeight:1.5}}>{m.notes}</div>}
+      </div>
+      <div style={{display:'flex',gap:5,flexShrink:0,alignItems:'center'}}>
+        {!past && (
+          <a
+            href={calUrl} target="_blank" rel="noreferrer"
+            className="btn btn-ghost btn-xs"
+            style={{textDecoration:'none',display:'inline-flex',alignItems:'center',gap:4}}
+            title="Toevoegen aan Google Calendar"
+          >📅 Inplannen</a>
+        )}
+        <button
+          className="btn btn-ghost btn-xs"
+          onClick={onToggle}
+          title={past ? 'Markeer als gepland' : 'Markeer als geweest'}
+        >{past ? '↩' : '✓'}</button>
+        <button
+          className="btn btn-ghost btn-xs"
+          style={{color:'var(--red-text)'}}
+          onClick={() => confirm('Meeting verwijderen?') && onDelete()}
+        >×</button>
+      </div>
+    </div>
+  )
 }
