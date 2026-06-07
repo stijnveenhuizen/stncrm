@@ -39,6 +39,7 @@ function ModalActions({ onCancel, onSave, saving }) {
 
 export default function Dashboard({ session }) {
   const [view, setView] = useState('overview')
+  const [darkMode, setDarkMode] = useState(() => { try { return localStorage.getItem('stn_theme') === 'dark' } catch(e) { return false } })
   const [curClientId, setCurClientId] = useState(null)
   const [curProjectId, setCurProjectId] = useState(null)
   const [clients, setClients] = useState([])
@@ -61,6 +62,10 @@ export default function Dashboard({ session }) {
   }, [])
 
   useEffect(() => { loadAll() }, [loadAll])
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+    try { localStorage.setItem('stn_theme', darkMode ? 'dark' : 'light') } catch(e) {}
+  }, [darkMode])
 
   function showView(v, id) {
     setView(v)
@@ -79,13 +84,6 @@ export default function Dashboard({ session }) {
   const totalPaid = allInvoices.filter(i => i.status === 'betaald').reduce((s,i) => s + Number(i.amount), 0)
   const totalOpen = allInvoices.filter(i => ['verzonden','te laat'].includes(i.status)).reduce((s,i) => s + Number(i.amount), 0)
   const totalMRR = db.calcMRR(allRecurring)
-
-  const [darkMode, setDarkMode] = React.useState(() => localStorage.getItem('stn_theme') === 'dark')
-
-  React.useEffect(() => {
-    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
-    localStorage.setItem('stn_theme', darkMode ? 'dark' : 'light')
-  }, [darkMode])
 
   const CSS = `
     .app{display:flex;min-height:100vh;transition:background .2s}
