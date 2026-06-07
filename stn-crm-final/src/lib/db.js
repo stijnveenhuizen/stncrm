@@ -260,3 +260,31 @@ export async function listUsers() {
   if (error) throw error
   return data.users
 }
+
+// ── Meetings ───────────────────────────────────────────────────────────────────
+export async function getMeetings(clientId) {
+  const { data, error } = await supabase
+    .from('meetings').select('*').eq('client_id', clientId).order('meeting_date', { ascending: true })
+  if (error) throw error
+  return data
+}
+export async function getAllMeetings() {
+  const { data, error } = await supabase
+    .from('meetings').select('*, clients(fname, lname, company)').order('meeting_date', { ascending: true })
+  if (error) throw error
+  return data
+}
+export async function createMeeting(meeting) {
+  const { data, error } = await supabase.from('meetings').insert([meeting]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateMeeting(id, updates) {
+  const { data, error } = await supabase.from('meetings').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteMeeting(id) {
+  const { error } = await supabase.from('meetings').delete().eq('id', id)
+  if (error) throw error
+}
