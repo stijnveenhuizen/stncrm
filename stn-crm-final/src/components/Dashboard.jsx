@@ -206,19 +206,47 @@ export default function Dashboard({ session }) {
     <div className="app">
       <style>{CSS}</style>
       <nav className="sidebar">
-        <div className="sb-logo"><h1>STN CRM</h1><span>Klantenbeheer</span></div>
+        <div className="sb-logo">
+          <div className="sb-logo-icon"><span>S</span></div>
+          <div className="sb-logo-text">
+            <h1>STN CRM</h1>
+            <span>Klantenbeheer</span>
+          </div>
+        </div>
         <div className="sb-nav">
           <div className="nav-section">Overzicht</div>
-          <button className={`nav-item${view==='overview'?' active':''}`} onClick={() => showView('overview')}>◈ &nbsp;Dashboard</button>
+          <button className={`nav-item${view==='overview'?' active':''}`} onClick={() => showView('overview')}>
+            <span className="nav-dot"></span>Dashboard
+          </button>
           <div className="nav-section">Beheer</div>
-          <button className={`nav-item${['clients','client-detail'].includes(view)?' active':''}`} onClick={() => showView('clients')}>◎ &nbsp;Klanten</button>
-          <button className={`nav-item${['projects','project-detail'].includes(view)?' active':''}`} onClick={() => showView('projects')}>▣ &nbsp;Projecten</button>
-          <button className={`nav-item${view==='tasks'?' active':''}`} onClick={() => showView('tasks')}>◻ &nbsp;Alle taken</button>
-          <button className={`nav-item${view==='finance'?' active':''}`} onClick={() => showView('finance')}>◇ &nbsp;Financiën</button>
-          <button className={`nav-item${view==='hosting'?' active':''}`} onClick={() => showView('hosting')}>⬡ &nbsp;Hosting</button>
+          <button className={`nav-item${['clients','client-detail'].includes(view)?' active':''}`} onClick={() => showView('clients')}>
+            <span className="nav-dot"></span>Klanten
+          </button>
+          <button className={`nav-item${['projects','project-detail'].includes(view)?' active':''}`} onClick={() => showView('projects')}>
+            <span className="nav-dot"></span>Projecten
+          </button>
+          <button className={`nav-item${view==='tasks'?' active':''}`} onClick={() => showView('tasks')}>
+            <span className="nav-dot"></span>Alle taken
+          </button>
+          <button className={`nav-item${view==='finance'?' active':''}`} onClick={() => showView('finance')}>
+            <span className="nav-dot"></span>Financiën
+          </button>
+          <button className={`nav-item${view==='hosting'?' active':''}`} onClick={() => showView('hosting')}>
+            <span className="nav-dot"></span>Hosting
+          </button>
         </div>
         <div className="sb-footer">
-          <div style={{fontSize:11,color:'var(--text-faint)',marginBottom:6,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{session.user.email}</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <span style={{fontSize:11,color:'var(--text-faint)'}}>Thema</span>
+            <button
+              className={darkMode ? 'theme-toggle dark' : 'theme-toggle'}
+              onClick={() => setDarkMode(!darkMode)}
+              title={darkMode ? 'Licht thema' : 'Donker thema'}
+            >
+              <div className="theme-toggle-knob"></div>
+            </button>
+          </div>
+          <div style={{fontSize:11,color:'var(--text-faint)',marginBottom:8,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{session.user.email}</div>
           <button className="btn btn-ghost btn-xs" onClick={logout} style={{width:'100%',justifyContent:'center'}}>Uitloggen</button>
         </div>
       </nav>
