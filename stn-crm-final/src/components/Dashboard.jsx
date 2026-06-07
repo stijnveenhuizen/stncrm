@@ -1018,7 +1018,7 @@ function ClientHostingTab({ clientId, onRefresh }) {
             {h.hosting_username && (
               <div style={{marginTop:8,background:'var(--bg)',borderRadius:'var(--rsm)',padding:'8px 12px',fontSize:12}}>
                 <div style={{color:'var(--text-muted)',marginBottom:4,fontWeight:600,fontSize:11,textTransform:'uppercase',letterSpacing:'.04em'}}>Inloggegevens</div>
-                <div style={{display:'flex',gap:16'}}>
+                <div style={{display:'flex',gap:16}}>
                   {h.hosting_username && <span>Gebruiker: <strong>{h.hosting_username}</strong></span>}
                   {h.hosting_password && <span style={{marginLeft:12}}>Wachtwoord: <strong>{h.hosting_password}</strong></span>}
                 </div>
