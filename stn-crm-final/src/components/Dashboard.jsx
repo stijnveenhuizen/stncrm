@@ -200,7 +200,6 @@ export default function Dashboard({ session }) {
       .cl-header,.cl-row{grid-template-columns:1fr}
     }
   `
-  `
 
   return (
     <div className="app">
