@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import * as db from '../lib/db'
+import ProfileView from './ProfileView.jsx'
 
 const money = n => '€\u202f' + Number(n).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fdate = d => { if (!d) return '—'; return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) }
@@ -39,6 +40,7 @@ function ModalActions({ onCancel, onSave, saving }) {
 
 export default function Dashboard({ session }) {
   const [view, setView] = useState('overview')
+  const [profile, setProfile] = useState(null)
   const [darkMode, setDarkMode] = useState(() => { try { return localStorage.getItem('stn_theme') === 'dark' } catch(e) { return false } })
   const [curClientId, setCurClientId] = useState(null)
   const [curProjectId, setCurProjectId] = useState(null)
@@ -49,6 +51,19 @@ export default function Dashboard({ session }) {
   const [allRecurring, setAllRecurring] = useState([])
   const [allHosting, setAllHosting] = useState([])
   const [loading, setLoading] = useState(true)
+
+  function applyProfileTheme(p) {
+    if (p.theme) setDarkMode(p.theme === 'dark')
+    if (p.accent_color) {
+      document.documentElement.style.setProperty('--accent', p.accent_color)
+      document.documentElement.style.setProperty('--accent-hover', p.accent_color + 'dd')
+      document.documentElement.style.setProperty('--accent-soft', p.accent_color + '18')
+      document.documentElement.style.setProperty('--accent-text', p.accent_color)
+      document.documentElement.style.setProperty('--green', p.accent_color)
+      document.documentElement.style.setProperty('--green-soft', p.accent_color + '18')
+      document.documentElement.style.setProperty('--green-text', p.accent_color)
+    }
+  }
 
   const loadAll = useCallback(async () => {
     try {
@@ -62,6 +77,7 @@ export default function Dashboard({ session }) {
   }, [])
 
   useEffect(() => { loadAll() }, [loadAll])
+  useEffect(() => { db.getProfile(session.user.id).then(p => { if(p) { setProfile(p); applyProfileTheme(p) } }) }, [session.user.id])
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
     try { localStorage.setItem('stn_theme', darkMode ? 'dark' : 'light') } catch(e) {}
@@ -243,7 +259,27 @@ export default function Dashboard({ session }) {
               <div className="theme-toggle-knob"></div>
             </button>
           </div>
-          <div style={{fontSize:11,color:'var(--text-faint)',marginBottom:8,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{session.user.email}</div>
+          <div
+            style={{display:'flex',alignItems:'center',gap:9,padding:'8px 6px',borderRadius:'var(--rsm)',cursor:'pointer',transition:'background .1s',marginBottom:8}}
+            onClick={() => showView('profile')}
+            onMouseEnter={e => e.currentTarget.style.background='var(--accent-soft)'}
+            onMouseLeave={e => e.currentTarget.style.background='transparent'}
+          >
+            <div style={{
+              width:30,height:30,borderRadius:'50%',flexShrink:0,overflow:'hidden',
+              background:'var(--accent)',display:'flex',alignItems:'center',justifyContent:'center',
+              fontSize:12,fontWeight:700,color:'#fff',fontFamily:'var(--heading-font)'
+            }}>
+              {profile?.avatar_url
+                ? <img src={profile.avatar_url} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}} />
+                : (profile?.full_name || session.user.email)[0].toUpperCase()
+              }
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{profile?.full_name || 'Profiel'}</div>
+              <div style={{fontSize:10,color:'var(--text-faint)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{session.user.email}</div>
+            </div>
+          </div>
           <button className="btn btn-ghost btn-xs" onClick={logout} style={{width:'100%',justifyContent:'center'}}>Uitloggen</button>
         </div>
       </nav>
@@ -256,6 +292,7 @@ export default function Dashboard({ session }) {
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} />}
         {view==='hosting' && <HostingView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} />}
+        {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} />}
       </div>
     </div>
   )
