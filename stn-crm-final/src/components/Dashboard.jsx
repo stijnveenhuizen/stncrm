@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import * as db from '../lib/db'
 import ProfileView from './ProfileView.jsx'
+import PipelineView from './PipelineView.jsx'
 
 const money = n => '€\u202f' + Number(n).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fdate = d => { if (!d) return '—'; return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) }
@@ -51,6 +52,7 @@ export default function Dashboard({ session }) {
   const [allRecurring, setAllRecurring] = useState([])
   const [allHosting, setAllHosting] = useState([])
   const [allMeetings, setAllMeetings] = useState([])
+  const [pipeline, setPipeline] = useState([])
   const [loading, setLoading] = useState(true)
 
   function applyProfileTheme(p) {
@@ -68,10 +70,10 @@ export default function Dashboard({ session }) {
 
   const loadAll = useCallback(async () => {
     try {
-      const [c, p, i, r, t, h, m] = await Promise.all([
-        db.getClients(), db.getProjects(), db.getAllInvoices(), db.getAllRecurring(), db.getAllTasks(), db.getAllHosting(), db.getAllMeetings()
+      const [c, p, i, r, t, h, m, pl] = await Promise.all([
+        db.getClients(), db.getProjects(), db.getAllInvoices(), db.getAllRecurring(), db.getAllTasks(), db.getAllHosting(), db.getAllMeetings(), db.getPipeline()
       ])
-      setClients(c); setProjects(p); setAllInvoices(i); setAllRecurring(r); setAllHosting(h); setAllMeetings(m)
+      setClients(c); setProjects(p); setAllInvoices(i); setAllRecurring(r); setAllHosting(h); setAllMeetings(m); setPipeline(pl)
       setAllTasks(t.map(task => ({ ...task, project: task.projects })))
     } catch(e) { console.error(e) }
     setLoading(false)
@@ -248,6 +250,9 @@ export default function Dashboard({ session }) {
           <button className={`nav-item${view==='hosting'?' active':''}`} onClick={() => showView('hosting')}>
             <span className="nav-dot"></span>Hosting
           </button>
+          <button className={`nav-item${view==='pipeline'?' active':''}`} onClick={() => showView('pipeline')}>
+            <span className="nav-dot"></span>Pipeline
+          </button>
         </div>
         <div className="sb-footer">
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
@@ -294,6 +299,7 @@ export default function Dashboard({ session }) {
         {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} />}
         {view==='hosting' && <HostingView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} />}
         {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} />}
+        {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} />}
       </div>
     </div>
   )
