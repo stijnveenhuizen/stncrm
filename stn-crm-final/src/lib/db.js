@@ -288,3 +288,41 @@ export async function deleteMeeting(id) {
   const { error } = await supabase.from('meetings').delete().eq('id', id)
   if (error) throw error
 }
+
+// ── Pipeline ───────────────────────────────────────────────────────────────────
+export async function getPipeline() {
+  const { data, error } = await supabase
+    .from('pipeline').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createProspect(prospect) {
+  const { data, error } = await supabase.from('pipeline').insert([prospect]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateProspect(id, updates) {
+  const { data, error } = await supabase.from('pipeline').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteProspect(id) {
+  const { error } = await supabase.from('pipeline').delete().eq('id', id)
+  if (error) throw error
+}
+export async function convertToClient(prospect) {
+  // Create client from prospect
+  const { data: client, error } = await supabase.from('clients').insert([{
+    fname: prospect.fname,
+    lname: prospect.lname,
+    company: prospect.company || null,
+    email: prospect.email || null,
+    phone: prospect.phone || null,
+    website: prospect.website || null,
+    status: 'actief'
+  }]).select().single()
+  if (error) throw error
+  // Mark prospect as converted
+  await supabase.from('pipeline').update({ stage: 'klant', converted_client_id: client.id }).eq('id', prospect.id)
+  return client
+}
