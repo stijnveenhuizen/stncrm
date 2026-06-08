@@ -29,15 +29,23 @@ function avColor(p) { const n=p.fname.charCodeAt(0)||0; return AVC[n%AVC.length]
 
 export default function PipelineView({ showView, onRefresh }) {
   const [pipeline, setPipeline] = useState([])
+  const [openTasks, setOpenTasks] = useState([])
   const [view, setView] = useState('lijst') // lijst | kanban
   const [filterStage, setFilterStage] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [editProspect, setEditProspect] = useState(null)
   const [converting, setConverting] = useState(null)
   const [dragging, setDragging] = useState(null)
+  const [taskView, setTaskView] = useState(false)
 
-  useEffect(() => { db.getPipeline().then(setPipeline) }, [])
-  const refresh = () => db.getPipeline().then(setPipeline)
+  useEffect(() => { 
+    db.getPipeline().then(setPipeline)
+    db.getAllPipelineTasks().then(setOpenTasks)
+  }, [])
+  const refresh = () => {
+    db.getPipeline().then(setPipeline)
+    db.getAllPipelineTasks().then(setOpenTasks)
+  }
 
   const filtered = filterStage === 'all'
     ? pipeline
@@ -82,11 +90,48 @@ export default function PipelineView({ showView, onRefresh }) {
             <button className={`tab${view==='lijst'?' active':''}`} onClick={() => setView('lijst')}>Lijst</button>
             <button className={`tab${view==='kanban'?' active':''}`} onClick={() => setView('kanban')}>Kanban</button>
           </div>
+          <button className={`btn btn-sm ${taskView ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTaskView(!taskView)}>
+            {openTasks.length > 0 && <span style={{background:'var(--red)',color:'#fff',borderRadius:99,padding:'0 5px',fontSize:10,fontWeight:700}}>{openTasks.length}</span>} Taken
+          </button>
           <button className="btn btn-primary btn-sm" onClick={() => { setEditProspect(null); setShowModal(true) }}>+ Prospect</button>
         </div>
       </div>
 
       <div className="content">
+        {/* Pipeline tasks overview */}
+        {taskView && (
+          <div className="sc" style={{marginBottom:20}}>
+            <div className="sc-head">
+              <span className="sc-title">Open pipeline-taken</span>
+              <span style={{fontSize:12,color:'var(--text-muted)'}}>{openTasks.length} open</span>
+            </div>
+            <div className="sc-body">
+              {!openTasks.length ? (
+                <div className="empty">Geen open taken</div>
+              ) : openTasks.map(t => {
+                const dd = t.due_date ? Math.ceil((new Date(t.due_date)-new Date(today()))/86400000) : null
+                const prospect = t.pipeline
+                return (
+                  <div key={t.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:'1px solid var(--border)'}}>
+                    <div
+                      style={{width:17,height:17,border:'1.5px solid var(--border-strong)',borderRadius:4,flexShrink:0,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}}
+                      onClick={async () => { await db.updatePipelineTask(t.id,{done:true}); db.getAllPipelineTasks().then(setOpenTasks) }}
+                    ></div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13}}>{t.description}</div>
+                      {prospect && <div style={{fontSize:11,color:'var(--text-muted)',marginTop:1}}>{prospect.fname} {prospect.lname}{prospect.company?' · '+prospect.company:''}</div>}
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                      {t.due_date && <span style={{fontSize:11,color:dd<0?'var(--red-text)':dd===0?'var(--amber-text)':'var(--text-faint)',fontWeight:dd<=0?600:400}}>{dd<0?Math.abs(dd)+'d te laat':dd===0?'Vandaag':fdate(t.due_date)}</span>}
+                      <button style={{fontSize:14,color:'var(--text-faint)',cursor:'pointer'}} onClick={async () => { await db.deletePipelineTask(t.id); db.getAllPipelineTasks().then(setOpenTasks) }}>×</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Stats */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
           <div className="stat-card"><div className="stat-label">Totaal prospects</div><div className="stat-value">{pipeline.filter(p=>p.stage!=='klant').length}</div></div>
@@ -117,6 +162,7 @@ export default function PipelineView({ showView, onRefresh }) {
             onStageChange={handleStageChange}
             converting={converting}
             showView={showView}
+            onRefreshTasks={() => db.getAllPipelineTasks().then(setOpenTasks)}
           />
         ) : (
           <KanbanView
@@ -143,7 +189,7 @@ export default function PipelineView({ showView, onRefresh }) {
 }
 
 // ── List View ──────────────────────────────────────────────────────────────────
-function ListView({ pipeline, filterStage, setFilterStage, onEdit, onDelete, onConvert, onStageChange, converting, showView }) {
+function ListView({ pipeline, filterStage, setFilterStage, onEdit, onDelete, onConvert, onStageChange, converting, showView, onRefreshTasks }) {
   return (
     <div>
       <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
@@ -170,6 +216,7 @@ function ListView({ pipeline, filterStage, setFilterStage, onEdit, onDelete, onC
                   <div style={{fontWeight:500,fontSize:14}}>{p.fname} {p.lname}</div>
                   <div style={{fontSize:11,color:'var(--text-muted)'}}>{p.company||p.email||'—'}</div>
                   {p.interest && <div style={{fontSize:11,color:'var(--text-faint)',fontStyle:'italic',marginTop:1}}>{p.interest}</div>}
+                  <ProspectTasksPanel prospect={p} onTasksChange={onRefreshTasks} />
                 </div>
               </div>
               <div style={{fontSize:12,color:'var(--text-muted)'}}>{p.source||'—'}</div>
@@ -345,6 +392,94 @@ function ProspectModal({ prospect, onClose, onSave }) {
           <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Opslaan…' : 'Opslaan'}</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Prospect Tasks Panel ───────────────────────────────────────────────────────
+function ProspectTasksPanel({ prospect, onTasksChange }) {
+  const [tasks, setTasks] = useState([])
+  const [input, setInput] = useState('')
+  const [date, setDate] = useState('')
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (open) db.getPipelineTasks(prospect.id).then(setTasks)
+  }, [open, prospect.id])
+
+  const refresh = () => db.getPipelineTasks(prospect.id).then(t => { setTasks(t); onTasksChange && onTasksChange() })
+
+  async function addTask() {
+    if (!input.trim()) return
+    await db.createPipelineTask({ prospect_id: prospect.id, description: input.trim(), due_date: date || null, priority: 'normaal', done: false })
+    setInput(''); setDate(''); refresh()
+  }
+
+  async function toggle(t) {
+    await db.updatePipelineTask(t.id, { done: !t.done }); refresh()
+  }
+
+  const openCount = tasks.filter(t => !t.done).length
+
+  return (
+    <div style={{marginTop:8}}>
+      <button
+        className="btn btn-ghost btn-xs"
+        onClick={() => setOpen(!open)}
+        style={{display:'flex',alignItems:'center',gap:5}}
+      >
+        {openCount > 0 && <span style={{background:'var(--amber)',color:'#fff',borderRadius:99,padding:'0 5px',fontSize:10,fontWeight:700,lineHeight:'16px'}}>{openCount}</span>}
+        {open ? '▲' : '▼'} Taken {openCount > 0 ? `(${openCount} open)` : ''}
+      </button>
+
+      {open && (
+        <div style={{marginTop:8,background:'var(--bg2)',borderRadius:'var(--rsm)',padding:'10px 12px'}}>
+          {/* Snelle taken templates */}
+          <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:8}}>
+            {['Follow-up mailen','Bellen','Offerte sturen','WhatsApp sturen','Demo plannen'].map(t => (
+              <button key={t} className="btn btn-ghost btn-xs" onClick={() => setInput(t)} style={{fontSize:11}}>{t}</button>
+            ))}
+          </div>
+          {/* Bestaande taken */}
+          {tasks.map(t => {
+            const dd = t.due_date ? Math.ceil((new Date(t.due_date)-new Date(today()))/86400000) : null
+            return (
+              <div key={t.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:'1px solid var(--border)'}}>
+                <div
+                  style={{
+                    width:16,height:16,border:`1.5px solid ${t.done?'var(--accent)':'var(--border-strong)'}`,
+                    borderRadius:4,flexShrink:0,cursor:'pointer',
+                    background:t.done?'var(--accent)':'transparent',
+                    display:'flex',alignItems:'center',justifyContent:'center'
+                  }}
+                  onClick={() => toggle(t)}
+                >
+                  {t.done && <span style={{color:'#fff',fontSize:9}}>✓</span>}
+                </div>
+                <div style={{flex:1,fontSize:12,textDecoration:t.done?'line-through':'none',color:t.done?'var(--text-faint)':'var(--text)'}}>{t.description}</div>
+                {t.due_date && !t.done && (
+                  <span style={{fontSize:10,color:dd<0?'var(--red-text)':dd===0?'var(--amber-text)':'var(--text-faint)',fontWeight:dd<=0?600:400,whiteSpace:'nowrap'}}>
+                    {dd<0?Math.abs(dd)+'d te laat':dd===0?'Vandaag':fdate(t.due_date)}
+                  </span>
+                )}
+                <button style={{fontSize:13,color:'var(--text-faint)',cursor:'pointer',lineHeight:1}} onClick={async () => { await db.deletePipelineTask(t.id); refresh() }}>×</button>
+              </div>
+            )
+          })}
+          {/* Nieuwe taak */}
+          <div style={{display:'flex',gap:6,marginTop:8}}>
+            <input
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              placeholder="Nieuwe taak…"
+              style={{flex:1,fontSize:12,padding:'5px 8px'}}
+              onKeyDown={e => e.key==='Enter' && addTask()}
+            />
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{width:120,fontSize:12,padding:'5px 8px'}} />
+            <button className="btn btn-primary btn-xs" onClick={addTask}>+</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
