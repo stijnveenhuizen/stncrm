@@ -54,6 +54,7 @@ export default function Dashboard({ session }) {
   const [allMeetings, setAllMeetings] = useState([])
   const [pipeline, setPipeline] = useState([])
   const [loading, setLoading] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   function applyProfileTheme(p) {
     if (p.theme) setDarkMode(p.theme === 'dark')
@@ -206,22 +207,134 @@ export default function Dashboard({ session }) {
     .theme-toggle.dark{background:var(--accent)}
     .theme-toggle-knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
     .theme-toggle.dark .theme-toggle-knob{transform:translateX(16px)}
-    @media(max-width:768px){
-      .sidebar{width:100%;height:auto;position:relative}
-      .main{margin-left:0}
-      .sb-nav{display:flex;overflow-x:auto;padding:6px}
-      .nav-section{display:none}
+    .hamburger-btn{display:none;width:40px;height:40px;border-radius:var(--rsm);background:none;border:1px solid var(--border-strong);cursor:pointer;align-items:center;justify-content:center;color:var(--text);font-size:18px;position:fixed;top:8px;left:8px;z-index:22;transition:all .15s;background:var(--surface)}
+    .hamburger-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:19}
+    .sidebar-overlay.open{display:block}
+    
+    @media(max-width:1024px){
+      .stats-grid{grid-template-columns:repeat(2,1fr)}
       .detail-grid{grid-template-columns:1fr}
-      .stats-grid{grid-template-columns:1fr 1fr}
+      .modal{width:90vw;max-width:520px}
+    }
+    
+    @media(max-width:768px){
+      .hamburger-btn{display:flex}
+      .sidebar{width:224px;position:fixed;left:0;top:0;height:100vh;transform:translateX(-100%);transition:transform .3s ease;z-index:21}
+      .sidebar.open{transform:translateX(0)}
+      .sidebar-overlay{display:none}
+      .sidebar-overlay.open{display:block}
+      .main{margin-left:0;width:100%}
+      .app{display:block}
+      .sb-nav{flex-direction:column;overflow-y:auto;padding:12px 10px}
+      .nav-section{display:block;font-size:10px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em;padding:14px 8px 5px;margin-top:8px}
+      .nav-section:first-of-type{margin-top:0}
+      .detail-grid{grid-template-columns:1fr}
+      .stats-grid{grid-template-columns:1fr 1fr;gap:12px}
+      .stat-card{padding:14px 16px}
+      .stat-value{font-size:18px}
+      .content{padding:16px}
+      .topbar{padding:0 14px;height:56px}
+      .topbar h2{font-size:14px}
+      .topbar-right{gap:6px}
+      .btn{padding:6px 12px;font-size:12px}
+      .btn-sm{padding:4px 9px;font-size:11px}
+      .tabs{flex-wrap:wrap}
+      .tab{padding:4px 10px;font-size:11px}
+      .cl-header{grid-template-columns:1fr;padding:9px 12px;font-size:9px}
+      .cl-row{grid-template-columns:1fr;padding:12px 12px}
       .cl-header div:nth-child(n+2),.cl-row div:nth-child(n+2){display:none}
-      .cl-header,.cl-row{grid-template-columns:1fr}
+      .pl-header{grid-template-columns:1fr;padding:9px 12px;font-size:9px}
+      .pl-row{grid-template-columns:1fr;padding:12px 12px}
+      .pl-header div:nth-child(n+2),.pl-row div:nth-child(n+2){display:none}
+      .modal{width:90vw;max-width:90vw;padding:20px;max-height:85vh}
+      .modal h3{font-size:14px;margin-bottom:16px}
+      .form-row{grid-template-columns:1fr}
+      .search-wrap input{width:100%}
+      .quick-add{flex-direction:column;gap:6px;padding:0 12px 10px}
+      .quick-add input[type=date]{width:100%}
+      .client-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
+      .client-tab{padding:9px 12px;font-size:12px}
+      .info-label{width:80px}
+      .avatar{width:30px;height:30px;font-size:11px}
+      input,textarea,select{font-size:16px;padding:10px 12px}
+      label{font-size:10px}
+      h1,h2,h3,h4,h5{font-size:inherit}
+      body{font-size:13px}
+    }
+    
+    @media(max-width:600px){
+      .stats-grid{grid-template-columns:1fr;gap:10px}
+      .stat-card{padding:12px 14px}
+      .stat-value{font-size:16px}
+      .stat-label{font-size:9px}
+      .content{padding:12px}
+      .topbar{padding:0 10px;height:52px}
+      .topbar h2{font-size:13px}
+      .btn{padding:5px 10px;font-size:11px;gap:4px}
+      .btn-sm{padding:3px 8px;font-size:10px}
+      .topbar-right{gap:4px}
+      .modal{padding:16px}
+      .form-group{margin-bottom:12px}
+      .sc-head{padding:12px 14px}
+      .sc-body{padding:12px 14px}
+      .sc-title{font-size:12px}
+      .cl-row{padding:10px 12px}
+      .pl-row{padding:10px 12px}
+      .task-item{padding:8px 0;gap:8px}
+      .task-check{width:16px;height:16px}
+      .info-row{padding:6px 0;font-size:12px}
+      .info-label{width:70px;font-size:11px}
+      .avatar{width:28px;height:28px;font-size:10px}
+      .badge{padding:2px 7px;font-size:10px}
+      .chart-wrap{height:60px}
+      .dl-item{padding:6px 0;font-size:12px}
+      .bc{font-size:12px}
+      .search-wrap input{width:100%;font-size:13px}
+      input,textarea,select{font-size:14px;padding:9px 11px}
+    }
+    
+    @media(max-width:480px){
+      .topbar{height:48px}
+      .topbar h2{font-size:12px}
+      .content{padding:10px}
+      .stats-grid{gap:8px}
+      .stat-card{padding:10px 12px}
+      .stat-value{font-size:14px;line-height:1}
+      .stat-label{font-size:8px}
+      .stat-sub{font-size:10px}
+      .btn{padding:4px 8px;font-size:10px}
+      .modal{padding:14px;margin:10px}
+      .form-group{margin-bottom:10px}
+      label{font-size:9px;margin-bottom:3px}
+      .sc{margin-bottom:12px}
+      .sc-head{padding:10px 12px}
+      .sc-body{padding:10px 12px}
+      .cl-row{padding:9px 10px}
+      .pl-row{padding:9px 10px}
+      .task-item{gap:6px}
+      .empty{padding:24px 12px;font-size:12px}
+      .avatar{width:26px;height:26px;font-size:9px}
+      .badge{padding:1px 6px;font-size:9px}
+      .bc{font-size:11px}
+      input,textarea,select{font-size:13px;padding:8px 10px;border-radius:5px}
+      .detail-grid{gap:14px}
+      .modal-actions{gap:6px}
+      .topbar-right{gap:3px}
+      .nav-item{padding:6px 8px;font-size:12px}
+      .sb-logo{padding:16px 14px 12px}
+      .sb-logo-icon{width:28px;height:28px}
+      .sb-logo-text h1{font-size:12px}
+      .sb-logo-text span{font-size:9px}
+      .sb-footer{padding:12px 14px}
     }
   `
 
   return (
     <div className="app">
       <style>{CSS}</style>
-      <nav className="sidebar">
+      <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)}></div>
+      <nav className={`sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="sb-logo">
           <div className="sb-logo-icon"><span>S</span></div>
           <div className="sb-logo-text">
@@ -231,26 +344,26 @@ export default function Dashboard({ session }) {
         </div>
         <div className="sb-nav">
           <div className="nav-section">Overzicht</div>
-          <button className={`nav-item${view==='overview'?' active':''}`} onClick={() => showView('overview')}>
+          <button className={`nav-item${view==='overview'?' active':''}`} onClick={() => { showView('overview'); setSidebarOpen(false) }}>
             <span className="nav-dot"></span>Dashboard
           </button>
           <div className="nav-section">Beheer</div>
-          <button className={`nav-item${['clients','client-detail'].includes(view)?' active':''}`} onClick={() => showView('clients')}>
+          <button className={`nav-item${['clients','client-detail'].includes(view)?' active':''}`} onClick={() => { showView('clients'); setSidebarOpen(false) }}>
             <span className="nav-dot"></span>Klanten
           </button>
-          <button className={`nav-item${['projects','project-detail'].includes(view)?' active':''}`} onClick={() => showView('projects')}>
+          <button className={`nav-item${['projects','project-detail'].includes(view)?' active':''}`} onClick={() => { showView('projects'); setSidebarOpen(false) }}>
             <span className="nav-dot"></span>Projecten
           </button>
-          <button className={`nav-item${view==='tasks'?' active':''}`} onClick={() => showView('tasks')}>
+          <button className={`nav-item${view==='tasks'?' active':''}`} onClick={() => { showView('tasks'); setSidebarOpen(false) }}>
             <span className="nav-dot"></span>Alle taken
           </button>
-          <button className={`nav-item${view==='finance'?' active':''}`} onClick={() => showView('finance')}>
+          <button className={`nav-item${view==='finance'?' active':''}`} onClick={() => { showView('finance'); setSidebarOpen(false) }}>
             <span className="nav-dot"></span>Financiën
           </button>
-          <button className={`nav-item${view==='hosting'?' active':''}`} onClick={() => showView('hosting')}>
+          <button className={`nav-item${view==='hosting'?' active':''}`} onClick={() => { showView('hosting'); setSidebarOpen(false) }}>
             <span className="nav-dot"></span>Hosting
           </button>
-          <button className={`nav-item${view==='pipeline'?' active':''}`} onClick={() => showView('pipeline')}>
+          <button className={`nav-item${view==='pipeline'?' active':''}`} onClick={() => { showView('pipeline'); setSidebarOpen(false) }}>
             <span className="nav-dot"></span>Pipeline
           </button>
         </div>
@@ -267,7 +380,7 @@ export default function Dashboard({ session }) {
           </div>
           <div
             style={{display:'flex',alignItems:'center',gap:9,padding:'8px 6px',borderRadius:'var(--rsm)',cursor:'pointer',transition:'background .1s',marginBottom:8}}
-            onClick={() => showView('profile')}
+            onClick={() => { showView('profile'); setSidebarOpen(false) }}
             onMouseEnter={e => e.currentTarget.style.background='var(--accent-soft)'}
             onMouseLeave={e => e.currentTarget.style.background='transparent'}
           >
@@ -290,6 +403,7 @@ export default function Dashboard({ session }) {
         </div>
       </nav>
       <div className="main">
+        <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)} title="Menu">☰</button>
         {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} />}

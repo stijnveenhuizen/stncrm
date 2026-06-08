@@ -19,9 +19,24 @@ export default function Login() {
   return (
     <div style={{
       minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center',
-      background:'var(--bg)', fontFamily:'var(--body-font)'
+      background:'var(--bg)', fontFamily:'var(--body-font)', padding: '16px'
     }}>
-      <div style={{width:400, padding:'0 24px'}}>
+      <style>{`
+        @media(max-width: 600px) {
+          h1 { font-size: 18px !important; }
+          p { font-size: 12px !important; }
+          input { font-size: 16px !important; padding: 10px 12px !important; }
+          label { font-size: 10px !important; }
+          button { font-size: 12px !important; }
+        }
+        @media(max-width: 480px) {
+          .login-card { padding: 20px 16px !important; }
+          h1 { font-size: 16px !important; }
+          p { font-size: 11px !important; }
+          input { font-size: 14px !important; padding: 9px 11px !important; }
+        }
+      `}</style>
+      <div style={{width:'100%', maxWidth: 400, padding:'0 8px'}}>
         {/* Logo / branding */}
         <div style={{textAlign:'center', marginBottom:40}}>
           <div style={{
@@ -36,7 +51,7 @@ export default function Login() {
         </div>
 
         {/* Card */}
-        <div style={{
+        <div className="login-card" style={{
           background:'var(--surface)', border:'1px solid var(--border)',
           borderRadius:'var(--r)', padding:'32px 28px',
           boxShadow:'var(--shadow-md)'
