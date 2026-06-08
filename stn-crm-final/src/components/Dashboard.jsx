@@ -261,6 +261,7 @@ export default function Dashboard({ session }) {
       label{font-size:10px}
       h1,h2,h3,h4,h5{font-size:inherit}
       body{font-size:13px}
+      iframe{height:300px!important}
     }
     
     @media(max-width:600px){
@@ -703,6 +704,7 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
 
 function ProjectsView({ projects, clients, clientName, showView, onRefresh }) {
   const [q, setQ] = useState('')
+  const [previewUrl, setPreviewUrl] = useState(null)
   const filtered = projects.filter(p => !q||p.name.toLowerCase().includes(q.toLowerCase())||clientName(p.client_id).toLowerCase().includes(q.toLowerCase()))
   return (
     <div>
@@ -718,6 +720,7 @@ function ProjectsView({ projects, clients, clientName, showView, onRefresh }) {
               <div style={{fontSize:13,color:dC}}>{p.deadline?fdate(p.deadline):'—'}</div>
               <div><Badge s={p.status} /></div>
               <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                {p.url&&<button onClick={e=>{e.stopPropagation();setPreviewUrl(p.url)}} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>👁 Preview</button>}
                 {p.url&&<a href={p.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>↗ Open</a>}
               </div>
             </div>
@@ -725,11 +728,22 @@ function ProjectsView({ projects, clients, clientName, showView, onRefresh }) {
         </div>
       </div>
     </div>
+    <Modal open={!!previewUrl} onClose={()=>setPreviewUrl(null)} title="Website Preview">
+      {previewUrl && <div style={{width:'100%',height:'500px',border:'1px solid var(--border)',borderRadius:'var(--r)',overflow:'hidden'}}>
+        <iframe 
+          src={previewUrl} 
+          style={{width:'100%',height:'100%',border:'none'}}
+          title="Website preview"
+          sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+        />
+      </div>}
+    </Modal>
   )
 }
 
 function ProjectDetailView({ project, clients, clientName, showView, onRefresh }) {
   const [tasks, setTasks] = useState([])
+  const [showPreview, setShowPreview] = useState(true)
   useEffect(() => { db.getTasks(project.id).then(setTasks) }, [project.id])
   const refreshTasks = () => db.getTasks(project.id).then(setTasks)
   const open=tasks.filter(t=>!t.done), done=tasks.filter(t=>t.done)
@@ -748,6 +762,22 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh }
         <div className="topbar-right"><ProjectModal project={project} clients={clients} onSave={onRefresh} trigger={<button className="btn btn-ghost btn-sm">Bewerken</button>} /><button className="btn btn-danger btn-sm" onClick={delProject}>Verwijderen</button></div>
       </div>
       <div className="content">
+        {project.url && showPreview && (
+          <div className="sc" style={{marginBottom:16}}>
+            <div className="sc-head">
+              <span className="sc-title">Website preview</span>
+              <button className="btn btn-ghost btn-xs" onClick={()=>setShowPreview(false)}>Sluiten</button>
+            </div>
+            <div className="sc-body" style={{padding:0,overflow:'hidden'}}>
+              <iframe 
+                src={project.url} 
+                style={{width:'100%',height:'400px',border:'none',borderRadius:'0 0 var(--r) var(--r)',backgroundColor:'#fff'}}
+                title="Website preview"
+                sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+              />
+            </div>
+          </div>
+        )}
         <div className="detail-grid">
           <div>
             <div className="sc">
