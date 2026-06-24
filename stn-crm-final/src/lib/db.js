@@ -47,6 +47,36 @@ export async function getClientHosting(clientId) {
   if (error) throw error
   return data
 }
+export async function revokeClientPortal(clientId) {
+  const { data, error } = await supabase.from('clients').update({ auth_user_id: null }).eq('id', clientId).select().single()
+  if (error) throw error
+  return data
+}
+
+// ── Organisaties & team ──────────────────────────────────────────────────────────
+export async function createOrganization(name) {
+  const existing = await getProfile((await supabase.auth.getUser()).data.user.id)
+  if (existing) throw new Error('Dit account heeft al een team-profiel.')
+  const { data: org, error: orgErr } = await supabase.from('organizations').insert([{ name }]).select().single()
+  if (orgErr) throw orgErr
+  const userId = (await supabase.auth.getUser()).data.user.id
+  const { data: profile, error: profErr } = await supabase
+    .from('profiles').insert([{ id: userId, organization_id: org.id, role: 'owner' }]).select().single()
+  if (profErr) throw profErr
+  return { org, profile }
+}
+export async function linkTeamMemberAccount(organizationId) {
+  const userId = (await supabase.auth.getUser()).data.user.id
+  const { data, error } = await supabase
+    .from('profiles').insert([{ id: userId, organization_id: organizationId, role: 'member' }]).select().single()
+  if (error) throw error
+  return data
+}
+export async function getOrgMembers() {
+  const { data, error } = await supabase.from('profiles').select('*').order('role', { ascending: true })
+  if (error) throw error
+  return data
+}
 
 // ── Projects ───────────────────────────────────────────────────────────────────
 export async function getProjects() {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-export default function Login() {
+export default function Login({ onSignupClick }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -91,7 +91,10 @@ export default function Login() {
           </form>
         </div>
 
-        <div style={{textAlign:'center', marginTop:24, fontSize:11, color:'var(--text-faint)'}}>
+        <div style={{textAlign:'center', marginTop:20, fontSize:12, color:'var(--text-muted)'}}>
+          Nog geen account? <span onClick={onSignupClick} style={{color:'var(--accent-text)', fontWeight:600, cursor:'pointer'}}>Bedrijf registreren</span>
+        </div>
+        <div style={{textAlign:'center', marginTop:12, fontSize:11, color:'var(--text-faint)'}}>
           STN Webdesign · Hardenberg
         </div>
       </div>

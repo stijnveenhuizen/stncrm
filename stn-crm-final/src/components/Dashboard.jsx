@@ -140,6 +140,7 @@ export default function Dashboard({ session }) {
   const [allHosting, setAllHosting] = useState([])
   const [allMeetings, setAllMeetings] = useState([])
   const [pipeline, setPipeline] = useState([])
+  const [orgMembers, setOrgMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -169,6 +170,8 @@ export default function Dashboard({ session }) {
 
   useEffect(() => { loadAll() }, [loadAll])
   useEffect(() => { db.getProfile(session.user.id).then(p => { if(p) { setProfile(p); applyProfileTheme(p) } }) }, [session.user.id])
+  const loadMembers = useCallback(() => { db.getOrgMembers().then(setOrgMembers).catch(() => {}) }, [])
+  useEffect(() => { loadMembers() }, [loadMembers])
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
     try { localStorage.setItem('stn_theme', darkMode ? 'dark' : 'light') } catch(e) {}
@@ -467,6 +470,11 @@ export default function Dashboard({ session }) {
           <button className={`nav-item${view==='pipeline'?' active':''}`} onClick={() => { showView('pipeline'); setSidebarOpen(false) }}>
             <span className="nav-dot"></span>Pipeline
           </button>
+          {profile?.role === 'owner' && (
+            <button className={`nav-item${view==='team'?' active':''}`} onClick={() => { showView('team'); setSidebarOpen(false) }}>
+              <span className="nav-dot"></span>Team
+            </button>
+          )}
         </div>
         <div className="sb-footer">
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
@@ -509,7 +517,7 @@ export default function Dashboard({ session }) {
         </button>
         {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
-        {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
+        {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} members={orgMembers} myProfile={profile} />}
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
         {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
@@ -517,6 +525,7 @@ export default function Dashboard({ session }) {
         {view==='hosting' && <HostingView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} />}
         {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} />}
         {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} />}
+        {view==='team' && profile?.role === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} />}
       </div>
     </div>
     </ToastProvider>
@@ -639,7 +648,7 @@ function ClientsView({ clients, projects, allTasks, showView, onRefresh }) {
   )
 }
 
-function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
+function ClientDetailView({ client, projects, allTasks, showView, onRefresh, members = [], myProfile }) {
   const [activeTab, setActiveTab] = useState('projects')
   const [invoices, setInvoices] = useState([])
   const [recurring, setRecurring] = useState([])
@@ -785,9 +794,26 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
                   {client.phone&&<div className="info-row"><span className="info-label">Telefoon</span><span className="info-val">{client.phone}</span></div>}
                   {client.website&&<div className="info-row"><span className="info-label">Website</span><a href={client.website} target="_blank" rel="noreferrer" style={{color:'var(--blue-text)',fontSize:13}}>{client.website}</a></div>}
                 </div>
+                {members.length > 0 && (
+                  <div className="info-row">
+                    <span className="info-label">Toegewezen aan</span>
+                    <span className="info-val">
+                      {myProfile?.role === 'owner' ? (
+                        <select value={client.assigned_to || ''} onChange={e=>db.updateClient(client.id, { assigned_to: e.target.value || null }).then(onRefresh)} style={{fontSize:13,padding:'5px 8px'}}>
+                          <option value="">— Niemand specifiek —</option>
+                          {members.map(m => <option key={m.id} value={m.id}>{m.full_name || m.id}{m.role==='owner'?' (eigenaar)':''}</option>)}
+                        </select>
+                      ) : (
+                        members.find(m => m.id === client.assigned_to)?.full_name || 'Niemand specifiek'
+                      )}
+                    </span>
+                  </div>
+                )}
                 <div style={{marginTop:14,paddingTop:12,borderTop:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
                   <span className={`badge ${client.auth_user_id?'bg-green':'bg-gray'}`}>{client.auth_user_id?'Portaal actief':'Geen portaaltoegang'}</span>
-                  {!client.auth_user_id && <PortalInviteButton client={client} />}
+                  {!client.auth_user_id
+                    ? <PortalInviteButton client={client} />
+                    : <button className="btn btn-ghost btn-xs" onClick={()=>{if(confirm('Portaaltoegang intrekken voor '+client.fname+'?')) db.revokeClientPortal(client.id).then(onRefresh)}}>Toegang intrekken</button>}
                 </div>
               </div>
             </div>
@@ -994,6 +1020,58 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
                 <div className="info-row"><span className="info-label">ARR totaal</span><span className="info-val" style={{fontFamily:'var(--mono-font)',fontWeight:500}}>{money(totalMRR*12)}</span></div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TeamView({ members, onRefresh }) {
+  const [email, setEmail] = useState('')
+  const [inviting, setInviting] = useState(false)
+
+  async function invite() {
+    if (!email.trim()) return
+    const me = members.find(m => m.role === 'owner')
+    setInviting(true)
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: { shouldCreateUser: true, data: { invite_organization_id: me?.organization_id } }
+      })
+      if (error) throw error
+      showToast('Uitnodiging verstuurd naar ' + email)
+      setEmail('')
+    } catch (e) {
+      showToast('Fout bij uitnodigen: ' + e.message, 'error')
+    } finally {
+      setInviting(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="topbar"><h2>Team</h2></div>
+      <div className="content">
+        <div className="sc">
+          <div className="sc-head"><span className="sc-title">Collega uitnodigen</span></div>
+          <div className="sc-body">
+            <div style={{display:'flex',gap:8}}>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="collega@bedrijf.nl" onKeyDown={e=>e.key==='Enter'&&invite()} />
+              <button className="btn btn-primary btn-sm" onClick={invite} disabled={inviting}>{inviting ? 'Versturen…' : 'Uitnodigen'}</button>
+            </div>
+          </div>
+        </div>
+        <div className="sc">
+          <div className="sc-head"><span className="sc-title">Teamleden ({members.length})</span></div>
+          <div className="sc-body">
+            {!members.length ? <div className="empty">Nog geen teamleden</div> : members.map(m => (
+              <div key={m.id} className="info-row">
+                <span className="info-label">{m.role === 'owner' ? 'Eigenaar' : 'Teamlid'}</span>
+                <span className="info-val">{m.full_name || m.id}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>

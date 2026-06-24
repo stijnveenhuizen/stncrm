@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import * as db from './lib/db'
 import Login from './components/Login.jsx'
+import Signup from './components/Signup.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import ClientPortal from './components/ClientPortal.jsx'
 
@@ -10,6 +11,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [role, setRole] = useState(null) // 'staff' | { client }
   const [roleError, setRoleError] = useState(false)
+  const [showSignup, setShowSignup] = useState(false)
 
   async function resolveRole(session) {
     if (!session) { setRole(null); return }
@@ -23,6 +25,14 @@ export default function App() {
       } catch (e) { /* self-link policy rejected it, fall through to error state */ }
     }
     if (client) { setRole({ client }); return }
+
+    if (session.user.user_metadata?.invite_organization_id) {
+      try {
+        await db.linkTeamMemberAccount(session.user.user_metadata.invite_organization_id)
+        setRole('staff')
+        return
+      } catch (e) { /* self-link policy rejected it, fall through to error state */ }
+    }
     setRoleError(true)
   }
 
@@ -45,7 +55,9 @@ export default function App() {
     </div>
   )
 
-  if (!session) return <Login />
+  if (!session) return showSignup
+    ? <Signup onBackToLogin={() => setShowSignup(false)} />
+    : <Login onSignupClick={() => setShowSignup(true)} />
 
   if (roleError) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:10,color:'var(--text-muted)',fontSize:13,textAlign:'center',padding:24}}>

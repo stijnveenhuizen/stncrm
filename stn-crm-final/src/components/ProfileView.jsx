@@ -72,13 +72,14 @@ export default function ProfileView({ session, onProfileUpdate }) {
   async function handleInvite(e) {
     e.preventDefault()
     if (!inviteEmail.trim()) return
+    if (!profile?.organization_id) { setInviteMsg('Fout: geen team-organisatie gevonden voor je account.'); return }
     setInviting(true)
     setInviteMsg('')
     try {
       // Use Supabase magic link instead of admin invite (works without service key)
       const { error } = await supabase.auth.signInWithOtp({
         email: inviteEmail.trim(),
-        options: { shouldCreateUser: true }
+        options: { shouldCreateUser: true, data: { invite_organization_id: profile.organization_id } }
       })
       if (error) throw error
       setInviteMsg('Uitnodiging verstuurd naar ' + inviteEmail)
