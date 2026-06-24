@@ -2026,12 +2026,12 @@ function HostingView({ allHosting, clients, showView, onRefresh }) {
   const expiringSoon = allHosting.filter(h => {
     if (!h.domain_expires) return false
     const d = daysN(h.domain_expires)
-    return d !== null && d <= 30
+    return d !== null && d <= 60
   })
   const sslWarn = allHosting.filter(h => {
     if (!h.ssl_expires) return false
     const d = daysN(h.ssl_expires)
-    return d !== null && d <= 30
+    return d !== null && d <= 60
   })
 
   function expiryColor(dateStr) {
@@ -2039,7 +2039,7 @@ function HostingView({ allHosting, clients, showView, onRefresh }) {
     const d = daysN(dateStr)
     if (d < 0) return 'var(--red-text)'
     if (d <= 14) return 'var(--red-text)'
-    if (d <= 30) return 'var(--amber-text)'
+    if (d <= 60) return 'var(--amber-text)'
     return 'var(--text-muted)'
   }
 
@@ -2088,8 +2088,8 @@ function HostingView({ allHosting, clients, showView, onRefresh }) {
                 {h.clients?.company && <div style={{fontSize:11,color:'var(--text-faint)'}}>{h.clients.company}</div>}
               </div>
               <div style={{fontSize:13,color:'var(--text-muted)'}}>{h.hoster||'—'}</div>
-              <div style={{fontSize:13,color:expiryColor(h.domain_expires),fontWeight:daysN(h.domain_expires)<=30?500:400}}>{h.domain_expires?fdate(h.domain_expires):'—'}</div>
-              <div style={{fontSize:13,color:expiryColor(h.ssl_expires),fontWeight:daysN(h.ssl_expires)<=30?500:400}}>{h.ssl_expires?fdate(h.ssl_expires):'—'}</div>
+              <div style={{fontSize:13,color:expiryColor(h.domain_expires),fontWeight:daysN(h.domain_expires)<=60?500:400}}>{h.domain_expires?fdate(h.domain_expires):'—'}</div>
+              <div style={{fontSize:13,color:expiryColor(h.ssl_expires),fontWeight:daysN(h.ssl_expires)<=60?500:400}}>{h.ssl_expires?fdate(h.ssl_expires):'—'}</div>
               <div style={{display:'flex',gap:5,justifyContent:'flex-end'}}>
                 {h.url && <a href={h.url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none'}} onClick={e=>e.stopPropagation()}>↗</a>}
                 {h.hosting_login_url && <a href={h.hosting_login_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none',padding:'3px 6px'}} title="Open hostingpaneel" onClick={e=>e.stopPropagation()}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg></a>}
@@ -2121,7 +2121,7 @@ function ClientHostingTab({ clientId, onRefresh, activeOrgId }) {
     const d = daysN(dateStr)
     if (d < 0) return 'var(--red-text)'
     if (d <= 14) return 'var(--red-text)'
-    if (d <= 30) return 'var(--amber-text)'
+    if (d <= 60) return 'var(--amber-text)'
     return 'var(--text-muted)'
   }
 
@@ -2149,8 +2149,8 @@ function ClientHostingTab({ clientId, onRefresh, activeOrgId }) {
               {h.cms && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>CMS</span><span className="info-val">{h.cms}</span></div>}
               {h.hoster && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>Hoster</span><span className="info-val">{h.hoster}</span></div>}
               {h.domain && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>Domein</span><span className="info-val">{h.domain}</span></div>}
-              {h.domain_expires && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>Domein exp.</span><span className="info-val" style={{color:expiryColor(h.domain_expires),fontWeight:daysN(h.domain_expires)<=30?500:400}}>{fdate(h.domain_expires)}</span></div>}
-              {h.ssl_expires && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>SSL exp.</span><span className="info-val" style={{color:expiryColor(h.ssl_expires),fontWeight:daysN(h.ssl_expires)<=30?500:400}}>{fdate(h.ssl_expires)}</span></div>}
+              {h.domain_expires && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>Domein exp.</span><span className="info-val" style={{color:expiryColor(h.domain_expires),fontWeight:daysN(h.domain_expires)<=60?500:400}}>{fdate(h.domain_expires)}</span></div>}
+              {h.ssl_expires && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>SSL exp.</span><span className="info-val" style={{color:expiryColor(h.ssl_expires),fontWeight:daysN(h.ssl_expires)<=60?500:400}}>{fdate(h.ssl_expires)}</span></div>}
               {h.monthly_cost && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>Kosten</span><span className="info-val" style={{fontFamily:'var(--mono-font)'}}>{money(h.monthly_cost)}/mnd</span></div>}
             </div>
             {h.hosting_username && (
