@@ -564,7 +564,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
-        {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
+        {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} />}
@@ -596,7 +596,7 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
 
   return (
     <div>
-      <div className="topbar"><h2>Welkom{myProfile?.full_name ? ', ' + myProfile.full_name.split(' ')[0] : ''}</h2><div className="topbar-right"><ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Klant</button>} /><ProjectModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-ghost btn-sm">+ Project</button>} /></div></div>
+      <div className="topbar"><h2>Welkom{myProfile?.full_name ? ', ' + myProfile.full_name.split(' ')[0] : ''}</h2><div className="topbar-right"><ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Klant</button>} /><ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-ghost btn-sm">+ Project</button>} /></div></div>
       <div className="content">
         <div className="stats-grid">
           <div className="stat-card"><div className="stat-label">Klanten</div><div className="stat-value">{clients.length}</div><div className="stat-sub">{clients.filter(c=>c.status==='actief').length} actief</div></div>
@@ -776,7 +776,7 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
               {activeTab==='projects' && (
                 <div>
                   <div style={{padding:'12px 16px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'flex-end'}}>
-                    <ProjectModal clients={[client]} defaultClientId={client.id} onSave={onRefresh} trigger={<button className="btn btn-ghost btn-sm">+ Project</button>} />
+                    <ProjectModal clients={[client]} defaultClientId={client.id} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-ghost btn-sm">+ Project</button>} />
                   </div>
                   <div className="sc-body">
                     {!clientProjects.length ? <div className="empty">Geen projecten</div> : clientProjects.map(p => {
@@ -907,14 +907,14 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
   )
 }
 
-function ProjectsView({ projects, clients, clientName, showView, onRefresh }) {
+function ProjectsView({ projects, clients, clientName, showView, onRefresh, activeOrgId }) {
   const [q, setQ] = useState('')
   const [previewUrl, setPreviewUrl] = useState(null)
   const filtered = projects.filter(p => !q||p.name.toLowerCase().includes(q.toLowerCase())||clientName(p.client_id).toLowerCase().includes(q.toLowerCase()))
   return (
     <>
       <div>
-        <div className="topbar"><h2>Projecten</h2><div className="topbar-right"><div className="search-wrap"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div><ProjectModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Nieuw project</button>} /></div></div>
+        <div className="topbar"><h2>Projecten</h2><div className="topbar-right"><div className="search-wrap"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div><ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Nieuw project</button>} /></div></div>
         <div className="content">
           <div className="sc" style={{padding:0}}>
             <div className="pl-header"><div>Project</div><div>Klant</div><div>Deadline</div><div>Status</div><div>Info</div></div>
@@ -1426,7 +1426,7 @@ function ClientModal({ client, onSave, trigger, activeOrgId }) {
   </>
 }
 
-function ProjectModal({ project, clients, defaultClientId, onSave, trigger }) {
+function ProjectModal({ project, clients, defaultClientId, onSave, trigger, activeOrgId }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [color, setColor] = useState(PROJ_COLORS[0])
@@ -1448,7 +1448,7 @@ function ProjectModal({ project, clients, defaultClientId, onSave, trigger }) {
         color
       }
       if(project) await db.updateProject(project.id, data)
-      else await db.createProject(data)
+      else await db.createProject({ ...data, organization_id: activeOrgId })
       setOpen(false); onSave(); showToast(project ? 'Project bijgewerkt' : 'Project aangemaakt')
     } catch(e) {
       showToast('Fout bij opslaan: ' + e.message, 'error')

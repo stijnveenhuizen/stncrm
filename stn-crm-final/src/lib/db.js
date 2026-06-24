@@ -181,11 +181,11 @@ export async function adminImpersonate(email) {
 // organizationId is optioneel: het klantenportaal (ClientPortal.jsx) heeft geen
 // werkruimte-besef, daar regelt RLS (auth_user_id van de klant) de scoping al.
 export async function getProjects(organizationId) {
-  let query = supabase.from('projects').select('*, clients!inner(organization_id)').order('created_at', { ascending: false })
-  if (organizationId) query = query.eq('clients.organization_id', organizationId)
+  let query = supabase.from('projects').select('*').order('created_at', { ascending: false })
+  if (organizationId) query = query.eq('organization_id', organizationId)
   const { data, error } = await query
   if (error) throw error
-  return data.map(({ clients, ...p }) => p)
+  return data
 }
 export async function createProject(project) {
   // Geen .select() na de insert: de RLS-policy voor het lezen van projecten
