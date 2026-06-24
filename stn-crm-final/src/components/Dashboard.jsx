@@ -161,9 +161,6 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
       document.documentElement.style.setProperty('--accent-hover', p.accent_color + 'dd')
       document.documentElement.style.setProperty('--accent-soft', p.accent_color + '18')
       document.documentElement.style.setProperty('--accent-text', p.accent_color)
-      document.documentElement.style.setProperty('--green', p.accent_color)
-      document.documentElement.style.setProperty('--green-soft', p.accent_color + '18')
-      document.documentElement.style.setProperty('--green-text', p.accent_color)
     }
   }
 
@@ -304,14 +301,15 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     .bc .sep{color:var(--text-faint);font-size:11px}
     .bc .bactive{color:var(--text);font-weight:600;font-family:var(--heading-font)}
     .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--rsm);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;border:1px solid transparent;line-height:1;white-space:nowrap}
-    .btn-primary{background:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(61,182,142,0.25)}.btn-primary:hover{background:var(--accent-hover);box-shadow:0 3px 10px rgba(61,182,142,0.35)}.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+    .btn-primary{background:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(109,93,246,0.25)}.btn-primary:hover{background:var(--accent-hover);box-shadow:0 3px 10px rgba(109,93,246,0.35)}.btn-primary:disabled{opacity:.5;cursor:not-allowed}
     .btn-ghost{background:none;border-color:var(--border-strong);color:var(--text-muted)}.btn-ghost:hover{background:var(--accent-soft);color:var(--accent-text);border-color:var(--accent)}
     .btn-danger{background:var(--red-soft);color:var(--red-text);border-color:transparent}.btn-danger:hover{opacity:.85}
     .btn-sm{padding:5px 11px;font-size:12px}.btn-xs{padding:3px 8px;font-size:11px}
     .content{padding:26px}
     .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
     .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;transition:background .2s,border .2s;box-shadow:var(--shadow)}
-    .stat-card:hover{border-color:var(--accent);box-shadow:0 0 0 3px rgba(61,182,142,0.08)}
+    .stat-card:hover{border-color:var(--accent);box-shadow:0 0 0 3px rgba(109,93,246,0.08)}
+    .stat-card-icon{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;margin-bottom:10px}
     .stat-label{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
     .stat-value{font-size:22px;font-weight:700;letter-spacing:-.03em;font-family:var(--heading-font)}
     .stat-sub{font-size:11px;color:var(--text-faint);margin-top:3px}
@@ -700,10 +698,22 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
       <div className="content">
         {showOnboarding && <OnboardingChecklist clients={clients} projects={projects} orgMembers={orgMembers} showView={showView} onRefresh={onRefresh} activeOrgId={activeOrgId} onDismiss={dismissOnboarding} />}
         <div className="stats-grid">
-          <div className="stat-card"><div className="stat-label">Klanten</div><div className="stat-value">{clients.length}</div><div className="stat-sub">{clients.filter(c=>c.status==='actief').length} actief</div></div>
-          <div className="stat-card"><div className="stat-label">Projecten</div><div className="stat-value">{projects.length}</div><div className="stat-sub">{projects.filter(p=>p.status==='actief').length} actief{myRole!=='owner' && ' · allemaal aan jou toegewezen'}</div></div>
-          <div className="stat-card"><div className="stat-label">Omzet betaald</div><div className="stat-value" style={{fontSize:18}}>{money(totalPaid)}</div>{totalOpen>0&&<div className="stat-sub" style={{color:'var(--amber-text)'}}>{money(totalOpen)} nog te ontvangen</div>}</div>
-          <div className="stat-card"><div className="stat-label">MRR</div><div className="stat-value" style={{fontSize:18}}>{money(totalMRR)}</div><div className="stat-sub">per maand</div></div>
+          <div className="stat-card">
+            <div className="stat-card-icon" style={{background:'var(--blue)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+            <div className="stat-label">Klanten</div><div className="stat-value">{clients.length}</div><div className="stat-sub">{clients.filter(c=>c.status==='actief').length} actief</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-icon" style={{background:'var(--purple)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2Z"/></svg></div>
+            <div className="stat-label">Projecten</div><div className="stat-value">{projects.length}</div><div className="stat-sub">{projects.filter(p=>p.status==='actief').length} actief{myRole!=='owner' && ' · allemaal aan jou toegewezen'}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-icon" style={{background:'var(--green)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+            <div className="stat-label">Omzet betaald</div><div className="stat-value" style={{fontSize:18}}>{money(totalPaid)}</div>{totalOpen>0&&<div className="stat-sub" style={{color:'var(--amber-text)'}}>{money(totalOpen)} nog te ontvangen</div>}
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-icon" style={{background:'var(--teal)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div>
+            <div className="stat-label">MRR</div><div className="stat-value" style={{fontSize:18}}>{money(totalMRR)}</div><div className="stat-sub">per maand</div>
+          </div>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
           <div className="sc" style={{cursor:'pointer'}} onClick={()=>showView('pipeline')}>
