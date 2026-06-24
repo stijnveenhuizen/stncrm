@@ -58,12 +58,17 @@ export async function createOrganization(name) {
   const userId = (await supabase.auth.getUser()).data.user.id
   // Profiel is nu puur persoonlijke voorkeuren (naam/thema/etc) — los van organisaties.
   await supabase.from('profiles').upsert({ id: userId }, { onConflict: 'id', ignoreDuplicates: true })
-  const { data: org, error: orgErr } = await supabase.from('organizations').insert([{ name }]).select().single()
+  // Het ID zelf genereren i.p.v. het via .select() terug te laten geven: direct na de
+  // insert mag je de organisatie nog niet "zien" (de membership-rij die dat regelt
+  // bestaat dan nog niet), dus een .select() hier zou de RLS-policy laten falen.
+  const orgId = crypto.randomUUID()
+  const { error: orgErr } = await supabase.from('organizations').insert([{ id: orgId, name }])
   if (orgErr) throw orgErr
-  const { data: membership, error: memErr } = await supabase
-    .from('memberships').insert([{ user_id: userId, organization_id: org.id, role: 'owner' }]).select().single()
+  const { error: memErr } = await supabase
+    .from('memberships').insert([{ user_id: userId, organization_id: orgId, role: 'owner' }])
   if (memErr) throw memErr
-  return { org, membership }
+  const org = await getOrganization(orgId)
+  return { org }
 }
 export async function linkTeamMemberAccount(organizationId) {
   const userId = (await supabase.auth.getUser()).data.user.id
