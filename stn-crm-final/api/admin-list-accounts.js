@@ -5,30 +5,35 @@ module.exports = async (req, res) => {
   try {
     const { service } = await requireAdmin(req)
 
-    const { data: orgs, error: orgErr } = await service.from('organizations').select('*').order('created_at', { ascending: true })
-    if (orgErr) throw orgErr
-
-    // Een account kan nu lid zijn van meerdere organisaties, dus dit komt via
-    // memberships (organization_id + role), niet meer rechtstreeks van profiles.
-    const { data: memberships, error: memErr } = await service.from('memberships').select('user_id, organization_id, role, profiles(*)')
-    if (memErr) throw memErr
-
-    // profiles heeft geen e-mailkolom — die staat alleen in auth.users, dus
-    // hier ophalen met de service-role en mergen. (perPage 1000: prima voor nu,
-    // bij veel grotere platforms moet dit gepagineerd worden.)
+    // Alle accounts op het platform — niet alleen die al ergens lid van zijn, anders
+    // verdwijnen net aangemaakte/nog niet gekoppelde accounts uit het overzicht.
     const { data: userList, error: userErr } = await service.auth.admin.listUsers({ perPage: 1000 })
     if (userErr) throw userErr
-    const emailById = Object.fromEntries(userList.users.map(u => [u.id, u.email]))
 
-    const profiles = memberships.map(m => ({
-      id: m.user_id,
-      organization_id: m.organization_id,
-      role: m.role,
-      full_name: m.profiles?.full_name || null,
-      email: emailById[m.user_id] || null
+    const { data: profiles, error: profErr } = await service.from('profiles').select('*')
+    if (profErr) throw profErr
+    const profileById = Object.fromEntries(profiles.map(p => [p.id, p]))
+
+    const { data: memberships, error: memErr } = await service
+      .from('memberships').select('user_id, role, organizations(id, name)')
+    if (memErr) throw memErr
+    const membershipsByUser = {}
+    for (const m of memberships) {
+      ;(membershipsByUser[m.user_id] ||= []).push({
+        organization_id: m.organizations?.id,
+        organization_name: m.organizations?.name,
+        role: m.role
+      })
+    }
+
+    const users = userList.users.map(u => ({
+      id: u.id,
+      email: u.email,
+      full_name: profileById[u.id]?.full_name || null,
+      memberships: membershipsByUser[u.id] || []
     }))
 
-    res.status(200).json({ organizations: orgs, profiles })
+    res.status(200).json({ users })
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message })
   }
