@@ -12,6 +12,7 @@ export default function App() {
   const [role, setRole] = useState(null) // 'staff' | { client }
   const [roleError, setRoleError] = useState(false)
   const [showSignup, setShowSignup] = useState(false)
+  const [fatalError, setFatalError] = useState('')
 
   async function resolveRole(session) {
     if (!session) { setRole(null); return }
@@ -39,12 +40,13 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      resolveRole(session).then(() => setLoading(false))
+      resolveRole(session).catch(e => setFatalError(e.message || 'Onbekende fout')).finally(() => setLoading(false))
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       setRoleError(false)
-      resolveRole(session)
+      setFatalError('')
+      resolveRole(session).catch(e => setFatalError(e.message || 'Onbekende fout'))
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -58,6 +60,14 @@ export default function App() {
   if (!session) return showSignup
     ? <Signup onBackToLogin={() => setShowSignup(false)} />
     : <Login onSignupClick={() => setShowSignup(true)} />
+
+  if (fatalError) return (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:10,color:'var(--text-muted)',fontSize:13,textAlign:'center',padding:24}}>
+      <div>Er ging iets mis bij het laden van je account.</div>
+      <div style={{fontSize:11,color:'var(--text-faint)',fontFamily:'monospace'}}>{fatalError}</div>
+      <button onClick={() => supabase.auth.signOut()} style={{padding:'7px 14px',borderRadius:7,border:'1px solid var(--border-strong)',background:'none',color:'var(--text-muted)',fontSize:13,cursor:'pointer'}}>Uitloggen</button>
+    </div>
+  )
 
   if (roleError) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:10,color:'var(--text-muted)',fontSize:13,textAlign:'center',padding:24}}>
