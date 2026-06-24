@@ -561,7 +561,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         </div>
       </header>
       <div className="main">
-        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} />}
+        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} orgMembers={orgMembers} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
@@ -583,7 +583,45 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   )
 }
 
-function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, allHosting = [], pipeline = [], totalPaid, totalOpen, totalMRR, showView, onRefresh, myProfile, myRole, activeOrgId }) {
+function OnboardingChecklist({ clients, projects, orgMembers, showView, onRefresh, activeOrgId, onDismiss }) {
+  const steps = [
+    { done: orgMembers.length > 1, label: "Nodig collega's uit", action: <button className="btn btn-ghost btn-xs" onClick={()=>showView('team')}>Naar Team</button> },
+    { done: clients.length > 0, label: 'Voeg je eerste klant toe', action: <ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-ghost btn-xs">Klant toevoegen</button>} /> },
+    { done: projects.length > 0, label: 'Maak je eerste project aan', action: <ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-ghost btn-xs">Project aanmaken</button>} /> },
+  ]
+  return (
+    <div className="sc" style={{marginBottom:16}}>
+      <div className="sc-head">
+        <span className="sc-title">Aan de slag</span>
+        <button className="btn btn-ghost btn-xs" onClick={onDismiss}>Sluiten</button>
+      </div>
+      <div className="sc-body">
+        {steps.map((s,i) => (
+          <div key={i} className="info-row" style={{alignItems:'center'}}>
+            <div style={{width:18,height:18,borderRadius:'50%',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:s.done?'var(--accent)':'var(--bg2)',border:s.done?'none':'1.5px solid var(--border-strong)'}}>
+              {s.done && <span style={{color:'#fff',fontSize:10}}>✓</span>}
+            </div>
+            <span className="info-val" style={{textDecoration:s.done?'line-through':'none',color:s.done?'var(--text-faint)':'var(--text)'}}>{s.label}</span>
+            {!s.done && s.action}
+          </div>
+        ))}
+        <div style={{fontSize:11,color:'var(--text-faint)',marginTop:10}}>
+          Tip: zodra je een project hebt, kun je daar vanuit ook je klant uitnodigen voor het klantportaal.
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, allHosting = [], pipeline = [], totalPaid, totalOpen, totalMRR, showView, onRefresh, myProfile, myRole, activeOrgId, orgMembers = [] }) {
+  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
+    try { return localStorage.getItem('stn_onboarding_dismissed_' + activeOrgId) === '1' } catch(e) { return false }
+  })
+  const showOnboarding = !onboardingDismissed && (clients.length === 0 || projects.length === 0 || orgMembers.length <= 1)
+  function dismissOnboarding() {
+    try { localStorage.setItem('stn_onboarding_dismissed_' + activeOrgId, '1') } catch(e) {}
+    setOnboardingDismissed(true)
+  }
   const openTasks = allTasks.filter(t => !t.done)
   const pDL = projects.filter(p => p.deadline && p.status !== 'afgerond').map(p => ({ name: p.name, deadline: p.deadline, sub: 'Project', tv: 'project-detail', tid: p.id, color: p.color }))
   const tDL = allTasks.filter(t => !t.done && t.due_date).map(t => ({ name: t.description, deadline: t.due_date, sub: t.project?.name || '', tv: 'project-detail', tid: t.project_id, color: t.project?.color || '#888' }))
@@ -598,6 +636,7 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
     <div>
       <div className="topbar"><h2>Welkom{myProfile?.full_name ? ', ' + myProfile.full_name.split(' ')[0] : ''}</h2><div className="topbar-right"><ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Klant</button>} /><ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-ghost btn-sm">+ Project</button>} /></div></div>
       <div className="content">
+        {showOnboarding && <OnboardingChecklist clients={clients} projects={projects} orgMembers={orgMembers} showView={showView} onRefresh={onRefresh} activeOrgId={activeOrgId} onDismiss={dismissOnboarding} />}
         <div className="stats-grid">
           <div className="stat-card"><div className="stat-label">Klanten</div><div className="stat-value">{clients.length}</div><div className="stat-sub">{clients.filter(c=>c.status==='actief').length} actief</div></div>
           <div className="stat-card"><div className="stat-label">Projecten</div><div className="stat-value">{projects.length}</div><div className="stat-sub">{projects.filter(p=>p.status==='actief').length} actief{myRole!=='owner' && ' · allemaal aan jou toegewezen'}</div></div>
