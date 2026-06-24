@@ -14,9 +14,70 @@ const ini = c => ((c.fname||'?')[0] + (c.lname||'?')[0]).toUpperCase()
 const PROJ_COLORS = ['#2563eb','#7c3aed','#0d9488','#d97706','#dc2626','#16a34a','#db2777','#1a1a18']
 const FREQ_MONTHS = { maandelijks: 1, kwartaallijks: 3, jaarlijks: 12 }
 
+let _toastFn = null
+function showToast(msg, type = 'success') { if (_toastFn) _toastFn(msg, type) }
+
+function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([])
+  useEffect(() => {
+    _toastFn = (msg, type) => {
+      const id = Date.now()
+      setToasts(t => [...t, { id, msg, type }])
+      setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000)
+    }
+    return () => { _toastFn = null }
+  }, [])
+  return (
+    <>
+      {children}
+      <div style={{position:'fixed',bottom:24,right:24,zIndex:999,display:'flex',flexDirection:'column',gap:8,alignItems:'flex-end'}}>
+        {toasts.map(t => (
+          <div key={t.id} style={{
+            background: t.type === 'error' ? 'var(--red-text)' : 'var(--text)',
+            color:'#fff', padding:'10px 16px', borderRadius:'var(--rsm)',
+            fontSize:13, fontWeight:500, boxShadow:'0 4px 16px rgba(0,0,0,.18)',
+            animation:'toast-in .2s cubic-bezier(.16,1,.3,1)',
+            maxWidth:320, lineHeight:1.4
+          }}>{t.msg}</div>
+        ))}
+      </div>
+      <style>{`@keyframes toast-in{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
+    </>
+  )
+}
+
 function Badge({ s }) {
   const m = { actief:'bg-green',prospect:'bg-blue',inactief:'bg-gray',betaald:'bg-green',verzonden:'bg-blue','te laat':'bg-red',concept:'bg-gray','on-hold':'bg-amber',afgerond:'bg-green',hoog:'bg-red',laag:'bg-gray',normaal:'bg-blue',gepauzeerd:'bg-amber',gestopt:'bg-gray',maandelijks:'bg-teal',kwartaallijks:'bg-purple',jaarlijks:'bg-blue' }
   return <span className={`badge ${m[s]||'bg-gray'}`}>{s}</span>
+}
+
+function MeetingTypeIcon({ type, size = 14 }) {
+  const p = { width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:2, strokeLinecap:'round', strokeLinejoin:'round' }
+  if (type === 'videocall') return <svg {...p}><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
+  if (type === 'bel') return <svg {...p}><path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"/></svg>
+  if (type === 'locatie') return <svg {...p}><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
+  return <svg {...p}><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+}
+
+function EyeIcon({ off, size = 13 }) {
+  const p = { width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:2, strokeLinecap:'round', strokeLinejoin:'round' }
+  if (off) return <svg {...p}><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
+  return <svg {...p}><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+}
+
+function MaskedSecret({ value }) {
+  const [show, setShow] = useState(false)
+  return (
+    <span style={{display:'inline-flex',alignItems:'center',gap:5}}>
+      <strong style={{fontFamily:'var(--mono-font)',fontSize:12}}>{show ? value : '••••••••'}</strong>
+      <button
+        type="button"
+        onClick={() => setShow(s => !s)}
+        aria-label={show ? 'Wachtwoord verbergen' : 'Wachtwoord tonen'}
+        style={{color:'var(--text-faint)',display:'inline-flex',alignItems:'center',padding:2}}
+      ><EyeIcon off={show} /></button>
+    </span>
+  )
 }
 
 function Modal({ open, onClose, title, children }) {
@@ -151,6 +212,12 @@ export default function Dashboard({ session }) {
     .pl-header{display:grid;grid-template-columns:2fr 1.4fr 1fr 0.8fr 120px;padding:9px 20px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em}
     .pl-row{display:grid;grid-template-columns:2fr 1.4fr 1fr 0.8fr 120px;padding:13px 20px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background .1s}
     .pl-row:last-child{border-bottom:none}.pl-row:hover{background:var(--accent-soft)}
+    .fin-header{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 110px;padding:8px 18px;background:var(--bg);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+    .fin-row{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 110px;gap:10px;align-items:center;padding:11px 18px;border-bottom:1px solid var(--border);font-size:13px}
+    .fin-row:last-child{border-bottom:none}
+    .host-header{display:grid;grid-template-columns:2fr 1.2fr 1fr 1fr 1fr 120px;padding:8px 18px;background:var(--bg);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+    .host-row{display:grid;grid-template-columns:2fr 1.2fr 1fr 1fr 1fr 120px;padding:12px 18px;border-bottom:1px solid var(--border);align-items:center;font-size:13px}
+    .host-row:last-child{border-bottom:none}
     .cl-name-cell{display:flex;align-items:center;gap:11px}
     .avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;font-family:var(--heading-font)}
     .av-b{background:#dbeafe;color:#1d4ed8}.av-g{background:#d1fae5;color:#065f46}
@@ -167,14 +234,14 @@ export default function Dashboard({ session }) {
     .task-check:hover{border-color:var(--accent)}
     .task-check.done{background:var(--accent);border-color:var(--accent)}
     .task-meta{font-size:11px;color:var(--text-faint);margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-    .task-del{color:var(--text-faint);font-size:17px;cursor:pointer;opacity:0;transition:opacity .1s;line-height:1;padding:2px 4px}
-    .task-item:hover .task-del{opacity:1}
+    .task-del{color:var(--text-faint);font-size:17px;cursor:pointer;opacity:.45;transition:opacity .1s;line-height:1;padding:2px 4px}
+    .task-item:hover .task-del,.task-del:focus-visible{opacity:1}
     .info-row{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
     .info-row:last-child{border-bottom:none}
     .info-label{color:var(--text-muted);width:100px;flex-shrink:0;padding-top:1px}.info-val{flex:1}
     .detail-grid{display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start}
     .total-bar{background:var(--bg2);border-top:1px solid var(--border);padding:11px 18px;display:flex;justify-content:space-between;font-size:13px}
-    .total-bar strong{font-family:'DM Mono',monospace}
+    .total-bar strong{font-family:var(--mono-font)}
     .search-wrap{position:relative}.search-wrap input{padding-left:32px;width:240px}
     .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-faint);font-size:14px;pointer-events:none}
     .tabs{display:flex;gap:2px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--rsm);padding:3px}
@@ -183,9 +250,11 @@ export default function Dashboard({ session }) {
     .client-tabs{display:flex;border-bottom:1px solid var(--border);overflow-x:auto;background:var(--surface2)}
     .client-tab{padding:11px 16px;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;white-space:nowrap;transition:all .1s}
     .client-tab:hover{color:var(--text)}.client-tab.active{color:var(--accent-text);border-bottom-color:var(--accent);font-weight:600}
-    .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
-    .modal-bg.open{display:flex}
-    .modal{background:var(--surface);border-radius:var(--r);padding:26px;width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.18);border:1px solid var(--border)}
+    .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center;backdrop-filter:blur(3px);opacity:0;transition:opacity .2s}
+    .modal-bg.open{display:flex;animation:modal-bg-in .2s ease forwards}
+    @keyframes modal-bg-in{from{opacity:0}to{opacity:1}}
+    .modal{background:var(--surface);border-radius:var(--r);padding:26px;width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.22);border:1px solid var(--border);animation:modal-in .2s cubic-bezier(.16,1,.3,1) forwards}
+    @keyframes modal-in{from{transform:translateY(12px) scale(.97);opacity:0}to{transform:translateY(0) scale(1);opacity:1}}
     .modal h3{font-size:16px;font-weight:700;margin-bottom:20px;letter-spacing:-.02em;font-family:var(--heading-font)}
     .form-group{margin-bottom:14px}.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
@@ -247,6 +316,10 @@ export default function Dashboard({ session }) {
       .pl-header{grid-template-columns:1fr;padding:9px 12px;font-size:9px}
       .pl-row{grid-template-columns:1fr;padding:12px 12px}
       .pl-header div:nth-child(n+2),.pl-row div:nth-child(n+2){display:none}
+      .fin-header,.host-header{display:none}
+      .fin-row,.host-row{display:flex;flex-wrap:wrap;grid-template-columns:none;gap:4px 12px;padding:12px 14px}
+      .fin-row>div:first-child,.host-row>div:first-child{flex:1 1 100%}
+      .fin-row>div:nth-child(4){margin-left:auto}
       .modal{width:90vw;max-width:90vw;padding:20px;max-height:85vh}
       .modal h3{font-size:14px;margin-bottom:16px}
       .form-row{grid-template-columns:1fr}
@@ -268,12 +341,12 @@ export default function Dashboard({ session }) {
       .stats-grid{grid-template-columns:1fr;gap:10px}
       .stat-card{padding:12px 14px}
       .stat-value{font-size:16px}
-      .stat-label{font-size:9px}
+      .stat-label{font-size:10px}
       .content{padding:12px}
       .topbar{padding:0 10px;height:52px}
-      .topbar h2{font-size:13px}
-      .btn{padding:5px 10px;font-size:11px;gap:4px}
-      .btn-sm{padding:3px 8px;font-size:10px}
+      .topbar h2{font-size:14px}
+      .btn{padding:5px 10px;font-size:12px;gap:4px}
+      .btn-sm{padding:4px 9px;font-size:11px}
       .topbar-right{gap:4px}
       .modal{padding:16px}
       .form-group{margin-bottom:12px}
@@ -283,55 +356,56 @@ export default function Dashboard({ session }) {
       .cl-row{padding:10px 12px}
       .pl-row{padding:10px 12px}
       .task-item{padding:8px 0;gap:8px}
-      .task-check{width:16px;height:16px}
-      .info-row{padding:6px 0;font-size:12px}
-      .info-label{width:70px;font-size:11px}
+      .task-check{width:18px;height:18px}
+      .info-row{padding:6px 0;font-size:13px}
+      .info-label{width:70px;font-size:12px}
       .avatar{width:28px;height:28px;font-size:10px}
       .badge{padding:2px 7px;font-size:10px}
       .chart-wrap{height:60px}
       .dl-item{padding:6px 0;font-size:12px}
       .bc{font-size:12px}
-      .search-wrap input{width:100%;font-size:13px}
-      input,textarea,select{font-size:14px;padding:9px 11px}
+      .search-wrap input{width:100%;font-size:16px}
+      input,textarea,select{font-size:16px;padding:10px 12px}
     }
-    
+
     @media(max-width:480px){
       .topbar{height:48px}
-      .topbar h2{font-size:12px}
+      .topbar h2{font-size:13px}
       .content{padding:10px}
       .stats-grid{gap:8px}
       .stat-card{padding:10px 12px}
-      .stat-value{font-size:14px;line-height:1}
-      .stat-label{font-size:8px}
+      .stat-value{font-size:15px;line-height:1}
+      .stat-label{font-size:10px}
       .stat-sub{font-size:10px}
-      .btn{padding:4px 8px;font-size:10px}
+      .btn{padding:5px 10px;font-size:11px}
       .modal{padding:14px;margin:10px}
       .form-group{margin-bottom:10px}
-      label{font-size:9px;margin-bottom:3px}
+      label{font-size:10px;margin-bottom:3px}
       .sc{margin-bottom:12px}
       .sc-head{padding:10px 12px}
       .sc-body{padding:10px 12px}
       .cl-row{padding:9px 10px}
       .pl-row{padding:9px 10px}
       .task-item{gap:6px}
-      .empty{padding:24px 12px;font-size:12px}
-      .avatar{width:26px;height:26px;font-size:9px}
-      .badge{padding:1px 6px;font-size:9px}
+      .empty{padding:24px 12px;font-size:13px}
+      .avatar{width:28px;height:28px;font-size:10px}
+      .badge{padding:2px 7px;font-size:10px}
       .bc{font-size:11px}
-      input,textarea,select{font-size:13px;padding:8px 10px;border-radius:5px}
+      input,textarea,select{font-size:16px;padding:10px 12px}
       .detail-grid{gap:14px}
       .modal-actions{gap:6px}
       .topbar-right{gap:3px}
-      .nav-item{padding:6px 8px;font-size:12px}
+      .nav-item{padding:7px 8px;font-size:12px}
       .sb-logo{padding:16px 14px 12px}
       .sb-logo-icon{width:28px;height:28px}
       .sb-logo-text h1{font-size:12px}
-      .sb-logo-text span{font-size:9px}
+      .sb-logo-text span{font-size:10px}
       .sb-footer{padding:12px 14px}
     }
   `
 
   return (
+    <ToastProvider>
     <div className="app">
       <style>{CSS}</style>
       <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)}></div>
@@ -404,7 +478,9 @@ export default function Dashboard({ session }) {
         </div>
       </nav>
       <div className="main">
-        <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)} title="Menu">☰</button>
+        <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Menu openen">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
         {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
@@ -417,6 +493,7 @@ export default function Dashboard({ session }) {
         {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} />}
       </div>
     </div>
+    </ToastProvider>
   )
 }
 
@@ -468,13 +545,12 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
             <div className="sc-body">
               {allMeetings.filter(m => m.status === 'gepland' && m.meeting_date >= today()).slice(0,4).map(m => {
                 const dd = daysN(m.meeting_date)
-                const typeIcon = m.type === 'videocall' ? '📹' : m.type === 'bel' ? '📞' : '📍'
                 const cn = m.clients ? m.clients.fname + ' ' + m.clients.lname : ''
                 return (
                   <div key={m.id} className="dl-item">
                     <div className="dl-dot" style={{background: dd === 0 ? 'var(--accent)' : dd <= 3 ? 'var(--amber)' : 'var(--border-strong)'}}></div>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:13,fontWeight:500}}>{typeIcon} {m.title}</div>
+                      <div style={{fontSize:13,fontWeight:500,display:'flex',alignItems:'center',gap:6}}><MeetingTypeIcon type={m.type} /> {m.title}</div>
                       <div style={{fontSize:11,color:'var(--text-faint)'}}>{cn}{m.meeting_time ? ' · ' + m.meeting_time.slice(0,5) : ''}</div>
                     </div>
                     <div style={{fontSize:12,color: dd===0?'var(--accent-text)':dd<=3?'var(--amber-text)':'var(--text-faint)',whiteSpace:'nowrap',fontWeight:dd<=3?500:400}}>
@@ -498,7 +574,7 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
             <div className="sc-body">
               {!activeRec.length ? <div className="empty">Geen terugkerende inkomsten</div> : activeRec.slice(0,5).map(r => {
                 const nd=db.nextDueDate(r); const dd=nd?daysN(nd):null
-                return <div key={r.id} className="dl-item"><div style={{flex:1}}><div style={{fontSize:13}}>{r.description}</div><div style={{fontSize:11,color:'var(--text-faint)'}}>{r.clients?.fname} {r.clients?.lname} · {r.freq}</div></div><div style={{textAlign:'right'}}><div style={{fontFamily:'DM Mono',fontSize:12,fontWeight:500}}>{money(r.amount)}</div>{nd&&<div style={{fontSize:11,color:dd<=7?'var(--amber-text)':'var(--text-faint)'}}>{dd===0?'vandaag':dd+'d'}</div>}</div></div>
+                return <div key={r.id} className="dl-item"><div style={{flex:1}}><div style={{fontSize:13}}>{r.description}</div><div style={{fontSize:11,color:'var(--text-faint)'}}>{r.clients?.fname} {r.clients?.lname} · {r.freq}</div></div><div style={{textAlign:'right'}}><div style={{fontFamily:'var(--mono-font)',fontSize:12,fontWeight:500}}>{money(r.amount)}</div>{nd&&<div style={{fontSize:11,color:dd<=7?'var(--amber-text)':'var(--text-faint)'}}>{dd===0?'vandaag':dd+'d'}</div>}</div></div>
               })}
             </div>
           </div>
@@ -513,7 +589,7 @@ function ClientsView({ clients, projects, allTasks, showView, onRefresh }) {
   const filtered = clients.filter(c => !q||(c.fname+c.lname+(c.company||'')+(c.email||'')).toLowerCase().includes(q.toLowerCase()))
   return (
     <div>
-      <div className="topbar"><h2>Klanten</h2><div className="topbar-right"><div className="search-wrap"><span className="search-icon">⌕</span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div><ClientModal onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Nieuwe klant</button>} /></div></div>
+      <div className="topbar"><h2>Klanten</h2><div className="topbar-right"><div className="search-wrap"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div><ClientModal onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Nieuwe klant</button>} /></div></div>
       <div className="content">
         <div className="sc" style={{padding:0}}>
           <div className="cl-header"><div>Klant</div><div>Contact</div><div>Status</div><div>Omzet</div><div></div></div>
@@ -524,7 +600,7 @@ function ClientsView({ clients, projects, allTasks, showView, onRefresh }) {
               <div className="cl-name-cell"><div className={`avatar ${avC(c.id)}`}>{ini(c)}</div><div><div style={{fontWeight:500,fontSize:14}}>{c.fname} {c.lname}</div><div style={{fontSize:11,color:'var(--text-muted)'}}>{c.company||'—'}</div></div></div>
               <div style={{fontSize:13,color:'var(--text-muted)'}}>{c.email||'—'}</div>
               <div><Badge s={c.status||'actief'} /></div>
-              <div style={{fontFamily:'DM Mono',fontSize:13}}>—</div>
+              <div style={{fontFamily:'var(--mono-font)',fontSize:13}}>—</div>
               <div style={{textAlign:'right',display:'flex',gap:4,justifyContent:'flex-end',flexWrap:'wrap'}}>
                 {pCount>0&&<span className="badge bg-blue">{pCount} proj</span>}
                 {openT>0&&<span className="badge bg-amber">{openT} taken</span>}
@@ -620,7 +696,7 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
                       <div key={i.id} style={{display:'grid',gridTemplateColumns:'1fr auto auto 130px',gap:10,alignItems:'center',padding:'9px 0',borderBottom:'1px solid var(--border)'}}>
                         <div><div style={{fontSize:13,fontWeight:500}}>{i.description}{i.recurring_id&&<span style={{fontSize:10,color:'var(--teal-text)',background:'var(--teal-soft)',padding:'1px 6px',borderRadius:99,marginLeft:6}}>↻</span>}</div><div style={{fontSize:11,color:'var(--text-faint)'}}>{fdate(i.date)}</div></div>
                         <div style={{fontSize:11,color:'var(--text-faint)'}}>{i.due_date?'Vervalt '+fdate(i.due_date):''}</div>
-                        <div style={{fontFamily:'DM Mono',fontSize:13,fontWeight:500,textAlign:'right'}}>{money(i.amount)}</div>
+                        <div style={{fontFamily:'var(--mono-font)',fontSize:13,fontWeight:500,textAlign:'right'}}>{money(i.amount)}</div>
                         <div style={{display:'flex',alignItems:'center',gap:5,justifyContent:'flex-end'}}><Badge s={i.status} /><InvMenu onStatus={s=>db.updateInvoice(i.id,{status:s}).then(refreshInv)} onDelete={()=>db.deleteInvoice(i.id).then(refreshInv)} /></div>
                       </div>
                     ))}
@@ -641,7 +717,7 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
                         <div style={{display:'grid',gridTemplateColumns:'1fr auto auto 100px',gap:10,alignItems:'center',padding:'9px 0',borderBottom:'1px solid var(--border)'}}>
                           <div><div style={{fontSize:13,fontWeight:500}}>{r.description}</div><div style={{fontSize:11,color:'var(--text-faint)'}}>Gestart: {fdate(r.start_date)}{r.end_date?' · Eindigt: '+fdate(r.end_date):''}</div></div>
                           <Badge s={r.freq} />
-                          <div style={{fontFamily:'DM Mono',fontSize:13,fontWeight:500,textAlign:'right'}}>{money(r.amount)}</div>
+                          <div style={{fontFamily:'var(--mono-font)',fontSize:13,fontWeight:500,textAlign:'right'}}>{money(r.amount)}</div>
                           <div style={{display:'flex',alignItems:'center',gap:5,justifyContent:'flex-end'}}><Badge s={r.status} /><RecMenu onStatus={s=>db.updateRecurring(r.id,{status:s}).then(refreshRec)} onDelete={()=>db.deleteRecurring(r.id).then(refreshRec)} /></div>
                         </div>
                         {nd&&<div style={{fontSize:11,padding:'2px 0 6px',color:dd<=14?'var(--amber-text)':'var(--text-faint)',borderBottom:'1px solid var(--border)'}}>Volgende factuur: {fdate(nd)} ({dd===0?'vandaag':dd+'d'})</div>}
@@ -652,10 +728,10 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
                 </div>
               )}
               {activeTab==='hosting' && (
-                <ClientHostingTab clientId={client.id} onRefresh={loadAll} />
+                <ClientHostingTab clientId={client.id} onRefresh={onRefresh} />
               )}
               {activeTab==='meetings' && (
-                <ClientMeetingsTab client={client} onRefresh={loadAll} />
+                <ClientMeetingsTab client={client} onRefresh={onRefresh} />
               )}
               {activeTab==='notes' && (
                 <div>
@@ -688,9 +764,9 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
             <div className="sc">
               <div className="sc-head"><span className="sc-title">Snel overzicht</span></div>
               <div className="sc-body">
-                <div className="info-row"><span className="info-label">Omzet betaald</span><span className="info-val" style={{fontFamily:'DM Mono',fontWeight:500}}>{money(paidAmt)}</span></div>
-                <div className="info-row"><span className="info-label">Nog te ontvangen</span><span className="info-val" style={{fontFamily:'DM Mono',color:'var(--amber-text)'}}>{openAmt>0?money(openAmt):'—'}</span></div>
-                <div className="info-row"><span className="info-label">MRR</span><span className="info-val" style={{fontFamily:'DM Mono',color:'var(--teal-text)'}}>{mrr>0?money(mrr)+'/mnd':'—'}</span></div>
+                <div className="info-row"><span className="info-label">Omzet betaald</span><span className="info-val" style={{fontFamily:'var(--mono-font)',fontWeight:500}}>{money(paidAmt)}</span></div>
+                <div className="info-row"><span className="info-label">Nog te ontvangen</span><span className="info-val" style={{fontFamily:'var(--mono-font)',color:'var(--amber-text)'}}>{openAmt>0?money(openAmt):'—'}</span></div>
+                <div className="info-row"><span className="info-label">MRR</span><span className="info-val" style={{fontFamily:'var(--mono-font)',color:'var(--teal-text)'}}>{mrr>0?money(mrr)+'/mnd':'—'}</span></div>
                 <div className="info-row"><span className="info-label">Projecten</span><span className="info-val">{clientProjects.length}</span></div>
                 <div className="info-row"><span className="info-label">Open taken</span><span className="info-val">{clientTasks.filter(t=>!t.done).length}</span></div>
               </div>
@@ -707,37 +783,39 @@ function ProjectsView({ projects, clients, clientName, showView, onRefresh }) {
   const [previewUrl, setPreviewUrl] = useState(null)
   const filtered = projects.filter(p => !q||p.name.toLowerCase().includes(q.toLowerCase())||clientName(p.client_id).toLowerCase().includes(q.toLowerCase()))
   return (
-    <div>
-      <div className="topbar"><h2>Projecten</h2><div className="topbar-right"><div className="search-wrap"><span className="search-icon">⌕</span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div><ProjectModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Nieuw project</button>} /></div></div>
-      <div className="content">
-        <div className="sc" style={{padding:0}}>
-          <div className="pl-header"><div>Project</div><div>Klant</div><div>Deadline</div><div>Status</div><div>Info</div></div>
-          {!filtered.length ? <div className="empty">Geen projecten</div> : filtered.map(p => {
-            const dd=p.deadline?daysN(p.deadline):null; const dC=dd!=null?(dd<0?'var(--red-text)':dd<=7?'var(--amber-text)':'var(--text-muted)'):'var(--text-muted)'
-            return <div key={p.id} className="pl-row" onClick={()=>showView('project-detail',p.id)}>
-              <div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:10,height:10,borderRadius:'50%',background:p.color,flexShrink:0}}></div><div><div style={{fontWeight:500,fontSize:14}}>{p.name}</div>{p.url&&<div style={{fontSize:11,color:'var(--blue-text)'}}>{p.url.replace('https://','').replace('http://','')}</div>}</div></div>
-              <div style={{fontSize:13,color:'var(--text-muted)'}}>{clientName(p.client_id)||'—'}</div>
-              <div style={{fontSize:13,color:dC}}>{p.deadline?fdate(p.deadline):'—'}</div>
-              <div><Badge s={p.status} /></div>
-              <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                {p.url&&<button onClick={e=>{e.stopPropagation();setPreviewUrl(p.url)}} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>👁 Preview</button>}
-                {p.url&&<a href={p.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>↗ Open</a>}
+    <>
+      <div>
+        <div className="topbar"><h2>Projecten</h2><div className="topbar-right"><div className="search-wrap"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div><ProjectModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Nieuw project</button>} /></div></div>
+        <div className="content">
+          <div className="sc" style={{padding:0}}>
+            <div className="pl-header"><div>Project</div><div>Klant</div><div>Deadline</div><div>Status</div><div>Info</div></div>
+            {!filtered.length ? <div className="empty">Geen projecten</div> : filtered.map(p => {
+              const dd=p.deadline?daysN(p.deadline):null; const dC=dd!=null?(dd<0?'var(--red-text)':dd<=7?'var(--amber-text)':'var(--text-muted)'):'var(--text-muted)'
+              return <div key={p.id} className="pl-row" onClick={()=>showView('project-detail',p.id)}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:10,height:10,borderRadius:'50%',background:p.color,flexShrink:0}}></div><div><div style={{fontWeight:500,fontSize:14}}>{p.name}</div>{p.url&&<div style={{fontSize:11,color:'var(--blue-text)'}}>{p.url.replace('https://','').replace('http://','')}</div>}</div></div>
+                <div style={{fontSize:13,color:'var(--text-muted)'}}>{clientName(p.client_id)||'—'}</div>
+                <div style={{fontSize:13,color:dC}}>{p.deadline?fdate(p.deadline):'—'}</div>
+                <div><Badge s={p.status} /></div>
+                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                  {p.url&&<button onClick={e=>{e.stopPropagation();setPreviewUrl(p.url)}} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>Preview</button>}
+                  {p.url&&<a href={p.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>↗ Open</a>}
+                </div>
               </div>
-            </div>
-          })}
+            })}
+          </div>
         </div>
       </div>
-    </div>
-    <Modal open={!!previewUrl} onClose={()=>setPreviewUrl(null)} title="Website Preview">
-      {previewUrl && <div style={{width:'100%',height:'500px',border:'1px solid var(--border)',borderRadius:'var(--r)',overflow:'hidden'}}>
-        <iframe 
-          src={previewUrl} 
-          style={{width:'100%',height:'100%',border:'none'}}
-          title="Website preview"
-          sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-        />
-      </div>}
-    </Modal>
+      <Modal open={!!previewUrl} onClose={()=>setPreviewUrl(null)} title="Website Preview">
+        {previewUrl && <div style={{width:'100%',height:'500px',border:'1px solid var(--border)',borderRadius:'var(--r)',overflow:'hidden'}}>
+          <iframe
+            src={previewUrl}
+            style={{width:'100%',height:'100%',border:'none'}}
+            title="Website preview"
+            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+          />
+        </div>}
+      </Modal>
+    </>
   )
 }
 
@@ -864,13 +942,13 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
         </div>
         <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:16}}>
           <div className="sc" style={{padding:0}}>
-            <div style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 1fr 1fr 110px',padding:'8px 18px',background:'var(--bg)',borderBottom:'1px solid var(--border)',fontSize:10,fontWeight:600,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'.06em'}}><div>Klant / omschrijving</div><div>Datum</div><div>Vervaldatum</div><div style={{textAlign:'right'}}>Bedrag</div><div style={{textAlign:'right'}}>Status</div></div>
+            <div className="fin-header"><div>Klant / omschrijving</div><div>Datum</div><div>Vervaldatum</div><div style={{textAlign:'right'}}>Bedrag</div><div style={{textAlign:'right'}}>Status</div></div>
             {!sorted.length ? <div className="empty">Geen facturen</div> : sorted.map(i => (
-              <div key={i.id} style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 1fr 1fr 110px',gap:10,alignItems:'center',padding:'11px 18px',borderBottom:'1px solid var(--border)',fontSize:13}}>
+              <div key={i.id} className="fin-row">
                 <div><div style={{fontWeight:500}}>{i.description}</div><div style={{fontSize:11,color:'var(--text-muted)'}}>{i.clients?.fname} {i.clients?.lname}{i.clients?.company?' · '+i.clients.company:''}</div></div>
                 <div style={{color:'var(--text-muted)'}}>{fdate(i.date)}</div>
                 <div style={{color:'var(--text-muted)'}}>{fdate(i.due_date)}</div>
-                <div style={{fontFamily:'DM Mono',textAlign:'right'}}>{money(i.amount)}</div>
+                <div style={{fontFamily:'var(--mono-font)',textAlign:'right'}}>{money(i.amount)}</div>
                 <div style={{textAlign:'right'}}><Badge s={i.status} /></div>
               </div>
             ))}
@@ -878,12 +956,12 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
           <div className="sc">
             <div className="sc-head"><span className="sc-title">Terugkerend</span></div>
             <div className="sc-body">
-              <div className="info-row"><span className="info-label">Maandelijks</span><span className="info-val" style={{fontFamily:'DM Mono'}}>{money(byFreq.maandelijks)}</span></div>
-              <div className="info-row"><span className="info-label">Kwartaal</span><span className="info-val" style={{fontFamily:'DM Mono'}}>{money(byFreq.kwartaallijks)}</span></div>
-              <div className="info-row"><span className="info-label">Jaarlijks</span><span className="info-val" style={{fontFamily:'DM Mono'}}>{money(byFreq.jaarlijks)}</span></div>
+              <div className="info-row"><span className="info-label">Maandelijks</span><span className="info-val" style={{fontFamily:'var(--mono-font)'}}>{money(byFreq.maandelijks)}</span></div>
+              <div className="info-row"><span className="info-label">Kwartaal</span><span className="info-val" style={{fontFamily:'var(--mono-font)'}}>{money(byFreq.kwartaallijks)}</span></div>
+              <div className="info-row"><span className="info-label">Jaarlijks</span><span className="info-val" style={{fontFamily:'var(--mono-font)'}}>{money(byFreq.jaarlijks)}</span></div>
               <div style={{borderTop:'1px solid var(--border)',marginTop:8,paddingTop:8}}>
-                <div className="info-row"><span className="info-label">MRR totaal</span><span className="info-val" style={{fontFamily:'DM Mono',color:'var(--teal-text)',fontWeight:500}}>{money(totalMRR)}</span></div>
-                <div className="info-row"><span className="info-label">ARR totaal</span><span className="info-val" style={{fontFamily:'DM Mono',fontWeight:500}}>{money(totalMRR*12)}</span></div>
+                <div className="info-row"><span className="info-label">MRR totaal</span><span className="info-val" style={{fontFamily:'var(--mono-font)',color:'var(--teal-text)',fontWeight:500}}>{money(totalMRR)}</span></div>
+                <div className="info-row"><span className="info-label">ARR totaal</span><span className="info-val" style={{fontFamily:'var(--mono-font)',fontWeight:500}}>{money(totalMRR*12)}</span></div>
               </div>
             </div>
           </div>
@@ -898,12 +976,20 @@ function TaskItem({ task, onToggle, onDelete }) {
   async function del() { await db.deleteTask(task.id); onDelete() }
   return (
     <div className="task-item">
-      <div className={`task-check${task.done?' done':''}`} onClick={toggle} style={{display:'flex',alignItems:'center',justifyContent:'center'}}>{task.done&&<span style={{color:'#fff',fontSize:10}}>✓</span>}</div>
+      <button
+        type="button"
+        className={`task-check${task.done?' done':''}`}
+        onClick={toggle}
+        role="checkbox"
+        aria-checked={task.done}
+        aria-label={task.done ? `"${task.description}" markeren als niet afgerond` : `"${task.description}" markeren als afgerond`}
+        style={{display:'flex',alignItems:'center',justifyContent:'center'}}
+      >{task.done&&<span style={{color:'#fff',fontSize:10}}>✓</span>}</button>
       <div style={{flex:1}}>
         <div style={{fontSize:13,textDecoration:task.done?'line-through':'none',color:task.done?'var(--text-faint)':'var(--text)'}}>{task.description}</div>
         {task.due_date&&<div className="task-meta">{fdate(task.due_date)}</div>}
       </div>
-      <span className="task-del" onClick={del}>×</span>
+      <button type="button" className="task-del" onClick={del} aria-label={`Taak "${task.description}" verwijderen`}>×</button>
     </div>
   )
 }
@@ -929,7 +1015,7 @@ function InvMenu({ onStatus, onDelete }) {
   const [open, setOpen] = useState(false)
   return (
     <div style={{position:'relative',display:'inline-block'}}>
-      <button className="btn btn-ghost btn-xs" onClick={()=>setOpen(!open)}>⋯</button>
+      <button className="btn btn-ghost btn-xs" onClick={()=>setOpen(!open)} aria-label="Opties" style={{padding:'3px 6px'}}><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
       {open&&<div style={{position:'absolute',right:0,top:'calc(100% + 4px)',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--rsm)',boxShadow:'0 4px 16px rgba(0,0,0,.08)',zIndex:50,minWidth:140,padding:4}} onMouseLeave={()=>setOpen(false)}>
         {['betaald','verzonden','te laat'].map(s=><button key={s} style={{display:'block',width:'100%',textAlign:'left',padding:'7px 10px',fontSize:13,borderRadius:4}} onClick={()=>{onStatus(s);setOpen(false)}}>{s.charAt(0).toUpperCase()+s.slice(1)}</button>)}
         <hr style={{border:'none',borderTop:'1px solid var(--border)',margin:'4px 0'}} />
@@ -943,7 +1029,7 @@ function RecMenu({ onStatus, onDelete }) {
   const [open, setOpen] = useState(false)
   return (
     <div style={{position:'relative',display:'inline-block'}}>
-      <button className="btn btn-ghost btn-xs" onClick={()=>setOpen(!open)}>⋯</button>
+      <button className="btn btn-ghost btn-xs" onClick={()=>setOpen(!open)} aria-label="Opties" style={{padding:'3px 6px'}}><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
       {open&&<div style={{position:'absolute',right:0,top:'calc(100% + 4px)',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--rsm)',boxShadow:'0 4px 16px rgba(0,0,0,.08)',zIndex:50,minWidth:140,padding:4}} onMouseLeave={()=>setOpen(false)}>
         {['actief','gepauzeerd','gestopt'].map(s=><button key={s} style={{display:'block',width:'100%',textAlign:'left',padding:'7px 10px',fontSize:13,borderRadius:4}} onClick={()=>{onStatus(s);setOpen(false)}}>{s.charAt(0).toUpperCase()+s.slice(1)}</button>)}
         <hr style={{border:'none',borderTop:'1px solid var(--border)',margin:'4px 0'}} />
@@ -961,14 +1047,14 @@ function ClientModal({ client, onSave, trigger }) {
   const f = k => e => setForm(p=>({...p,[k]:e.target.value}))
   function openModal() { setForm(client?{fname:client.fname||'',lname:client.lname||'',company:client.company||'',email:client.email||'',phone:client.phone||'',website:client.website||'',status:client.status||'actief'}:init); setOpen(true) }
   async function save() {
-    if(!form.fname&&!form.lname) return alert('Vul een naam in.')
+    if(!form.fname&&!form.lname) return showToast('Vul een naam in.','error')
     setSaving(true)
     try {
       if(client) await db.updateClient(client.id, form)
       else await db.createClient(form)
-      setOpen(false); onSave()
+      setOpen(false); onSave(); showToast(client ? 'Klant bijgewerkt' : 'Klant aangemaakt')
     } catch(e) {
-      alert('Fout bij opslaan: ' + e.message)
+      showToast('Fout bij opslaan: ' + e.message, 'error')
     } finally {
       setSaving(false)
     }
@@ -995,7 +1081,7 @@ function ProjectModal({ project, clients, defaultClientId, onSave, trigger }) {
   const f = k => e => setForm(p=>({...p,[k]:e.target.value}))
   function openModal() { setForm(project?{name:project.name||'',client_id:project.client_id||'',url:project.url||'',start_date:project.start_date||'',deadline:project.deadline||'',status:project.status||'actief'}:{...init,client_id:defaultClientId||''}); setColor(project?.color||PROJ_COLORS[0]); setOpen(true) }
   async function save() {
-    if(!form.name.trim()) return alert('Vul een projectnaam in.')
+    if(!form.name.trim()) return showToast('Vul een projectnaam in.','error')
     setSaving(true)
     try {
       const data={
@@ -1009,10 +1095,9 @@ function ProjectModal({ project, clients, defaultClientId, onSave, trigger }) {
       }
       if(project) await db.updateProject(project.id, data)
       else await db.createProject(data)
-      setOpen(false)
-      onSave()
+      setOpen(false); onSave(); showToast(project ? 'Project bijgewerkt' : 'Project aangemaakt')
     } catch(e) {
-      alert('Fout bij opslaan: ' + e.message)
+      showToast('Fout bij opslaan: ' + e.message, 'error')
     } finally {
       setSaving(false)
     }
@@ -1043,7 +1128,7 @@ function TaskModal({ projectId, onSave, trigger }) {
       await db.createTask({ project_id: projectId, description: form.description.trim(), due_date: form.due_date||null, priority: form.priority, done: false })
       setOpen(false); onSave()
     } catch(e) {
-      alert('Fout bij opslaan: ' + e.message)
+      showToast('Fout bij opslaan: ' + e.message, 'error')
     } finally {
       setSaving(false)
     }
@@ -1070,7 +1155,7 @@ function InvoiceModal({ clientId, onSave, trigger }) {
       await db.createInvoice({ client_id: clientId, description: form.description, amount: parseFloat(form.amount), date: form.date, due_date: form.due_date||null, status: form.status })
       setOpen(false); onSave()
     } catch(e) {
-      alert('Fout bij opslaan: ' + e.message)
+      showToast('Fout bij opslaan: ' + e.message, 'error')
     } finally {
       setSaving(false)
     }
@@ -1092,13 +1177,13 @@ function RecurringModal({ clientId, onSave, trigger }) {
   const [form, setForm] = useState({ description:'', amount:'', freq:'maandelijks', start_date:today(), end_date:'', status:'actief' })
   const f = k => e => setForm(p=>({...p,[k]:e.target.value}))
   async function save() {
-    if(!form.description.trim()||!form.amount) return alert('Vul omschrijving en bedrag in.')
+    if(!form.description.trim()||!form.amount) return showToast('Vul omschrijving en bedrag in.','error')
     setSaving(true)
     try {
       await db.createRecurring({ client_id: clientId, description: form.description, amount: parseFloat(form.amount), freq: form.freq, start_date: form.start_date||today(), end_date: form.end_date||null, status: form.status })
       setOpen(false); onSave()
     } catch(e) {
-      alert('Fout bij opslaan: ' + e.message)
+      showToast('Fout bij opslaan: ' + e.message, 'error')
     } finally {
       setSaving(false)
     }
@@ -1170,24 +1255,24 @@ function HostingView({ allHosting, clients, showView, onRefresh }) {
       <div className="topbar">
         <h2>Hosting & domeinen</h2>
         <div className="topbar-right">
-          <div className="search-wrap"><span className="search-icon">⌕</span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div>
+          <div className="search-wrap"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div>
           <HostingModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Site toevoegen</button>} />
         </div>
       </div>
       <div className="content">
 
         {(expiringSoon.length > 0 || sslWarn.length > 0) && (
-          <div style={{background:'#fffbeb',border:'1px solid #fcd34d',borderRadius:'var(--r)',padding:'14px 18px',marginBottom:18}}>
-            <div style={{fontWeight:600,fontSize:13,color:'#b45309',marginBottom:8}}>⚠ Actie vereist</div>
+          <div style={{background:'var(--amber-soft)',border:'1px solid var(--amber)',borderRadius:'var(--r)',padding:'14px 18px',marginBottom:18}}>
+            <div style={{fontWeight:600,fontSize:13,color:'var(--amber-text)',marginBottom:8,display:'flex',alignItems:'center',gap:6}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Actie vereist</div>
             {expiringSoon.map(h => {
               const d = daysN(h.domain_expires)
-              return <div key={h.id} style={{fontSize:13,color:'#92400e',marginBottom:4}}>
+              return <div key={h.id} style={{fontSize:13,color:'var(--amber-text)',marginBottom:4}}>
                 Domein <strong>{h.domain}</strong> verloopt {d <= 0 ? 'al' : 'over ' + d + ' dagen'} — {h.clients?.fname} {h.clients?.lname}
               </div>
             })}
             {sslWarn.map(h => {
               const d = daysN(h.ssl_expires)
-              return <div key={h.id+'-ssl'} style={{fontSize:13,color:'#92400e',marginBottom:4}}>
+              return <div key={h.id+'-ssl'} style={{fontSize:13,color:'var(--amber-text)',marginBottom:4}}>
                 SSL van <strong>{h.site_name}</strong> verloopt {d <= 0 ? 'al' : 'over ' + d + ' dagen'} — {h.clients?.fname} {h.clients?.lname}
               </div>
             })}
@@ -1195,11 +1280,11 @@ function HostingView({ allHosting, clients, showView, onRefresh }) {
         )}
 
         <div className="sc" style={{padding:0}}>
-          <div style={{display:'grid',gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr 120px',padding:'8px 18px',background:'var(--bg)',borderBottom:'1px solid var(--border)',fontSize:10,fontWeight:600,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'.06em'}}>
+          <div className="host-header">
             <div>Site</div><div>Klant</div><div>Hoster</div><div>Domein verloopt</div><div>SSL verloopt</div><div></div>
           </div>
           {!filtered.length ? <div className="empty">Geen sites toegevoegd</div> : filtered.map(h => (
-            <div key={h.id} style={{display:'grid',gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr 120px',padding:'12px 18px',borderBottom:'1px solid var(--border)',alignItems:'center',fontSize:13}}>
+            <div key={h.id} className="host-row">
               <div>
                 <div style={{fontWeight:500}}>{h.site_name}</div>
                 <div style={{fontSize:11,color:'var(--text-muted)'}}>{h.cms}{h.cms&&h.hoster?' · ':''}</div>
@@ -1214,9 +1299,9 @@ function HostingView({ allHosting, clients, showView, onRefresh }) {
               <div style={{fontSize:13,color:expiryColor(h.ssl_expires),fontWeight:daysN(h.ssl_expires)<=30?500:400}}>{h.ssl_expires?fdate(h.ssl_expires):'—'}</div>
               <div style={{display:'flex',gap:5,justifyContent:'flex-end'}}>
                 {h.url && <a href={h.url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none'}} onClick={e=>e.stopPropagation()}>↗</a>}
-                {h.hosting_login_url && <a href={h.hosting_login_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none'}} title="Open hostingpaneel" onClick={e=>e.stopPropagation()}>⚙</a>}
-                <HostingModal hosting={h} clients={clients} onSave={onRefresh} trigger={<button className="btn btn-ghost btn-xs">✎</button>} />
-                <button className="btn btn-ghost btn-xs" style={{color:'var(--red-text)'}} onClick={()=>{if(confirm('Verwijderen?'))db.deleteHosting(h.id).then(onRefresh)}}>×</button>
+                {h.hosting_login_url && <a href={h.hosting_login_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none',padding:'3px 6px'}} title="Open hostingpaneel" onClick={e=>e.stopPropagation()}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg></a>}
+                <HostingModal hosting={h} clients={clients} onSave={onRefresh} trigger={<button className="btn btn-ghost btn-xs" aria-label="Bewerken" style={{padding:'3px 6px'}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>} />
+                <button className="btn btn-ghost btn-xs" style={{color:'var(--red-text)'}} onClick={()=>{if(confirm('Verwijderen?'))db.deleteHosting(h.id).then(onRefresh)}} aria-label={`Site "${h.site_name}" verwijderen`}>×</button>
               </div>
             </div>
           ))}
@@ -1262,9 +1347,9 @@ function ClientHostingTab({ clientId, onRefresh }) {
               </div>
               <div style={{display:'flex',gap:5}}>
                 {h.url && <a href={h.url} target="_blank" rel="noreferrer" className="btn btn-primary btn-xs" style={{textDecoration:'none'}}>↗ Open site</a>}
-                {h.hosting_login_url && <a href={h.hosting_login_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>⚙ Hostingpaneel</a>}
-                <HostingModal hosting={h} clients={clients} defaultClientId={clientId} onSave={refresh} trigger={<button className="btn btn-ghost btn-xs">✎</button>} />
-                <button className="btn btn-ghost btn-xs" style={{color:'var(--red-text)'}} onClick={()=>{if(confirm('Verwijderen?'))db.deleteHosting(h.id).then(refresh)}}>×</button>
+                {h.hosting_login_url && <a href={h.hosting_login_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>Hostingpaneel</a>}
+                <HostingModal hosting={h} clients={clients} defaultClientId={clientId} onSave={refresh} trigger={<button className="btn btn-ghost btn-xs" aria-label="Bewerken" style={{padding:'3px 6px'}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>} />
+                <button className="btn btn-ghost btn-xs" style={{color:'var(--red-text)'}} onClick={()=>{if(confirm('Verwijderen?'))db.deleteHosting(h.id).then(refresh)}} aria-label={`Site "${h.site_name}" verwijderen`}>×</button>
               </div>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
@@ -1273,14 +1358,14 @@ function ClientHostingTab({ clientId, onRefresh }) {
               {h.domain && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>Domein</span><span className="info-val">{h.domain}</span></div>}
               {h.domain_expires && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>Domein exp.</span><span className="info-val" style={{color:expiryColor(h.domain_expires),fontWeight:daysN(h.domain_expires)<=30?500:400}}>{fdate(h.domain_expires)}</span></div>}
               {h.ssl_expires && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>SSL exp.</span><span className="info-val" style={{color:expiryColor(h.ssl_expires),fontWeight:daysN(h.ssl_expires)<=30?500:400}}>{fdate(h.ssl_expires)}</span></div>}
-              {h.monthly_cost && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>Kosten</span><span className="info-val" style={{fontFamily:'DM Mono'}}>{money(h.monthly_cost)}/mnd</span></div>}
+              {h.monthly_cost && <div className="info-row" style={{padding:'4px 0'}}><span className="info-label" style={{width:70}}>Kosten</span><span className="info-val" style={{fontFamily:'var(--mono-font)'}}>{money(h.monthly_cost)}/mnd</span></div>}
             </div>
             {h.hosting_username && (
               <div style={{marginTop:8,background:'var(--bg)',borderRadius:'var(--rsm)',padding:'8px 12px',fontSize:12}}>
                 <div style={{color:'var(--text-muted)',marginBottom:4,fontWeight:600,fontSize:11,textTransform:'uppercase',letterSpacing:'.04em'}}>Inloggegevens</div>
                 <div style={{display:'flex',gap:16}}>
                   {h.hosting_username && <span>Gebruiker: <strong>{h.hosting_username}</strong></span>}
-                  {h.hosting_password && <span style={{marginLeft:12}}>Wachtwoord: <strong>{h.hosting_password}</strong></span>}
+                  {h.hosting_password && <span style={{marginLeft:12}}>Wachtwoord: <MaskedSecret value={h.hosting_password} /></span>}
                 </div>
               </div>
             )}
@@ -1299,6 +1384,7 @@ const HOSTER_OPTIONS = ['Antagonist','Mijn.host','TransIP','Hostnet','WP Engine'
 function HostingModal({ hosting, clients, defaultClientId, onSave, trigger }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [showPw, setShowPw] = useState(false)
   const init = { client_id: defaultClientId||'', site_name:'', url:'', cms:'', hoster:'', hosting_login_url:'', hosting_username:'', hosting_password:'', domain:'', domain_expires:'', ssl_expires:'', monthly_cost:'', notes:'' }
   const [form, setForm] = useState(init)
   const f = k => e => setForm(p=>({...p,[k]:e.target.value}))
@@ -1319,11 +1405,12 @@ function HostingModal({ hosting, clients, defaultClientId, onSave, trigger }) {
       monthly_cost: hosting.monthly_cost||'',
       notes: hosting.notes||''
     } : {...init, client_id: defaultClientId||''})
+    setShowPw(false)
     setOpen(true)
   }
 
   async function save() {
-    if(!form.site_name.trim()) return alert('Vul een sitenaam in.')
+    if(!form.site_name.trim()) return showToast('Vul een sitenaam in.','error')
     setSaving(true)
     try {
       const data = {
@@ -1345,7 +1432,7 @@ function HostingModal({ hosting, clients, defaultClientId, onSave, trigger }) {
       else await db.createHosting(data)
       setOpen(false); onSave()
     } catch(e) {
-      alert('Fout bij opslaan: ' + e.message)
+      showToast('Fout bij opslaan: ' + e.message, 'error')
     } finally {
       setSaving(false)
     }
@@ -1376,7 +1463,17 @@ function HostingModal({ hosting, clients, defaultClientId, onSave, trigger }) {
       <FG label="Hostingpaneel URL"><input value={form.hosting_login_url} onChange={f('hosting_login_url')} placeholder="https://mijn.host/login" type="url" /></FG>
       <FR>
         <FG label="Gebruikersnaam hosting"><input value={form.hosting_username} onChange={f('hosting_username')} /></FG>
-        <FG label="Wachtwoord hosting"><input value={form.hosting_password} onChange={f('hosting_password')} /></FG>
+        <FG label="Wachtwoord hosting">
+          <div style={{position:'relative'}}>
+            <input type={showPw?'text':'password'} value={form.hosting_password} onChange={f('hosting_password')} style={{paddingRight:34}} autoComplete="new-password" />
+            <button
+              type="button"
+              onClick={()=>setShowPw(s=>!s)}
+              aria-label={showPw ? 'Wachtwoord verbergen' : 'Wachtwoord tonen'}
+              style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',color:'var(--text-faint)',padding:4,display:'flex'}}
+            ><EyeIcon off={showPw} /></button>
+          </div>
+        </FG>
       </FR>
       <FR>
         <FG label="Domeinnaam"><input value={form.domain} onChange={f('domain')} placeholder="klant.nl" /></FG>
@@ -1402,9 +1499,6 @@ function ClientMeetingsTab({ client, onRefresh }) {
 
   useEffect(() => { db.getMeetings(client.id).then(setMeetings) }, [client.id])
   const refresh = () => db.getMeetings(client.id).then(setMeetings)
-
-  const TYPE_ICONS = { videocall: '📹', bel: '📞', locatie: '📍', overig: '📅' }
-  const TYPE_LABELS = { videocall: 'Videocall', bel: 'Telefoongesprek', locatie: 'Op locatie', overig: 'Overig' }
 
   function buildCalendarUrl(m) {
     const base = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
@@ -1433,14 +1527,14 @@ function ClientMeetingsTab({ client, onRefresh }) {
   }
 
   async function saveMeeting() {
-    if (!form.title.trim() || !form.meeting_date) return alert('Vul een titel en datum in.')
+    if (!form.title.trim() || !form.meeting_date) return showToast('Vul een titel en datum in.','error')
     setSaving(true)
     try {
       await db.createMeeting({ client_id: client.id, ...form, duration_minutes: parseInt(form.duration_minutes) || 60 })
       setShowModal(false)
       setForm({ title:'', meeting_date:'', meeting_time:'', duration_minutes:60, type:'videocall', location:'', notes:'', status:'gepland' })
       refresh()
-    } catch(e) { alert('Fout: ' + e.message) }
+    } catch(e) { showToast('Fout: ' + e.message, 'error') }
     finally { setSaving(false) }
   }
 
@@ -1492,10 +1586,10 @@ function ClientMeetingsTab({ client, onRefresh }) {
               <div className="form-group"><label>Duur (minuten)</label><input type="number" value={form.duration_minutes} onChange={f('duration_minutes')} min="15" step="15" /></div>
               <div className="form-group"><label>Type</label>
                 <select value={form.type} onChange={f('type')}>
-                  <option value="videocall">📹 Videocall</option>
-                  <option value="bel">📞 Telefoongesprek</option>
-                  <option value="locatie">📍 Op locatie</option>
-                  <option value="overig">📅 Overig</option>
+                  <option value="videocall">Videocall</option>
+                  <option value="bel">Telefoongesprek</option>
+                  <option value="locatie">Op locatie</option>
+                  <option value="overig">Overig</option>
                 </select>
               </div>
             </div>
@@ -1513,7 +1607,6 @@ function ClientMeetingsTab({ client, onRefresh }) {
 }
 
 function MeetingRow({ m, past, onToggle, onDelete, calUrl }) {
-  const TYPE_ICONS = { videocall: '📹', bel: '📞', locatie: '📍', overig: '📅' }
   const dd = daysN(m.meeting_date)
   const isToday = dd === 0
   const isTomorrow = dd === 1
@@ -1538,7 +1631,7 @@ function MeetingRow({ m, past, onToggle, onDelete, calUrl }) {
       </div>
       <div style={{flex:1, minWidth:0}}>
         <div style={{fontWeight:500,fontSize:13,display:'flex',alignItems:'center',gap:6}}>
-          {TYPE_ICONS[m.type] || '📅'} {m.title}
+          <MeetingTypeIcon type={m.type} /> {m.title}
           {isToday && <span className="badge bg-green" style={{fontSize:10}}>Vandaag</span>}
           {isTomorrow && <span className="badge bg-amber" style={{fontSize:10}}>Morgen</span>}
         </div>
@@ -1555,17 +1648,19 @@ function MeetingRow({ m, past, onToggle, onDelete, calUrl }) {
             className="btn btn-ghost btn-xs"
             style={{textDecoration:'none',display:'inline-flex',alignItems:'center',gap:4}}
             title="Toevoegen aan Google Calendar"
-          >📅 Inplannen</a>
+          >Inplannen</a>
         )}
         <button
           className="btn btn-ghost btn-xs"
           onClick={onToggle}
           title={past ? 'Markeer als gepland' : 'Markeer als geweest'}
+          aria-label={past ? 'Markeer als gepland' : 'Markeer als geweest'}
         >{past ? '↩' : '✓'}</button>
         <button
           className="btn btn-ghost btn-xs"
           style={{color:'var(--red-text)'}}
           onClick={() => confirm('Meeting verwijderen?') && onDelete()}
+          aria-label="Verwijderen"
         >×</button>
       </div>
     </div>
