@@ -77,6 +77,16 @@ export async function getOrgMembers() {
   if (error) throw error
   return data
 }
+export async function getOrganization(id) {
+  const { data, error } = await supabase.from('organizations').select('*').eq('id', id).single()
+  if (error) throw error
+  return data
+}
+export async function updateMemberRole(profileId, role) {
+  const { data, error } = await supabase.from('profiles').update({ role }).eq('id', profileId).select().single()
+  if (error) throw error
+  return data
+}
 
 // ── Projects ───────────────────────────────────────────────────────────────────
 export async function getProjects() {

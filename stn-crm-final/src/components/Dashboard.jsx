@@ -129,6 +129,7 @@ function ModalActions({ onCancel, onSave, saving }) {
 export default function Dashboard({ session }) {
   const [view, setView] = useState('overview')
   const [profile, setProfile] = useState(null)
+  const [orgName, setOrgName] = useState('')
   const [darkMode, setDarkMode] = useState(() => { try { return localStorage.getItem('stn_theme') === 'dark' } catch(e) { return false } })
   const [curClientId, setCurClientId] = useState(null)
   const [curProjectId, setCurProjectId] = useState(null)
@@ -172,6 +173,9 @@ export default function Dashboard({ session }) {
   useEffect(() => { db.getProfile(session.user.id).then(p => { if(p) { setProfile(p); applyProfileTheme(p) } }) }, [session.user.id])
   const loadMembers = useCallback(() => { db.getOrgMembers().then(setOrgMembers).catch(() => {}) }, [])
   useEffect(() => { loadMembers() }, [loadMembers])
+  useEffect(() => {
+    if (profile?.organization_id) db.getOrganization(profile.organization_id).then(o => setOrgName(o.name)).catch(() => {})
+  }, [profile?.organization_id])
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
     try { localStorage.setItem('stn_theme', darkMode ? 'dark' : 'light') } catch(e) {}
@@ -442,8 +446,8 @@ export default function Dashboard({ session }) {
         <div className="sb-logo">
           <div className="sb-logo-icon"><span>S</span></div>
           <div className="sb-logo-text">
-            <h1>STN CRM</h1>
-            <span>Klantenbeheer</span>
+            <h1>{orgName || 'STN CRM'}</h1>
+            <span>{orgName ? 'STN CRM' : 'Klantenbeheer'}</span>
           </div>
         </div>
         <div className="sb-nav">
@@ -515,7 +519,7 @@ export default function Dashboard({ session }) {
         <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Menu openen">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
-        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} />}
+        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} members={orgMembers} myProfile={profile} />}
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
@@ -525,15 +529,16 @@ export default function Dashboard({ session }) {
         {view==='hosting' && <HostingView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} />}
         {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} />}
         {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} />}
-        {view==='team' && profile?.role === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} />}
+        {view==='team' && profile?.role === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} myProfile={profile} />}
       </div>
     </div>
     </ToastProvider>
   )
 }
 
-function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, totalPaid, totalOpen, totalMRR, showView, onRefresh }) {
+function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, totalPaid, totalOpen, totalMRR, showView, onRefresh, myProfile }) {
   const openTasks = allTasks.filter(t => !t.done)
+  const myClients = myProfile ? clients.filter(c => c.assigned_to === myProfile.id) : []
   const pDL = projects.filter(p => p.deadline && p.status !== 'afgerond').map(p => ({ name: p.name, deadline: p.deadline, sub: 'Project', tv: 'project-detail', tid: p.id, color: p.color }))
   const tDL = allTasks.filter(t => !t.done && t.due_date).map(t => ({ name: t.description, deadline: t.due_date, sub: t.project?.name || '', tv: 'project-detail', tid: t.project_id, color: t.project?.color || '#888' }))
   const deadlines = [...pDL, ...tDL].sort((a,b) => a.deadline.localeCompare(b.deadline)).slice(0,6)
@@ -543,10 +548,10 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
 
   return (
     <div>
-      <div className="topbar"><h2>Dashboard</h2><div className="topbar-right"><ClientModal onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Klant</button>} /><ProjectModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-ghost btn-sm">+ Project</button>} /></div></div>
+      <div className="topbar"><h2>Welkom{myProfile?.full_name ? ', ' + myProfile.full_name.split(' ')[0] : ''}</h2><div className="topbar-right"><ClientModal onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Klant</button>} /><ProjectModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-ghost btn-sm">+ Project</button>} /></div></div>
       <div className="content">
         <div className="stats-grid">
-          <div className="stat-card"><div className="stat-label">Klanten</div><div className="stat-value">{clients.length}</div><div className="stat-sub">{clients.filter(c=>c.status==='actief').length} actief</div></div>
+          <div className="stat-card"><div className="stat-label">Klanten</div><div className="stat-value">{clients.length}</div><div className="stat-sub">{clients.filter(c=>c.status==='actief').length} actief{myProfile?.role!=='owner' && ` · ${myClients.length} aan jou toegewezen`}</div></div>
           <div className="stat-card"><div className="stat-label">Projecten</div><div className="stat-value">{projects.length}</div><div className="stat-sub">{projects.filter(p=>p.status==='actief').length} actief</div></div>
           <div className="stat-card"><div className="stat-label">Omzet betaald</div><div className="stat-value" style={{fontSize:18}}>{money(totalPaid)}</div>{totalOpen>0&&<div className="stat-sub" style={{color:'var(--amber-text)'}}>{money(totalOpen)} nog te ontvangen</div>}</div>
           <div className="stat-card"><div className="stat-label">MRR</div><div className="stat-value" style={{fontSize:18}}>{money(totalMRR)}</div><div className="stat-sub">per maand</div></div>
@@ -1027,18 +1032,18 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
   )
 }
 
-function TeamView({ members, onRefresh }) {
+function TeamView({ members, onRefresh, myProfile }) {
   const [email, setEmail] = useState('')
   const [inviting, setInviting] = useState(false)
+  const ownerCount = members.filter(m => m.role === 'owner').length
 
   async function invite() {
     if (!email.trim()) return
-    const me = members.find(m => m.role === 'owner')
     setInviting(true)
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: { shouldCreateUser: true, data: { invite_organization_id: me?.organization_id } }
+        options: { shouldCreateUser: true, data: { invite_organization_id: myProfile.organization_id } }
       })
       if (error) throw error
       showToast('Uitnodiging verstuurd naar ' + email)
@@ -1047,6 +1052,19 @@ function TeamView({ members, onRefresh }) {
       showToast('Fout bij uitnodigen: ' + e.message, 'error')
     } finally {
       setInviting(false)
+    }
+  }
+
+  async function changeRole(member, role) {
+    if (member.role === 'owner' && role !== 'owner' && ownerCount <= 1) {
+      return showToast('Een organisatie moet minstens één eigenaar hebben.', 'error')
+    }
+    try {
+      await db.updateMemberRole(member.id, role)
+      onRefresh()
+      showToast('Rol bijgewerkt')
+    } catch (e) {
+      showToast('Fout bij wijzigen rol: ' + e.message, 'error')
     }
   }
 
@@ -1068,8 +1086,17 @@ function TeamView({ members, onRefresh }) {
           <div className="sc-body">
             {!members.length ? <div className="empty">Nog geen teamleden</div> : members.map(m => (
               <div key={m.id} className="info-row">
-                <span className="info-label">{m.role === 'owner' ? 'Eigenaar' : 'Teamlid'}</span>
-                <span className="info-val">{m.full_name || m.id}</span>
+                <span className="info-label">{m.full_name || m.id}{m.id===myProfile?.id?' (jij)':''}</span>
+                <span className="info-val">
+                  {m.id === myProfile?.id ? (
+                    <span className="badge bg-blue">{m.role === 'owner' ? 'Eigenaar' : 'Teamlid'}</span>
+                  ) : (
+                    <select value={m.role} onChange={e=>changeRole(m, e.target.value)} style={{fontSize:13,padding:'5px 8px'}}>
+                      <option value="member">Teamlid</option>
+                      <option value="owner">Eigenaar</option>
+                    </select>
+                  )}
+                </span>
               </div>
             ))}
           </div>
