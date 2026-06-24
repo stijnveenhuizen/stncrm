@@ -14,7 +14,7 @@ const STAGES = [
 const SOURCES = ['Mailmeteor','LinkedIn','Koude acquisitie','Referral','Website','Instagram','Anders']
 
 const money = n => n ? '€\u202f' + Number(n).toLocaleString('nl-NL', {minimumFractionDigits:0,maximumFractionDigits:0}) : ''
-const fdate = d => { if(!d) return '—'; return new Date(d).toLocaleDateString('nl-NL', {day:'numeric',month:'short'}) }
+const fdate = d => { if(!d) return '—'; return new Date(d).toLocaleDateString('nl-NL', {day:'numeric',month:'short',year:'numeric'}) }
 const today = () => new Date().toISOString().slice(0,10)
 const daysN = d => { if(!d) return null; return Math.ceil((new Date(d)-new Date(today()))/86400000) }
 
@@ -32,6 +32,7 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
   const [openTasks, setOpenTasks] = useState([])
   const [view, setView] = useState('lijst') // lijst | kanban
   const [filterStage, setFilterStage] = useState('all')
+  const [filterSource, setFilterSource] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [editProspect, setEditProspect] = useState(null)
   const [converting, setConverting] = useState(null)
@@ -47,13 +48,17 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
     db.getAllPipelineTasks().then(setOpenTasks)
   }
 
-  const filtered = filterStage === 'all'
-    ? pipeline
-    : pipeline.filter(p => p.stage === filterStage)
+  const filtered = pipeline
+    .filter(p => filterStage === 'all' || p.stage === filterStage)
+    .filter(p => filterSource === 'all' || p.source === filterSource)
 
   const totalValue = pipeline.filter(p => !['afgewezen','klant'].includes(p.stage)).reduce((s,p) => s+Number(p.deal_value||0), 0)
   const wonValue = pipeline.filter(p => p.stage === 'klant').reduce((s,p) => s+Number(p.deal_value||0), 0)
   const interested = pipeline.filter(p => ['interesse','gesprek','offerte','akkoord'].includes(p.stage)).length
+  const wonCount = pipeline.filter(p => p.stage === 'klant').length
+  const decidedCount = pipeline.filter(p => ['klant','afgewezen'].includes(p.stage)).length
+  const convRatio = decidedCount > 0 ? Math.round((wonCount / decidedCount) * 100) : 0
+  const usedSources = [...new Set(pipeline.map(p => p.source).filter(Boolean))]
 
   async function handleConvert(prospect) {
     if (!confirm(`${prospect.fname} ${prospect.lname} omzetten naar klant?`)) return
@@ -68,13 +73,23 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
   }
 
   async function handleStageChange(id, stage) {
-    await db.updateProspect(id, { stage })
+    const updates = { stage }
+    if (stage === 'afgewezen') {
+      const reason = window.prompt('Reden van afwijzing (optioneel):')
+      if (reason) updates.lost_reason = reason
+    }
+    await db.updateProspect(id, updates)
     refresh()
   }
 
   async function handleDrop(stage, prospectId) {
     if (!prospectId) return
-    await db.updateProspect(prospectId, { stage })
+    const updates = { stage }
+    if (stage === 'afgewezen') {
+      const reason = window.prompt('Reden van afwijzing (optioneel):')
+      if (reason) updates.lost_reason = reason
+    }
+    await db.updateProspect(prospectId, updates)
     setDragging(null)
     refresh()
   }
@@ -133,11 +148,12 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
         )}
 
         {/* Stats */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:12,marginBottom:20}}>
           <div className="stat-card"><div className="stat-label">Totaal prospects</div><div className="stat-value">{pipeline.filter(p=>p.stage!=='klant').length}</div></div>
           <div className="stat-card"><div className="stat-label">Actief in pipeline</div><div className="stat-value" style={{color:'var(--blue)'}}>{interested}</div></div>
           <div className="stat-card"><div className="stat-label">Pipeline waarde</div><div className="stat-value" style={{fontSize:18}}>{money(totalValue)}</div></div>
-          <div className="stat-card"><div className="stat-label">Gewonnen</div><div className="stat-value" style={{fontSize:18,color:'var(--accent)'}}>{money(wonValue)}</div><div className="stat-sub">{pipeline.filter(p=>p.stage==='klant').length} klanten</div></div>
+          <div className="stat-card"><div className="stat-label">Gewonnen</div><div className="stat-value" style={{fontSize:18,color:'var(--accent)'}}>{money(wonValue)}</div><div className="stat-sub">{wonCount} klanten</div></div>
+          <div className="stat-card"><div className="stat-label">Conversieratio</div><div className="stat-value" style={{color:'var(--teal-text)'}}>{convRatio}%</div><div className="stat-sub">{decidedCount} besloten</div></div>
         </div>
 
         {/* Follow-up warnings */}
@@ -156,6 +172,9 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
             pipeline={filtered}
             filterStage={filterStage}
             setFilterStage={setFilterStage}
+            filterSource={filterSource}
+            setFilterSource={setFilterSource}
+            usedSources={usedSources}
             onEdit={p => { setEditProspect(p); setShowModal(true) }}
             onDelete={async p => { if(confirm('Verwijderen?')) { await db.deleteProspect(p.id); refresh() } }}
             onConvert={handleConvert}
@@ -190,14 +209,18 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
 }
 
 // ── List View ──────────────────────────────────────────────────────────────────
-function ListView({ pipeline, filterStage, setFilterStage, onEdit, onDelete, onConvert, onStageChange, converting, showView, onRefreshTasks }) {
+function ListView({ pipeline, filterStage, setFilterStage, filterSource, setFilterSource, usedSources, onEdit, onDelete, onConvert, onStageChange, converting, showView, onRefreshTasks }) {
   return (
     <div>
-      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap',alignItems:'center'}}>
         <button className={`btn btn-sm ${filterStage==='all'?'btn-primary':'btn-ghost'}`} onClick={() => setFilterStage('all')}>Alles ({pipeline.length})</button>
         {STAGES.map(s => (
           <button key={s.key} className={`btn btn-sm ${filterStage===s.key?'btn-primary':'btn-ghost'}`} onClick={() => setFilterStage(s.key)} style={filterStage===s.key?{background:s.color,borderColor:s.color}:{}}>{s.label}</button>
         ))}
+        <select value={filterSource} onChange={e=>setFilterSource(e.target.value)} style={{width:'auto',marginLeft:'auto',fontSize:12,padding:'5px 8px'}}>
+          <option value="all">Alle bronnen</option>
+          {usedSources.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
       </div>
       <div className="sc" style={{padding:0}}>
         <div style={{display:'grid',gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr 140px',padding:'9px 20px',background:'var(--bg2)',borderBottom:'1px solid var(--border)',fontSize:10,fontWeight:600,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'.06em'}}>
@@ -217,6 +240,7 @@ function ListView({ pipeline, filterStage, setFilterStage, onEdit, onDelete, onC
                   <div style={{fontWeight:500,fontSize:14}}>{p.fname} {p.lname}</div>
                   <div style={{fontSize:11,color:'var(--text-muted)'}}>{p.company||p.email||'—'}</div>
                   {p.interest && <div style={{fontSize:11,color:'var(--text-faint)',fontStyle:'italic',marginTop:1}}>{p.interest}</div>}
+                  {p.stage==='afgewezen' && p.lost_reason && <div style={{fontSize:11,color:'var(--red-text)',marginTop:1}}>Verloren: {p.lost_reason}</div>}
                   <ProspectTasksPanel prospect={p} onTasksChange={onRefreshTasks} />
                 </div>
               </div>
