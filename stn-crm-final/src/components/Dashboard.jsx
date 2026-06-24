@@ -673,6 +673,17 @@ function OnboardingChecklist({ clients, projects, orgMembers, showView, onRefres
   )
 }
 
+function TrendBadge({ value, format }) {
+  if (!value) return null
+  const up = value > 0
+  return (
+    <span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:11,fontWeight:600,color: up?'var(--green-text)':'var(--red-text)',marginLeft:6}}>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{transform: up?'none':'rotate(180deg)'}}><polyline points="18 15 12 9 6 15"/></svg>
+      {up?'+':''}{format ? format(value) : value}
+    </span>
+  )
+}
+
 function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, allHosting = [], pipeline = [], totalPaid, totalOpen, totalMRR, showView, onRefresh, myProfile, myRole, activeOrgId, orgMembers = [] }) {
   const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
     try { return localStorage.getItem('stn_onboarding_dismissed_' + activeOrgId) === '1' } catch(e) { return false }
@@ -690,7 +701,17 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
   const mx = revByClient.length ? Math.max(...revByClient.map(x => x.v)) : 1
   const activeRec = allRecurring.filter(r => r.status === 'actief')
   const openLeads = pipeline.filter(p => !['klant','afgewezen'].includes(p.stage))
-  const expiringHosting = allHosting.filter(h => (h.domain_expires && daysN(h.domain_expires) <= 30) || (h.ssl_expires && daysN(h.ssl_expires) <= 30))
+  const expiringHosting = allHosting.filter(h => (h.domain_expires && daysN(h.domain_expires) <= 60) || (h.ssl_expires && daysN(h.ssl_expires) <= 60))
+
+  const now = new Date()
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth()-1, 1)
+  const newClientsThisMonth = clients.filter(c => c.created_at && new Date(c.created_at) >= startOfMonth).length
+  const newProjectsThisMonth = projects.filter(p => p.created_at && new Date(p.created_at) >= startOfMonth).length
+  const paidThisMonth = allInvoices.filter(i => i.status==='betaald' && i.date && new Date(i.date) >= startOfMonth).reduce((s,i)=>s+Number(i.amount),0)
+  const paidLastMonth = allInvoices.filter(i => i.status==='betaald' && i.date && new Date(i.date) >= startOfLastMonth && new Date(i.date) < startOfMonth).reduce((s,i)=>s+Number(i.amount),0)
+  const newRecurringThisMonth = allRecurring.filter(r => r.created_at && new Date(r.created_at) >= startOfMonth && r.status==='actief').length
+  const [hoveredBar, setHoveredBar] = useState(null)
 
   return (
     <div>
@@ -700,19 +721,19 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
         <div className="stats-grid">
           <div className="stat-card">
             <div className="stat-card-icon" style={{background:'var(--accent)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-            <div className="stat-label">Klanten</div><div className="stat-value">{clients.length}</div><div className="stat-sub">{clients.filter(c=>c.status==='actief').length} actief</div>
+            <div className="stat-label">Klanten</div><div className="stat-value">{clients.length}<TrendBadge value={newClientsThisMonth} /></div><div className="stat-sub">{clients.filter(c=>c.status==='actief').length} actief</div>
           </div>
           <div className="stat-card">
             <div className="stat-card-icon" style={{background:'var(--accent)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2Z"/></svg></div>
-            <div className="stat-label">Projecten</div><div className="stat-value">{projects.length}</div><div className="stat-sub">{projects.filter(p=>p.status==='actief').length} actief{myRole!=='owner' && ' · allemaal aan jou toegewezen'}</div>
+            <div className="stat-label">Projecten</div><div className="stat-value">{projects.length}<TrendBadge value={newProjectsThisMonth} /></div><div className="stat-sub">{projects.filter(p=>p.status==='actief').length} actief{myRole!=='owner' && ' · allemaal aan jou toegewezen'}</div>
           </div>
           <div className="stat-card">
             <div className="stat-card-icon" style={{background:'var(--accent)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-            <div className="stat-label">Omzet betaald</div><div className="stat-value" style={{fontSize:18}}>{money(totalPaid)}</div>{totalOpen>0&&<div className="stat-sub" style={{color:'var(--amber-text)'}}>{money(totalOpen)} nog te ontvangen</div>}
+            <div className="stat-label">Omzet betaald</div><div className="stat-value" style={{fontSize:18}}>{money(totalPaid)}<TrendBadge value={paidThisMonth - paidLastMonth} format={v=>money(Math.abs(v))} /></div>{totalOpen>0&&<div className="stat-sub" style={{color:'var(--amber-text)'}}>{money(totalOpen)} nog te ontvangen</div>}
           </div>
           <div className="stat-card">
             <div className="stat-card-icon" style={{background:'var(--accent)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div>
-            <div className="stat-label">MRR</div><div className="stat-value" style={{fontSize:18}}>{money(totalMRR)}</div><div className="stat-sub">per maand</div>
+            <div className="stat-label">MRR</div><div className="stat-value" style={{fontSize:18}}>{money(totalMRR)}<TrendBadge value={newRecurringThisMonth} format={v=>v+' nieuw'} /></div><div className="stat-sub">per maand</div>
           </div>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
@@ -729,17 +750,27 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
               )}
             </div>
           </div>
-          <div className="sc" style={{cursor:'pointer'}} onClick={()=>showView('hosting')}>
-            <div className="sc-head"><span className="sc-title">Hosting</span></div>
+          <div className="sc" style={{cursor: expiringHosting.length ? 'default' : 'pointer'}} onClick={()=>!expiringHosting.length && showView('hosting')}>
+            <div className="sc-head"><span className="sc-title">Domein/SSL verloopt binnenkort</span></div>
             <div className="sc-body">
-              {!expiringHosting.length ? <div className="empty">Niets verloopt binnenkort</div> : (
-                <div className="dl-item" style={{borderBottom:'none',padding:0}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:22,fontWeight:700,fontFamily:'var(--heading-font)',color:'var(--amber-text)'}}>{expiringHosting.length}</div>
-                    <div style={{fontSize:12,color:'var(--text-muted)'}}>domein/SSL verloopt binnen 30 dagen</div>
+              {!expiringHosting.length ? <div className="empty">Niets verloopt binnen 60 dagen</div> : expiringHosting.slice(0,4).map(h => {
+                const dDom = h.domain_expires ? daysN(h.domain_expires) : null
+                const dSsl = h.ssl_expires ? daysN(h.ssl_expires) : null
+                const soonest = [dDom, dSsl].filter(d => d !== null).sort((a,b)=>a-b)[0]
+                const c = soonest <= 14 ? 'var(--red-text)' : 'var(--amber-text)'
+                return (
+                  <div key={h.id} className="dl-item" style={{cursor:'pointer'}} onClick={()=>showView('hosting')}>
+                    <div className="dl-dot" style={{background: soonest<=14 ? 'var(--red)' : 'var(--amber)'}}></div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13}}>{h.site_name}</div>
+                      <div style={{fontSize:11,color:'var(--text-faint)'}}>
+                        {dDom!==null && `Domein: ${dDom<0?'verlopen':dDom+'d'}`}{dDom!==null&&dSsl!==null?' · ':''}{dSsl!==null && `SSL: ${dSsl<0?'verlopen':dSsl+'d'}`}
+                      </div>
+                    </div>
+                    <div style={{fontSize:12,color:c,fontWeight:500,whiteSpace:'nowrap'}}>{soonest<0?'Verlopen':soonest+'d'}</div>
                   </div>
-                </div>
-              )}
+                )
+              })}
             </div>
           </div>
         </div>
@@ -756,12 +787,22 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
           <div className="sc">
             <div className="sc-head"><span className="sc-title">Open taken</span></div>
             <div className="sc-body">
-              {!openTasks.length ? <div className="empty">Geen open taken</div> : openTasks.slice(0,6).map(t => (
-                <div key={t.id} className="task-item">
-                  <div className="task-check"></div>
-                  <div style={{flex:1}}><div style={{fontSize:13}}>{t.description}</div><div className="task-meta" style={{cursor:'pointer'}} onClick={()=>showView('project-detail',t.project_id)}>{t.project?.name}</div></div>
-                </div>
-              ))}
+              {!openTasks.length ? <div className="empty">Geen open taken</div> : openTasks.slice(0,6).map(t => {
+                const dd = t.due_date ? daysN(t.due_date) : null
+                return (
+                  <div key={t.id} className="task-item">
+                    <div className="task-check"></div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,color:dd<0?'var(--red-text)':'var(--text)'}}>{t.description}</div>
+                      <div className="task-meta" style={{cursor:'pointer'}} onClick={()=>showView('project-detail',t.project_id)}>
+                        {t.project?.name}
+                        {t.priority && t.priority!=='normaal' && <span className={`badge ${t.priority==='hoog'?'bg-red':'bg-gray'}`} style={{fontSize:9}}>{t.priority}</span>}
+                        {dd!==null && <span style={{color:dd<0?'var(--red-text)':'inherit',fontWeight:dd<0?600:400}}>{dd<0?'Te laat':dd===0?'Vandaag':fdate(t.due_date)}</span>}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
@@ -793,7 +834,27 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
           <div className="sc">
             <div className="sc-head"><span className="sc-title">Omzet per klant (betaald)</span></div>
             <div className="sc-body">
-              {!revByClient.length ? <div className="empty">Nog geen betaalde facturen</div> : <div className="chart-wrap">{revByClient.map(x=><div key={x.id} className="chart-col" title={money(x.v)} onClick={()=>showView('client-detail',x.id)}><div className="chart-bar" style={{height:Math.max(3,Math.round(x.v/mx*72))+'px'}}></div><div className="chart-lbl">{x.name}</div></div>)}</div>}
+              {!revByClient.length ? <div className="empty">Nog geen betaalde facturen</div> : <>
+                <div style={{display:'flex',gap:8}}>
+                  <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',height:80,paddingTop:8,fontSize:10,color:'var(--text-faint)',textAlign:'right',flexShrink:0}}>
+                    <span>{money(mx)}</span>
+                    <span>{money(mx/2)}</span>
+                    <span>€0</span>
+                  </div>
+                  <div className="chart-wrap" style={{flex:1,position:'relative'}}>
+                    {revByClient.map((x,i)=>(
+                      <div key={x.id} className="chart-col" onClick={()=>showView('client-detail',x.id)} onMouseEnter={()=>setHoveredBar(i)} onMouseLeave={()=>setHoveredBar(null)} style={{position:'relative'}}>
+                        {hoveredBar===i && <div style={{position:'absolute',bottom:'100%',left:'50%',transform:'translateX(-50%)',marginBottom:6,background:'var(--text)',color:'var(--surface)',fontSize:11,fontWeight:600,padding:'4px 8px',borderRadius:6,whiteSpace:'nowrap',zIndex:10}}>{x.name}: {money(x.v)}</div>}
+                        <div className="chart-bar" style={{height:Math.max(3,Math.round(x.v/mx*72))+'px'}}></div>
+                        <div className="chart-lbl">{x.name}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,fontSize:11,color:'var(--text-muted)'}}>
+                  <span style={{width:9,height:9,borderRadius:2,background:'var(--accent)',display:'inline-block'}}></span> Betaalde omzet per klant
+                </div>
+              </>}
             </div>
           </div>
           <div className="sc">

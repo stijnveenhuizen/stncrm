@@ -517,3 +517,37 @@ export async function deletePipelineTask(id) {
   const { error } = await supabase.from('pipeline_tasks').delete().eq('id', id)
   if (error) throw error
 }
+
+// ── Bedrijfsinstellingen ──────────────────────────────────────────────────────
+export async function getCompanySettings(organizationId) {
+  const { data, error } = await supabase.from('company_settings').select('*').eq('organization_id', organizationId).maybeSingle()
+  if (error) throw error
+  return data
+}
+export async function upsertCompanySettings(organizationId, updates) {
+  const { data, error } = await supabase
+    .from('company_settings').upsert([{ organization_id: organizationId, ...updates, updated_at: new Date().toISOString() }]).select().single()
+  if (error) throw error
+  return data
+}
+export async function uploadCompanyLogo(organizationId, file) {
+  const ext = file.name.split('.').pop()
+  const path = `${organizationId}/logo.${ext}`
+  const { error } = await supabase.storage.from('company-logos').upload(path, file, { upsert: true })
+  if (error) throw error
+  const { data } = supabase.storage.from('company-logos').getPublicUrl(path)
+  return data.publicUrl + '?t=' + Date.now()
+}
+
+// ── Notificaties (live berekend, alleen leesstatus wordt opgeslagen) ───────────
+export async function getReadNotificationKeys() {
+  const userId = (await supabase.auth.getUser()).data.user.id
+  const { data, error } = await supabase.from('notification_reads').select('notification_key').eq('user_id', userId)
+  if (error) throw error
+  return data.map(r => r.notification_key)
+}
+export async function markNotificationRead(key) {
+  const userId = (await supabase.auth.getUser()).data.user.id
+  const { error } = await supabase.from('notification_reads').upsert([{ user_id: userId, notification_key: key }], { onConflict: 'user_id,notification_key', ignoreDuplicates: true })
+  if (error) throw error
+}
