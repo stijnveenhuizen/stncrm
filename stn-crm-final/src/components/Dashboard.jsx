@@ -51,6 +51,10 @@ export function Badge({ s }) {
   return <span className={`badge ${m[s]||'bg-gray'}`}>{s}</span>
 }
 
+function ChevronIcon({ size = 12 }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+}
+
 export function MeetingTypeIcon({ type, size = 14 }) {
   const p = { width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:2, strokeLinecap:'round', strokeLinejoin:'round' }
   if (type === 'videocall') return <svg {...p}><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
@@ -143,7 +147,8 @@ export default function Dashboard({ session }) {
   const [pipeline, setPipeline] = useState([])
   const [orgMembers, setOrgMembers] = useState([])
   const [loading, setLoading] = useState(true)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [orgMenuOpen, setOrgMenuOpen] = useState(false)
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
 
   function applyProfileTheme(p) {
     if (p.theme) setDarkMode(p.theme === 'dark')
@@ -200,23 +205,30 @@ export default function Dashboard({ session }) {
   const totalMRR = db.calcMRR(allRecurring)
 
   const CSS = `
-    .app{display:flex;min-height:100vh;transition:background .2s}
-    .sidebar{width:224px;min-width:224px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:20;overflow-y:auto;transition:background .2s,border .2s}
-    .main{margin-left:224px;flex:1;min-height:100vh}
-    .sb-logo{padding:20px 18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
-    .sb-logo-icon{width:32px;height:32px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(61,182,142,0.3)}
-    .sb-logo-icon span{color:#fff;font-size:15px;font-family:var(--heading-font);font-weight:700}
-    .sb-logo-text h1{font-size:14px;font-weight:700;letter-spacing:-.02em;font-family:var(--heading-font)}
-    .sb-logo-text span{font-size:10px;color:var(--text-faint);font-weight:400}
-    .sb-nav{flex:1;padding:12px 10px}
-    .nav-section{font-size:10px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em;padding:14px 8px 5px}
-    .nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--rsm);color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;margin-bottom:2px;width:100%;text-align:left;transition:all .12s;border:none;background:none}
-    .nav-item:hover{background:var(--accent-soft);color:var(--accent-text)}
-    .nav-item.active{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
-    .nav-item.active .nav-dot{background:var(--accent)}
-    .nav-dot{width:6px;height:6px;border-radius:50%;background:var(--border-strong);flex-shrink:0;transition:background .12s}
-    .sb-footer{padding:14px 16px;border-top:1px solid var(--border)}
-    .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 26px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;transition:background .2s,border .2s}
+    .app{min-height:100vh;transition:background .2s}
+    .main{flex:1;min-height:100vh}
+    .topnav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;height:60px;display:flex;align-items:center;gap:20px;position:sticky;top:0;z-index:30;transition:background .2s,border .2s}
+    .topnav-left{display:flex;align-items:center;gap:10px;flex-shrink:0;position:relative;cursor:pointer;padding:6px;border-radius:var(--rsm);transition:background .1s}
+    .topnav-left:hover{background:var(--bg2)}
+    .org-icon{width:32px;height:32px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(61,182,142,0.3)}
+    .org-icon span{color:#fff;font-size:15px;font-family:var(--heading-font);font-weight:700}
+    .org-text h1{font-size:14px;font-weight:700;letter-spacing:-.02em;font-family:var(--heading-font);display:flex;align-items:center;gap:5px;white-space:nowrap}
+    .org-text span{font-size:10px;color:var(--text-faint);font-weight:400}
+    .org-menu,.profile-menu{position:absolute;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,.14);min-width:230px;max-height:360px;overflow-y:auto;z-index:50;padding:6px}
+    .org-menu{left:0}
+    .profile-menu{right:0;min-width:210px}
+    .menu-item{padding:8px 10px;border-radius:6px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;color:var(--text)}
+    .menu-item:hover{background:var(--accent-soft);color:var(--accent-text)}
+    .menu-sep{height:1px;background:var(--border);margin:6px 2px}
+    .topnav-tabs{flex:1;display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+    .topnav-tabs::-webkit-scrollbar{display:none}
+    .topnav-tab{display:flex;align-items:center;gap:6px;padding:8px 13px;border-radius:var(--rsm);color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;border:none;background:none;transition:all .12s}
+    .topnav-tab:hover{background:var(--accent-soft);color:var(--accent-text)}
+    .topnav-tab.active{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+    .topnav-right{display:flex;align-items:center;gap:10px;flex-shrink:0;position:relative}
+    .profile-trigger{display:flex;align-items:center;cursor:pointer;padding:4px;border-radius:50%;transition:background .1s}
+    .profile-trigger:hover{background:var(--bg2)}
+    .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 26px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:60px;z-index:10;transition:background .2s,border .2s}
     .topbar h2{font-size:16px;font-weight:700;letter-spacing:-.02em;font-family:var(--heading-font)}
     .topbar-right{display:flex;align-items:center;gap:8px}
     .bc{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-muted)}
@@ -309,11 +321,7 @@ export default function Dashboard({ session }) {
     .theme-toggle.dark{background:var(--accent)}
     .theme-toggle-knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
     .theme-toggle.dark .theme-toggle-knob{transform:translateX(16px)}
-    .hamburger-btn{display:none;width:40px;height:40px;border-radius:var(--rsm);background:none;border:1px solid var(--border-strong);cursor:pointer;align-items:center;justify-content:center;color:var(--text);font-size:18px;position:fixed;top:8px;left:8px;z-index:22;transition:all .15s;background:var(--surface)}
-    .hamburger-btn:hover{border-color:var(--accent);color:var(--accent)}
-    .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:19}
-    .sidebar-overlay.open{display:block}
-    
+
     @media(max-width:1024px){
       .stats-grid{grid-template-columns:repeat(2,1fr)}
       .detail-grid{grid-template-columns:1fr}
@@ -321,22 +329,17 @@ export default function Dashboard({ session }) {
     }
     
     @media(max-width:768px){
-      .hamburger-btn{display:flex}
-      .sidebar{width:224px;position:fixed;left:0;top:0;height:100vh;transform:translateX(-100%);transition:transform .3s ease;z-index:21}
-      .sidebar.open{transform:translateX(0)}
-      .sidebar-overlay{display:none}
-      .sidebar-overlay.open{display:block}
-      .main{margin-left:0;width:100%}
-      .app{display:block}
-      .sb-nav{flex-direction:column;overflow-y:auto;padding:12px 10px}
-      .nav-section{display:block;font-size:10px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em;padding:14px 8px 5px;margin-top:8px}
-      .nav-section:first-of-type{margin-top:0}
+      .topnav{flex-wrap:wrap;height:auto;padding:10px 12px 0}
+      .topnav-left{order:1}
+      .topnav-right{order:2}
+      .topnav-tabs{order:3;flex-basis:100%;width:100%;margin-top:10px;padding:8px 0;border-top:1px solid var(--border)}
+      .org-text h1{font-size:13px}
       .detail-grid{grid-template-columns:1fr}
       .stats-grid{grid-template-columns:1fr 1fr;gap:12px}
       .stat-card{padding:14px 16px}
       .stat-value{font-size:18px}
       .content{padding:16px}
-      .topbar{padding:0 14px;height:56px}
+      .topbar{padding:0 14px;height:56px;position:static}
       .topbar h2{font-size:14px}
       .topbar-right{gap:6px}
       .btn{padding:6px 12px;font-size:12px}
@@ -428,12 +431,7 @@ export default function Dashboard({ session }) {
       .detail-grid{gap:14px}
       .modal-actions{gap:6px}
       .topbar-right{gap:3px}
-      .nav-item{padding:7px 8px;font-size:12px}
-      .sb-logo{padding:16px 14px 12px}
-      .sb-logo-icon{width:28px;height:28px}
-      .sb-logo-text h1{font-size:12px}
-      .sb-logo-text span{font-size:10px}
-      .sb-footer{padding:12px 14px}
+      .topnav-tab{padding:7px 10px;font-size:12px}
     }
   `
 
@@ -441,64 +439,42 @@ export default function Dashboard({ session }) {
     <ToastProvider>
     <div className="app">
       <style>{CSS}</style>
-      <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)}></div>
-      <nav className={`sidebar${sidebarOpen ? ' open' : ''}`}>
-        <div className="sb-logo">
-          <div className="sb-logo-icon"><span>S</span></div>
-          <div className="sb-logo-text">
-            <h1>{orgName || 'STN CRM'}</h1>
-            <span>{orgName ? 'STN CRM' : 'Klantenbeheer'}</span>
+      <header className="topnav">
+        <div className="topnav-left" onClick={() => { setOrgMenuOpen(o => !o); setProfileMenuOpen(false) }} onMouseLeave={() => setOrgMenuOpen(false)}>
+          <div className="org-icon"><span>S</span></div>
+          <div className="org-text">
+            <h1>{orgName || 'STN CRM'}<ChevronIcon/></h1>
+            <span>{curClient ? curClient.fname+' '+curClient.lname : 'Bedrijfsoverzicht'}</span>
           </div>
-        </div>
-        <div className="sb-nav">
-          <div className="nav-section">Overzicht</div>
-          <button className={`nav-item${view==='overview'?' active':''}`} onClick={() => { showView('overview'); setSidebarOpen(false) }}>
-            <span className="nav-dot"></span>Dashboard
-          </button>
-          <div className="nav-section">Beheer</div>
-          <button className={`nav-item${['clients','client-detail'].includes(view)?' active':''}`} onClick={() => { showView('clients'); setSidebarOpen(false) }}>
-            <span className="nav-dot"></span>Klanten
-          </button>
-          <button className={`nav-item${['projects','project-detail'].includes(view)?' active':''}`} onClick={() => { showView('projects'); setSidebarOpen(false) }}>
-            <span className="nav-dot"></span>Projecten
-          </button>
-          <button className={`nav-item${view==='tasks'?' active':''}`} onClick={() => { showView('tasks'); setSidebarOpen(false) }}>
-            <span className="nav-dot"></span>Alle taken
-          </button>
-          <button className={`nav-item${view==='finance'?' active':''}`} onClick={() => { showView('finance'); setSidebarOpen(false) }}>
-            <span className="nav-dot"></span>Financiën
-          </button>
-          <button className={`nav-item${view==='hosting'?' active':''}`} onClick={() => { showView('hosting'); setSidebarOpen(false) }}>
-            <span className="nav-dot"></span>Hosting
-          </button>
-          <button className={`nav-item${view==='pipeline'?' active':''}`} onClick={() => { showView('pipeline'); setSidebarOpen(false) }}>
-            <span className="nav-dot"></span>Pipeline
-          </button>
-          {profile?.role === 'owner' && (
-            <button className={`nav-item${view==='team'?' active':''}`} onClick={() => { showView('team'); setSidebarOpen(false) }}>
-              <span className="nav-dot"></span>Team
-            </button>
+          {orgMenuOpen && (
+            <div className="org-menu">
+              <div className="menu-item" onClick={() => { showView('overview'); setOrgMenuOpen(false) }}>Bedrijfsoverzicht</div>
+              <div className="menu-sep"></div>
+              {!clients.length
+                ? <div className="menu-item" style={{color:'var(--text-faint)',cursor:'default'}}>Nog geen klanten</div>
+                : clients.map(c => (
+                  <div key={c.id} className="menu-item" onClick={() => { showView('client-detail', c.id); setOrgMenuOpen(false) }}>
+                    <span className={`avatar ${avC(c.id)}`} style={{width:22,height:22,fontSize:9,flexShrink:0}}>{ini(c)}</span>
+                    {c.fname} {c.lname}
+                  </div>
+                ))}
+            </div>
           )}
         </div>
-        <div className="sb-footer">
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-            <span style={{fontSize:11,color:'var(--text-faint)'}}>Thema</span>
-            <button
-              className={darkMode ? 'theme-toggle dark' : 'theme-toggle'}
-              onClick={() => setDarkMode(!darkMode)}
-              title={darkMode ? 'Licht thema' : 'Donker thema'}
-            >
-              <div className="theme-toggle-knob"></div>
-            </button>
-          </div>
-          <div
-            style={{display:'flex',alignItems:'center',gap:9,padding:'8px 6px',borderRadius:'var(--rsm)',cursor:'pointer',transition:'background .1s',marginBottom:8}}
-            onClick={() => { showView('profile'); setSidebarOpen(false) }}
-            onMouseEnter={e => e.currentTarget.style.background='var(--accent-soft)'}
-            onMouseLeave={e => e.currentTarget.style.background='transparent'}
-          >
+        <nav className="topnav-tabs">
+          <button className={`topnav-tab${view==='overview'?' active':''}`} onClick={() => showView('overview')}>Dashboard</button>
+          <button className={`topnav-tab${['clients','client-detail'].includes(view)?' active':''}`} onClick={() => showView('clients')}>Klanten</button>
+          <button className={`topnav-tab${['projects','project-detail'].includes(view)?' active':''}`} onClick={() => showView('projects')}>Projecten</button>
+          <button className={`topnav-tab${view==='tasks'?' active':''}`} onClick={() => showView('tasks')}>Taken</button>
+          <button className={`topnav-tab${view==='finance'?' active':''}`} onClick={() => showView('finance')}>Financiën</button>
+          <button className={`topnav-tab${view==='hosting'?' active':''}`} onClick={() => showView('hosting')}>Hosting</button>
+          <button className={`topnav-tab${view==='pipeline'?' active':''}`} onClick={() => showView('pipeline')}>Pipeline</button>
+          {profile?.role === 'owner' && <button className={`topnav-tab${view==='team'?' active':''}`} onClick={() => showView('team')}>Team</button>}
+        </nav>
+        <div className="topnav-right" onMouseLeave={() => setProfileMenuOpen(false)}>
+          <div className="profile-trigger" onClick={() => { setProfileMenuOpen(o => !o); setOrgMenuOpen(false) }}>
             <div style={{
-              width:30,height:30,borderRadius:'50%',flexShrink:0,overflow:'hidden',
+              width:32,height:32,borderRadius:'50%',flexShrink:0,overflow:'hidden',
               background:'var(--accent)',display:'flex',alignItems:'center',justifyContent:'center',
               fontSize:12,fontWeight:700,color:'#fff',fontFamily:'var(--heading-font)'
             }}>
@@ -507,21 +483,30 @@ export default function Dashboard({ session }) {
                 : (profile?.full_name || session.user.email)[0].toUpperCase()
               }
             </div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{profile?.full_name || 'Profiel'}</div>
-              <div style={{fontSize:10,color:'var(--text-faint)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{session.user.email}</div>
-            </div>
           </div>
-          <button className="btn btn-ghost btn-xs" onClick={logout} style={{width:'100%',justifyContent:'center'}}>Uitloggen</button>
+          {profileMenuOpen && (
+            <div className="profile-menu">
+              <div style={{padding:'8px 10px',marginBottom:4,borderBottom:'1px solid var(--border)'}}>
+                <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{profile?.full_name || 'Profiel'}</div>
+                <div style={{fontSize:11,color:'var(--text-faint)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{session.user.email}</div>
+              </div>
+              <div className="menu-item" onClick={() => { showView('profile'); setProfileMenuOpen(false) }}>Profiel</div>
+              <div className="menu-item" style={{justifyContent:'space-between',cursor:'default'}}>
+                <span>Donker thema</span>
+                <button className={darkMode ? 'theme-toggle dark' : 'theme-toggle'} onClick={() => setDarkMode(!darkMode)} title={darkMode ? 'Licht thema' : 'Donker thema'}>
+                  <div className="theme-toggle-knob"></div>
+                </button>
+              </div>
+              <div className="menu-sep"></div>
+              <div className="menu-item" onClick={logout} style={{color:'var(--red-text)'}}>Uitloggen</div>
+            </div>
+          )}
         </div>
-      </nav>
+      </header>
       <div className="main">
-        <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Menu openen">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-        </button>
-        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} />}
+        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
-        {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} members={orgMembers} myProfile={profile} />}
+        {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} members={orgMembers} myProfile={profile} />}
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
         {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
@@ -536,7 +521,7 @@ export default function Dashboard({ session }) {
   )
 }
 
-function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, totalPaid, totalOpen, totalMRR, showView, onRefresh, myProfile }) {
+function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, allHosting = [], pipeline = [], totalPaid, totalOpen, totalMRR, showView, onRefresh, myProfile }) {
   const openTasks = allTasks.filter(t => !t.done)
   const myClients = myProfile ? clients.filter(c => c.assigned_to === myProfile.id) : []
   const pDL = projects.filter(p => p.deadline && p.status !== 'afgerond').map(p => ({ name: p.name, deadline: p.deadline, sub: 'Project', tv: 'project-detail', tid: p.id, color: p.color }))
@@ -545,6 +530,8 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
   const revByClient = clients.map(c => ({ name: (c.company || c.fname+' '+c.lname).slice(0,14), v: allInvoices.filter(i => i.client_id===c.id && i.status==='betaald').reduce((s,i) => s+Number(i.amount),0), id: c.id })).filter(x => x.v>0).sort((a,b) => b.v-a.v).slice(0,8)
   const mx = revByClient.length ? Math.max(...revByClient.map(x => x.v)) : 1
   const activeRec = allRecurring.filter(r => r.status === 'actief')
+  const openLeads = pipeline.filter(p => !['klant','afgewezen'].includes(p.stage))
+  const expiringHosting = allHosting.filter(h => (h.domain_expires && daysN(h.domain_expires) <= 30) || (h.ssl_expires && daysN(h.ssl_expires) <= 30))
 
   return (
     <div>
@@ -555,6 +542,34 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
           <div className="stat-card"><div className="stat-label">Projecten</div><div className="stat-value">{projects.length}</div><div className="stat-sub">{projects.filter(p=>p.status==='actief').length} actief</div></div>
           <div className="stat-card"><div className="stat-label">Omzet betaald</div><div className="stat-value" style={{fontSize:18}}>{money(totalPaid)}</div>{totalOpen>0&&<div className="stat-sub" style={{color:'var(--amber-text)'}}>{money(totalOpen)} nog te ontvangen</div>}</div>
           <div className="stat-card"><div className="stat-label">MRR</div><div className="stat-value" style={{fontSize:18}}>{money(totalMRR)}</div><div className="stat-sub">per maand</div></div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
+          <div className="sc" style={{cursor:'pointer'}} onClick={()=>showView('pipeline')}>
+            <div className="sc-head"><span className="sc-title">Pipeline</span></div>
+            <div className="sc-body">
+              {!openLeads.length ? <div className="empty">Geen open leads</div> : (
+                <div className="dl-item" style={{borderBottom:'none',padding:0}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:22,fontWeight:700,fontFamily:'var(--heading-font)'}}>{openLeads.length}</div>
+                    <div style={{fontSize:12,color:'var(--text-muted)'}}>open lead{openLeads.length!==1?'s':''} in behandeling</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="sc" style={{cursor:'pointer'}} onClick={()=>showView('hosting')}>
+            <div className="sc-head"><span className="sc-title">Hosting</span></div>
+            <div className="sc-body">
+              {!expiringHosting.length ? <div className="empty">Niets verloopt binnenkort</div> : (
+                <div className="dl-item" style={{borderBottom:'none',padding:0}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:22,fontWeight:700,fontFamily:'var(--heading-font)',color:'var(--amber-text)'}}>{expiringHosting.length}</div>
+                    <div style={{fontSize:12,color:'var(--text-muted)'}}>domein/SSL verloopt binnen 30 dagen</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
           <div className="sc">
@@ -653,7 +668,7 @@ function ClientsView({ clients, projects, allTasks, showView, onRefresh }) {
   )
 }
 
-function ClientDetailView({ client, projects, allTasks, showView, onRefresh, members = [], myProfile }) {
+function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeetings = [], showView, onRefresh, members = [], myProfile }) {
   const [activeTab, setActiveTab] = useState('projects')
   const [invoices, setInvoices] = useState([])
   const [recurring, setRecurring] = useState([])
@@ -830,6 +845,15 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh, mem
                 <div className="info-row"><span className="info-label">MRR</span><span className="info-val" style={{fontFamily:'var(--mono-font)',color:'var(--teal-text)'}}>{mrr>0?money(mrr)+'/mnd':'—'}</span></div>
                 <div className="info-row"><span className="info-label">Projecten</span><span className="info-val">{clientProjects.length}</span></div>
                 <div className="info-row"><span className="info-label">Open taken</span><span className="info-val">{clientTasks.filter(t=>!t.done).length}</span></div>
+                {(() => {
+                  const clientHosting = allHosting.filter(h => h.client_id === client.id)
+                  const expiring = clientHosting.filter(h => (h.domain_expires && daysN(h.domain_expires) <= 30) || (h.ssl_expires && daysN(h.ssl_expires) <= 30))
+                  const upcomingMeetings = allMeetings.filter(m => m.client_id === client.id && m.status === 'gepland' && m.meeting_date >= today())
+                  return <>
+                    {clientHosting.length > 0 && <div className="info-row"><span className="info-label">Hosting</span><span className="info-val" style={{color:expiring.length?'var(--amber-text)':'inherit'}}>{expiring.length>0?expiring.length+' verloopt binnenkort':clientHosting.length+' site(s) ok'}</span></div>}
+                    {upcomingMeetings.length > 0 && <div className="info-row"><span className="info-label">Meetings</span><span className="info-val">{upcomingMeetings.length} gepland</span></div>}
+                  </>
+                })()}
               </div>
             </div>
           </div>
