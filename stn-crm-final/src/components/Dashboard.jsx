@@ -317,8 +317,10 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     .sc-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
     .sc-title{font-size:13px;font-weight:600;font-family:var(--heading-font);display:flex;align-items:center;gap:8px}
     .sc-body{padding:16px 18px}
-    .cl-header{display:grid;grid-template-columns:2fr 1.4fr 0.9fr 1.1fr 80px;padding:9px 20px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em}
-    .cl-row{display:grid;grid-template-columns:2fr 1.4fr 0.9fr 1.1fr 80px;padding:13px 20px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background .1s}
+    .cl-header{display:grid;grid-template-columns:2fr 1.2fr 0.8fr 1fr 1fr 100px;padding:9px 20px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em}
+    .cl-header .sortable{cursor:pointer;user-select:none;display:flex;align-items:center;gap:3px}
+    .cl-header .sortable:hover{color:var(--accent-text)}
+    .cl-row{display:grid;grid-template-columns:2fr 1.2fr 0.8fr 1fr 1fr 100px;padding:13px 20px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background .1s}
     .cl-row:last-child{border-bottom:none}.cl-row:hover{background:var(--accent-soft)}
     .pl-header{display:grid;grid-template-columns:2fr 1.4fr 1fr 0.8fr 120px;padding:9px 20px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em}
     .pl-row{display:grid;grid-template-columns:2fr 1.4fr 1fr 0.8fr 120px;padding:13px 20px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background .1s}
@@ -622,7 +624,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
       </nav>
       <div className="main">
         {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} orgMembers={orgMembers} />}
-        {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
+        {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} />}
@@ -872,11 +874,34 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
   )
 }
 
-function ClientsView({ clients, projects, allTasks, showView, onRefresh, activeOrgId }) {
+function ClientsView({ clients, projects, allTasks, allInvoices = [], showView, onRefresh, activeOrgId }) {
   const [q, setQ] = useState('')
   const [viewMode, setViewMode] = useState('list')
   const [statusFilter, setStatusFilter] = useState(null)
-  const filtered = clients.filter(c => (!q||(c.fname+c.lname+(c.company||'')+(c.email||'')).toLowerCase().includes(q.toLowerCase())) && (!statusFilter || (c.status||'actief')===statusFilter))
+  const [sort, setSort] = useState({ key: null, dir: 1 })
+
+  function clientStats(c) {
+    const revenue = allInvoices.filter(i => i.client_id===c.id && i.status==='betaald').reduce((s,i)=>s+Number(i.amount),0)
+    const clientProjectIds = projects.filter(p=>p.client_id===c.id).map(p=>p.id)
+    const taskDates = allTasks.filter(t=>clientProjectIds.includes(t.project_id)).map(t=>t.created_at)
+    const invDates = allInvoices.filter(i=>i.client_id===c.id).map(i=>i.created_at || i.date)
+    const lastActivity = [...taskDates, ...invDates].filter(Boolean).sort().slice(-1)[0] || null
+    return { revenue, lastActivity }
+  }
+
+  function toggleSort(key) {
+    setSort(s => s.key===key ? { key, dir: -s.dir } : { key, dir: 1 })
+  }
+
+  let filtered = clients.filter(c => (!q||(c.fname+c.lname+(c.company||'')+(c.email||'')).toLowerCase().includes(q.toLowerCase())) && (!statusFilter || (c.status||'actief')===statusFilter))
+  if (sort.key) {
+    filtered = [...filtered].sort((a,b) => {
+      if (sort.key==='name') return sort.dir * (a.fname+a.lname).localeCompare(b.fname+b.lname)
+      if (sort.key==='status') return sort.dir * (a.status||'actief').localeCompare(b.status||'actief')
+      if (sort.key==='revenue') return sort.dir * (clientStats(a).revenue - clientStats(b).revenue)
+      return 0
+    })
+  }
   const statusGroups = [
     { key:'actief', label:'Actief', color:'var(--green)' },
     { key:'prospect', label:'Prospect', color:'var(--blue)' },
@@ -925,15 +950,24 @@ function ClientsView({ clients, projects, allTasks, showView, onRefresh, activeO
       ) : (
         <div className="content" style={{paddingTop:6}}>
           <div className="sc" style={{padding:0}}>
-            <div className="cl-header"><div>Klant</div><div>Contact</div><div>Status</div><div>Omzet</div><div></div></div>
+            <div className="cl-header">
+              <div className="sortable" onClick={()=>toggleSort('name')}>Klant {sort.key==='name'&&(sort.dir>0?'↑':'↓')}</div>
+              <div>Contact</div>
+              <div className="sortable" onClick={()=>toggleSort('status')}>Status {sort.key==='status'&&(sort.dir>0?'↑':'↓')}</div>
+              <div className="sortable" onClick={()=>toggleSort('revenue')}>Omzet {sort.key==='revenue'&&(sort.dir>0?'↑':'↓')}</div>
+              <div>Laatste activiteit</div>
+              <div></div>
+            </div>
             {!filtered.length ? <div className="empty">Geen klanten</div> : filtered.map((c,idx) => {
               const pCount=projects.filter(p=>p.client_id===c.id).length
               const openT=allTasks.filter(t=>!t.done&&projects.find(p=>p.id===t.project_id)?.client_id===c.id).length
+              const { revenue, lastActivity } = clientStats(c)
               return <div key={c.id} className="cl-row" onClick={()=>showView('client-detail',c.id)}>
                 <div className="cl-name-cell"><div className={`avatar ${avC(c.id)}`}>{ini(c)}</div><div><div style={{fontWeight:500,fontSize:14}}>{c.fname} {c.lname}</div><div style={{fontSize:11,color:'var(--text-muted)'}}>{c.company||'—'}</div></div></div>
                 <div style={{fontSize:13,color:'var(--text-muted)'}}>{c.email||'—'}</div>
                 <div><Badge s={c.status||'actief'} /></div>
-                <div style={{fontFamily:'var(--mono-font)',fontSize:13}}>—</div>
+                <div style={{fontFamily:'var(--mono-font)',fontSize:13}}>{revenue>0?money(revenue):'—'}</div>
+                <div style={{fontSize:12,color:'var(--text-faint)'}}>{lastActivity?fdate(lastActivity.slice(0,10)):'—'}</div>
                 <div style={{textAlign:'right',display:'flex',gap:4,justifyContent:'flex-end',flexWrap:'wrap'}}>
                   {pCount>0&&<span className="badge bg-blue">{pCount} proj</span>}
                   {openT>0&&<span className="badge bg-amber">{openT} taken</span>}
