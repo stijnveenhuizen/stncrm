@@ -626,7 +626,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} orgMembers={orgMembers} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
-        {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
+        {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} />}
@@ -1159,12 +1159,17 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
   )
 }
 
-function ProjectsView({ projects, clients, clientName, showView, onRefresh, activeOrgId }) {
+function ProjectsView({ projects, clients, clientName, allTasks = [], showView, onRefresh, activeOrgId }) {
   const [q, setQ] = useState('')
   const [previewUrl, setPreviewUrl] = useState(null)
   const [viewMode, setViewMode] = useState('grid')
   const [statusFilter, setStatusFilter] = useState(null)
   const filtered = projects.filter(p => (!q||p.name.toLowerCase().includes(q.toLowerCase())||clientName(p.client_id).toLowerCase().includes(q.toLowerCase())) && (!statusFilter || p.status===statusFilter))
+  function progressOf(p) {
+    const ts = allTasks.filter(t => t.project_id === p.id)
+    if (!ts.length) return null
+    return Math.round(ts.filter(t=>t.done).length / ts.length * 100)
+  }
   const statusGroups = [
     { key:'actief', label:'Actief', color:'var(--accent)' },
     { key:'on-hold', label:'On-hold', color:'var(--amber)' },
@@ -1196,10 +1201,19 @@ function ProjectsView({ projects, clients, clientName, showView, onRefresh, acti
             </div>
           ))}
         </div>
-        {viewMode === 'grid' ? (
+        {!filtered.length ? (
+          <div className="empty" style={{padding:'48px 20px'}}>
+            <div style={{fontSize:14,fontWeight:600,color:'var(--text)',marginBottom:6}}>{projects.length ? 'Geen projecten gevonden' : 'Nog geen projecten'}</div>
+            <div style={{fontSize:13,marginBottom:16,maxWidth:380,marginLeft:'auto',marginRight:'auto'}}>
+              {projects.length ? 'Pas je zoekopdracht of filter aan.' : 'Een project is de werkruimte voor één klus — bijv. een website voor een klant. Hier houd je taken, documenten en collega\'s bij, en kun je de klant uitnodigen om mee te kijken.'}
+            </div>
+            {!projects.length && <ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Eerste project aanmaken</button>} />}
+          </div>
+        ) : viewMode === 'grid' ? (
           <div className="item-card-grid">
-            {!filtered.length ? <div className="empty">Geen projecten</div> : filtered.map(p => {
+            {filtered.map(p => {
               const dd=p.deadline?daysN(p.deadline):null; const dC=dd!=null?(dd<0?'var(--red-text)':dd<=7?'var(--amber-text)':'var(--text-muted)'):'var(--text-muted)'
+              const pct = progressOf(p)
               return (
                 <div key={p.id} className="item-card" onClick={()=>showView('project-detail',p.id)}>
                   <div className="item-card-thumb" style={{background:p.color}}>
@@ -1208,7 +1222,14 @@ function ProjectsView({ projects, clients, clientName, showView, onRefresh, acti
                   </div>
                   <div className="item-card-body">
                     <div style={{fontWeight:600,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
-                    <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:6,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clientName(p.client_id)||'Geen klant'}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                      <div style={{fontSize:12,color:'var(--text-muted)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clientName(p.client_id)||'Geen klant'}</div>
+                      {p.type && <span className="badge bg-gray" style={{fontSize:9}}>{p.type}</span>}
+                    </div>
+                    {pct!==null && <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                      <div style={{flex:1,height:5,background:'var(--border)',borderRadius:99}}><div style={{height:'100%',width:pct+'%',background:p.color,borderRadius:99}}></div></div>
+                      <span style={{fontSize:10,color:'var(--text-faint)'}}>{pct}%</span>
+                    </div>}
                     <div style={{fontSize:11,color:dC}}>{p.deadline?'Deadline: '+fdate(p.deadline):'Geen deadline'}</div>
                     {p.url && <div style={{display:'flex',gap:6,marginTop:8}} onClick={e=>e.stopPropagation()}>
                       <button onClick={()=>setPreviewUrl(p.url)} className="btn btn-ghost btn-xs">Preview</button>
@@ -1222,17 +1243,21 @@ function ProjectsView({ projects, clients, clientName, showView, onRefresh, acti
         ) : (
           <div className="content" style={{paddingTop:6}}>
             <div className="sc" style={{padding:0}}>
-              <div className="pl-header"><div>Project</div><div>Klant</div><div>Deadline</div><div>Status</div><div>Info</div></div>
-              {!filtered.length ? <div className="empty">Geen projecten</div> : filtered.map(p => {
+              <div className="pl-header"><div>Project</div><div>Klant</div><div>Voortgang</div><div>Deadline</div><div>Status</div></div>
+              {filtered.map(p => {
                 const dd=p.deadline?daysN(p.deadline):null; const dC=dd!=null?(dd<0?'var(--red-text)':dd<=7?'var(--amber-text)':'var(--text-muted)'):'var(--text-muted)'
+                const pct = progressOf(p)
                 return <div key={p.id} className="pl-row" onClick={()=>showView('project-detail',p.id)}>
-                  <div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:10,height:10,borderRadius:'50%',background:p.color,flexShrink:0}}></div><div><div style={{fontWeight:500,fontSize:14}}>{p.name}</div>{p.url&&<div style={{fontSize:11,color:'var(--blue-text)'}}>{p.url.replace('https://','').replace('http://','')}</div>}</div></div>
+                  <div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:10,height:10,borderRadius:'50%',background:p.color,flexShrink:0}}></div><div><div style={{fontWeight:500,fontSize:14}}>{p.name}{p.type && <span className="badge bg-gray" style={{fontSize:9,marginLeft:6}}>{p.type}</span>}</div>{p.url&&<div style={{fontSize:11,color:'var(--blue-text)'}}>{p.url.replace('https://','').replace('http://','')}</div>}</div></div>
                   <div style={{fontSize:13,color:'var(--text-muted)'}}>{clientName(p.client_id)||'—'}</div>
+                  <div>{pct!==null ? <div style={{display:'flex',alignItems:'center',gap:6}}><div style={{width:60,height:5,background:'var(--border)',borderRadius:99}}><div style={{height:'100%',width:pct+'%',background:p.color,borderRadius:99}}></div></div><span style={{fontSize:11,color:'var(--text-faint)'}}>{pct}%</span></div> : <span style={{fontSize:12,color:'var(--text-faint)'}}>—</span>}</div>
                   <div style={{fontSize:13,color:dC}}>{p.deadline?fdate(p.deadline):'—'}</div>
-                  <div><Badge s={p.status} /></div>
-                  <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                    {p.url&&<button onClick={e=>{e.stopPropagation();setPreviewUrl(p.url)}} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>Preview</button>}
-                    {p.url&&<a href={p.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>↗ Open</a>}
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}>
+                    <Badge s={p.status} />
+                    <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                      {p.url&&<button onClick={e=>{e.stopPropagation();setPreviewUrl(p.url)}} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>Preview</button>}
+                      {p.url&&<a href={p.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>↗ Open</a>}
+                    </div>
                   </div>
                 </div>
               })}
@@ -1736,10 +1761,10 @@ function ProjectModal({ project, clients, defaultClientId, onSave, trigger, acti
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [color, setColor] = useState(PROJ_COLORS[0])
-  const init = { name:'', client_id:'', url:'', start_date:'', deadline:'', status:'actief' }
+  const init = { name:'', client_id:'', url:'', start_date:'', deadline:'', status:'actief', type:'' }
   const [form, setForm] = useState(init)
   const f = k => e => setForm(p=>({...p,[k]:e.target.value}))
-  function openModal() { setForm(project?{name:project.name||'',client_id:project.client_id||'',url:project.url||'',start_date:project.start_date||'',deadline:project.deadline||'',status:project.status||'actief'}:{...init,client_id:defaultClientId||''}); setColor(project?.color||PROJ_COLORS[0]); setOpen(true) }
+  function openModal() { setForm(project?{name:project.name||'',client_id:project.client_id||'',url:project.url||'',start_date:project.start_date||'',deadline:project.deadline||'',status:project.status||'actief',type:project.type||''}:{...init,client_id:defaultClientId||''}); setColor(project?.color||PROJ_COLORS[0]); setOpen(true) }
   async function save() {
     if(!form.name.trim()) return showToast('Vul een projectnaam in.','error')
     setSaving(true)
@@ -1751,6 +1776,7 @@ function ProjectModal({ project, clients, defaultClientId, onSave, trigger, acti
         start_date: form.start_date || null,
         deadline: form.deadline || null,
         status: form.status,
+        type: form.type || null,
         color
       }
       if(project) await db.updateProject(project.id, data)
@@ -1769,7 +1795,13 @@ function ProjectModal({ project, clients, defaultClientId, onSave, trigger, acti
       <FG label="Klant (optioneel)"><select value={form.client_id} onChange={f('client_id')}><option value="">— Geen klant —</option>{(clients||[]).map(c=><option key={c.id} value={c.id}>{c.fname} {c.lname}{c.company?' ('+c.company+')':''}</option>)}</select></FG>
       <FG label="URL"><input type="url" value={form.url} onChange={f('url')} placeholder="https://" /></FG>
       <FR><FG label="Startdatum"><input type="date" value={form.start_date} onChange={f('start_date')} /></FG><FG label="Deadline"><input type="date" value={form.deadline} onChange={f('deadline')} /></FG></FR>
-      <FG label="Status"><select value={form.status} onChange={f('status')}><option value="actief">Actief</option><option value="on-hold">On-hold</option><option value="afgerond">Afgerond</option></select></FG>
+      <FR>
+        <FG label="Status"><select value={form.status} onChange={f('status')}><option value="actief">Actief</option><option value="on-hold">On-hold</option><option value="afgerond">Afgerond</option></select></FG>
+        <FG label="Type (optioneel)">
+          <input value={form.type} onChange={f('type')} placeholder="bijv. WordPress" list="project-types" />
+          <datalist id="project-types"><option value="WordPress" /><option value="Webflow" /><option value="Shopify" /><option value="Custom" /><option value="WooCommerce" /></datalist>
+        </FG>
+      </FR>
       <FG label="Kleur"><div className="color-opts">{PROJ_COLORS.map(c=><div key={c} className={`color-opt${color===c?' sel':''}`} style={{background:c}} onClick={()=>setColor(c)} />)}</div></FG>
       <ModalActions onCancel={()=>setOpen(false)} onSave={save} saving={saving} />
     </Modal>
