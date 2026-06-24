@@ -188,9 +188,13 @@ export async function getProjects(organizationId) {
   return data.map(({ clients, ...p }) => p)
 }
 export async function createProject(project) {
-  const { data, error } = await supabase.from('projects').insert([project]).select().single()
+  // Geen .select() na de insert: de RLS-policy voor het lezen van projecten
+  // (can_access_project) verwijst naar de projects-tabel zelf, en die check
+  // gebruikt het snapshot van vóór de insert — het net aangemaakte project zou
+  // zichzelf dus nooit vinden. De aanroeper (ProjectModal) gebruikt de
+  // teruggegeven rij niet, dus simpelweg niets terugvragen lost het op.
+  const { error } = await supabase.from('projects').insert([project])
   if (error) throw error
-  return data
 }
 export async function updateProject(id, updates) {
   const { data, error } = await supabase.from('projects').update(updates).eq('id', id).select().single()
