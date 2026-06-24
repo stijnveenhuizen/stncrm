@@ -46,6 +46,11 @@ export default function App() {
         client = await db.linkClientPortalAccount(session.user.user_metadata.portal_client_id)
       } catch (e) { /* self-link policy rejected it, fall through to error state */ }
     }
+    if (client && session.user.user_metadata?.portal_project_id) {
+      try {
+        await db.grantProjectAccess(session.user.user_metadata.portal_project_id, client.id)
+      } catch (e) { /* already granted, or claim doesn't match — harmless either way */ }
+    }
     if (client) { setRole({ client }); return }
 
     if (session.user.user_metadata?.invite_organization_id) {

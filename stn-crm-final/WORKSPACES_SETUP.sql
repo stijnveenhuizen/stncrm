@@ -64,9 +64,9 @@ create policy "view fellow members" on profiles for select
 create policy "insert own profile" on profiles for insert with check (id = auth.uid());
 create policy "update own profile" on profiles for update using (id = auth.uid()) with check (id = auth.uid());
 
--- ── 4. profiles.organization_id/role zijn nu ongebruikt — weg ermee ────────────
-alter table profiles drop column if exists organization_id;
-alter table profiles drop column if exists role;
+-- ── 4. (verplaatst naar het allerlaatst — zie onderaan dit bestand. De "org member
+--    access"-policies op clients/projects/etc. verwijzen nog naar profiles.organization_id
+--    en moeten eerst herschreven worden in stap 7, anders kan de kolom niet weg.)
 
 -- ── 5. Memberships-policies + bescherming tegen een organisatie zonder eigenaar ─
 create policy "view org memberships" on memberships for select
@@ -196,3 +196,7 @@ create policy "org member access" on pipeline_tasks for all
 -- De klant-kant policies uit CLIENT_PORTAL_SETUP.sql ("client read own ...", "client
 -- self-link", etc.) blijven volledig ongewijzigd — die zijn al gescoped op het eigen
 -- client_id van de klant en hebben geen organisatie-besef nodig.
+
+-- ── 8. Nu pas, want alle policies die ernaar verwezen zijn hierboven al herschreven ─
+alter table profiles drop column if exists organization_id;
+alter table profiles drop column if exists role;

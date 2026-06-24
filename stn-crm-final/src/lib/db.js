@@ -23,14 +23,8 @@ export async function deleteClient(id) {
 }
 
 // ── Client portal ──────────────────────────────────────────────────────────────
-export async function inviteClientPortal(client) {
-  const { data, error } = await supabase.auth.signInWithOtp({
-    email: client.email,
-    options: { shouldCreateUser: true, emailRedirectTo: window.location.origin, data: { portal_client_id: client.id } }
-  })
-  if (error) throw error
-  return data
-}
+// Klant-uitnodiging gebeurt nu per project (zie inviteClientToProject hieronder) —
+// dat regelt zowel de account-koppeling als de toegang tot dat ene project.
 export async function linkClientPortalAccount(clientId) {
   const { data, error } = await supabase.from('clients').update({ auth_user_id: (await supabase.auth.getUser()).data.user.id }).eq('id', clientId).select().single()
   if (error) throw error
@@ -41,16 +35,76 @@ export async function getClientByAuthUserId(authUserId) {
   if (error) throw error
   return data
 }
-export async function getClientHosting(clientId) {
+
+// ── Project members (meerdere collega's per project) ────────────────────────────
+export async function getProjectMembers(projectId) {
+  const { data, error } = await supabase.from('project_members').select('user_id, profiles(*)').eq('project_id', projectId)
+  if (error) throw error
+  return data.map(m => m.profiles).filter(Boolean)
+}
+export async function addProjectMember(projectId, userId) {
+  const { error } = await supabase.from('project_members').upsert([{ project_id: projectId, user_id: userId }], { onConflict: 'project_id,user_id', ignoreDuplicates: true })
+  if (error) throw error
+}
+export async function removeProjectMember(projectId, userId) {
+  const { error } = await supabase.from('project_members').delete().eq('project_id', projectId).eq('user_id', userId)
+  if (error) throw error
+}
+
+// ── Project-scoped klantportaal-toegang ──────────────────────────────────────────
+export async function inviteClientToProject(project, client) {
+  const { error } = await supabase.auth.signInWithOtp({
+    email: client.email,
+    options: { shouldCreateUser: true, emailRedirectTo: window.location.origin, data: { portal_client_id: client.id, portal_project_id: project.id } }
+  })
+  if (error) throw error
+}
+export async function grantProjectAccess(projectId, clientId) {
+  const { error } = await supabase.from('project_client_access').upsert([{ project_id: projectId, client_id: clientId }], { onConflict: 'project_id,client_id', ignoreDuplicates: true })
+  if (error) throw error
+}
+export async function revokeProjectAccess(projectId, clientId) {
+  const { error } = await supabase.from('project_client_access').delete().eq('project_id', projectId).eq('client_id', clientId)
+  if (error) throw error
+}
+export async function getProjectClientAccess(projectId) {
+  const { data, error } = await supabase.from('project_client_access').select('client_id').eq('project_id', projectId)
+  if (error) throw error
+  return data.map(r => r.client_id)
+}
+
+// ── Project-documenten ───────────────────────────────────────────────────────────
+export async function getProjectDocuments(projectId) {
   const { data, error } = await supabase
-    .from('client_hosting').select('*').eq('client_id', clientId).order('created_at', { ascending: false })
+    .from('project_documents').select('*').eq('project_id', projectId).order('created_at', { ascending: false })
   if (error) throw error
   return data
 }
-export async function revokeClientPortal(clientId) {
-  const { data, error } = await supabase.from('clients').update({ auth_user_id: null }).eq('id', clientId).select().single()
+export async function uploadProjectDocument(projectId, file, visibleToClient) {
+  const userId = (await supabase.auth.getUser()).data.user.id
+  const path = `${projectId}/${crypto.randomUUID()}-${file.name}`
+  const { error: upErr } = await supabase.storage.from('project-docs').upload(path, file)
+  if (upErr) throw upErr
+  const { data, error } = await supabase.from('project_documents').insert([{
+    project_id: projectId, uploaded_by: userId, file_name: file.name, storage_path: path, file_size: file.size, visible_to_client: !!visibleToClient
+  }]).select().single()
   if (error) throw error
   return data
+}
+export async function getProjectDocumentUrl(storagePath) {
+  const { data, error } = await supabase.storage.from('project-docs').createSignedUrl(storagePath, 60)
+  if (error) throw error
+  return data.signedUrl
+}
+export async function updateProjectDocument(id, updates) {
+  const { data, error } = await supabase.from('project_documents').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteProjectDocument(id, storagePath) {
+  await supabase.storage.from('project-docs').remove([storagePath])
+  const { error } = await supabase.from('project_documents').delete().eq('id', id)
+  if (error) throw error
 }
 
 // ── Organisaties & team (een account kan lid zijn van meerdere organisaties) ────

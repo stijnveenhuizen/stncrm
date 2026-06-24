@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import * as db from '../lib/db'
 import ProfileView from './ProfileView.jsx'
@@ -471,9 +471,9 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     <ToastProvider>
       <style>{CSS}</style>
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:14}}>
-        <div style={{fontSize:15,fontWeight:600}}>Je hebt nog geen werkruimte</div>
-        <div style={{fontSize:13,color:'var(--text-muted)'}}>Maak een werkruimte aan om klanten en projecten te beheren.</div>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowNewWorkspace(true)}>+ Werkruimte aanmaken</button>
+        <div style={{fontSize:15,fontWeight:600}}>Je hebt nog geen bedrijf</div>
+        <div style={{fontSize:13,color:'var(--text-muted)'}}>Maak een bedrijf aan om klanten en projecten te beheren.</div>
+        <button className="btn btn-primary btn-sm" onClick={() => setShowNewWorkspace(true)}>+ Bedrijf aanmaken</button>
         <button className="btn btn-ghost btn-xs" onClick={logout}>Uitloggen</button>
         <NewWorkspaceModal open={showNewWorkspace} onClose={() => setShowNewWorkspace(false)} onCreated={orgId => { loadOrganizations(); switchOrg(orgId) }} />
       </div>
@@ -495,14 +495,14 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
           </div>
           {orgMenuOpen && (
             <div className="org-menu">
-              <div style={{fontSize:10,fontWeight:600,color:'var(--text-faint)',textTransform:'uppercase',letterSpacing:'.06em',padding:'6px 10px 4px'}}>Werkruimtes</div>
+              <div style={{fontSize:10,fontWeight:600,color:'var(--text-faint)',textTransform:'uppercase',letterSpacing:'.06em',padding:'6px 10px 4px'}}>Bedrijven</div>
               {myOrganizations.map(o => (
                 <div key={o.id} className="menu-item" style={{justifyContent:'space-between'}} onClick={() => switchOrg(o.id)}>
                   <span>{o.name}</span>
                   {o.id === activeOrgId && <span style={{color:'var(--accent-text)'}}>✓</span>}
                 </div>
               ))}
-              <div className="menu-item" onClick={() => { setOrgMenuOpen(false); setShowNewWorkspace(true) }}>+ Nieuwe werkruimte</div>
+              <div className="menu-item" onClick={() => { setOrgMenuOpen(false); setShowNewWorkspace(true) }}>+ Nieuw bedrijf</div>
               <div className="menu-sep"></div>
               <div className="menu-item" onClick={() => { showView('overview'); setOrgMenuOpen(false) }}>Bedrijfsoverzicht</div>
               <div className="menu-sep"></div>
@@ -563,9 +563,9 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
       <div className="main">
         {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
-        {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} members={orgMembers} myRole={myRole} activeOrgId={activeOrgId} />}
+        {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
-        {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
+        {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} />}
         {view==='hosting' && <HostingView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} />}
@@ -585,7 +585,6 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
 
 function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, allHosting = [], pipeline = [], totalPaid, totalOpen, totalMRR, showView, onRefresh, myProfile, myRole, activeOrgId }) {
   const openTasks = allTasks.filter(t => !t.done)
-  const myClients = myProfile ? clients.filter(c => c.assigned_to === myProfile.id) : []
   const pDL = projects.filter(p => p.deadline && p.status !== 'afgerond').map(p => ({ name: p.name, deadline: p.deadline, sub: 'Project', tv: 'project-detail', tid: p.id, color: p.color }))
   const tDL = allTasks.filter(t => !t.done && t.due_date).map(t => ({ name: t.description, deadline: t.due_date, sub: t.project?.name || '', tv: 'project-detail', tid: t.project_id, color: t.project?.color || '#888' }))
   const deadlines = [...pDL, ...tDL].sort((a,b) => a.deadline.localeCompare(b.deadline)).slice(0,6)
@@ -600,8 +599,8 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
       <div className="topbar"><h2>Welkom{myProfile?.full_name ? ', ' + myProfile.full_name.split(' ')[0] : ''}</h2><div className="topbar-right"><ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Klant</button>} /><ProjectModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-ghost btn-sm">+ Project</button>} /></div></div>
       <div className="content">
         <div className="stats-grid">
-          <div className="stat-card"><div className="stat-label">Klanten</div><div className="stat-value">{clients.length}</div><div className="stat-sub">{clients.filter(c=>c.status==='actief').length} actief{myRole!=='owner' && ` · ${myClients.length} aan jou toegewezen`}</div></div>
-          <div className="stat-card"><div className="stat-label">Projecten</div><div className="stat-value">{projects.length}</div><div className="stat-sub">{projects.filter(p=>p.status==='actief').length} actief</div></div>
+          <div className="stat-card"><div className="stat-label">Klanten</div><div className="stat-value">{clients.length}</div><div className="stat-sub">{clients.filter(c=>c.status==='actief').length} actief</div></div>
+          <div className="stat-card"><div className="stat-label">Projecten</div><div className="stat-value">{projects.length}</div><div className="stat-sub">{projects.filter(p=>p.status==='actief').length} actief{myRole!=='owner' && ' · allemaal aan jou toegewezen'}</div></div>
           <div className="stat-card"><div className="stat-label">Omzet betaald</div><div className="stat-value" style={{fontSize:18}}>{money(totalPaid)}</div>{totalOpen>0&&<div className="stat-sub" style={{color:'var(--amber-text)'}}>{money(totalOpen)} nog te ontvangen</div>}</div>
           <div className="stat-card"><div className="stat-label">MRR</div><div className="stat-value" style={{fontSize:18}}>{money(totalMRR)}</div><div className="stat-sub">per maand</div></div>
         </div>
@@ -730,7 +729,7 @@ function ClientsView({ clients, projects, allTasks, showView, onRefresh, activeO
   )
 }
 
-function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeetings = [], showView, onRefresh, members = [], myRole, activeOrgId }) {
+function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeetings = [], showView, onRefresh, activeOrgId }) {
   const [activeTab, setActiveTab] = useState('projects')
   const [invoices, setInvoices] = useState([])
   const [recurring, setRecurring] = useState([])
@@ -876,26 +875,9 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
                   {client.phone&&<div className="info-row"><span className="info-label">Telefoon</span><span className="info-val">{client.phone}</span></div>}
                   {client.website&&<div className="info-row"><span className="info-label">Website</span><a href={client.website} target="_blank" rel="noreferrer" style={{color:'var(--blue-text)',fontSize:13}}>{client.website}</a></div>}
                 </div>
-                {members.length > 0 && (
-                  <div className="info-row">
-                    <span className="info-label">Toegewezen aan</span>
-                    <span className="info-val">
-                      {myRole === 'owner' ? (
-                        <select value={client.assigned_to || ''} onChange={e=>db.updateClient(client.id, { assigned_to: e.target.value || null }).then(onRefresh)} style={{fontSize:13,padding:'5px 8px'}}>
-                          <option value="">— Niemand specifiek —</option>
-                          {members.map(m => <option key={m.id} value={m.id}>{m.full_name || m.id}{m.role==='owner'?' (eigenaar)':''}</option>)}
-                        </select>
-                      ) : (
-                        members.find(m => m.id === client.assigned_to)?.full_name || 'Niemand specifiek'
-                      )}
-                    </span>
-                  </div>
-                )}
-                <div style={{marginTop:14,paddingTop:12,borderTop:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-                  <span className={`badge ${client.auth_user_id?'bg-green':'bg-gray'}`}>{client.auth_user_id?'Portaal actief':'Geen portaaltoegang'}</span>
-                  {!client.auth_user_id
-                    ? <PortalInviteButton client={client} />
-                    : <button className="btn btn-ghost btn-xs" onClick={()=>{if(confirm('Portaaltoegang intrekken voor '+client.fname+'?')) db.revokeClientPortal(client.id).then(onRefresh)}}>Toegang intrekken</button>}
+                <div style={{marginTop:14,paddingTop:12,borderTop:'1px solid var(--border)'}}>
+                  <span className={`badge ${client.auth_user_id?'bg-green':'bg-gray'}`}>{client.auth_user_id?'Heeft een portaalaccount':'Nog geen portaalaccount'}</span>
+                  <div style={{fontSize:11,color:'var(--text-faint)',marginTop:6}}>Toegang per project regel je op de projectpagina zelf.</div>
                 </div>
               </div>
             </div>
@@ -966,14 +948,72 @@ function ProjectsView({ projects, clients, clientName, showView, onRefresh }) {
   )
 }
 
-function ProjectDetailView({ project, clients, clientName, showView, onRefresh }) {
+function ProjectDetailView({ project, clients, clientName, showView, onRefresh, orgMembers = [], myRole }) {
   const [tasks, setTasks] = useState([])
   const [showPreview, setShowPreview] = useState(true)
+  const [projectMembers, setProjectMembers] = useState([])
+  const [clientAccess, setClientAccess] = useState([])
+  const [docs, setDocs] = useState([])
+  const [inviting, setInviting] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef()
+  const client = clients.find(c => c.id === project.client_id)
+
   useEffect(() => { db.getTasks(project.id).then(setTasks) }, [project.id])
   const refreshTasks = () => db.getTasks(project.id).then(setTasks)
   const open=tasks.filter(t=>!t.done), done=tasks.filter(t=>t.done)
   const pct=tasks.length?Math.round(done.length/tasks.length*100):0
   const cn=clientName(project.client_id)
+
+  const refreshTeam = () => db.getProjectMembers(project.id).then(setProjectMembers)
+  const refreshAccess = () => db.getProjectClientAccess(project.id).then(setClientAccess)
+  const refreshDocs = () => db.getProjectDocuments(project.id).then(setDocs)
+  useEffect(() => { refreshTeam(); refreshAccess(); refreshDocs() }, [project.id])
+
+  async function toggleMember(userId, isMember) {
+    try {
+      if (isMember) await db.removeProjectMember(project.id, userId)
+      else await db.addProjectMember(project.id, userId)
+      refreshTeam()
+    } catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+
+  async function inviteClient() {
+    if (!client?.email) return showToast('Vul eerst een e-mailadres in bij deze klant.', 'error')
+    setInviting(true)
+    try {
+      await db.inviteClientToProject(project, client)
+      showToast('Uitnodiging verstuurd naar ' + client.email)
+    } catch (e) { showToast('Fout bij uitnodigen: ' + e.message, 'error') }
+    finally { setInviting(false) }
+  }
+  async function revokeClient() {
+    if (!client) return
+    try { await db.revokeProjectAccess(project.id, client.id); refreshAccess(); showToast('Toegang ingetrokken') }
+    catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+
+  async function handleUpload(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploading(true)
+    try { await db.uploadProjectDocument(project.id, file, false); refreshDocs() }
+    catch (e) { showToast('Fout bij uploaden: ' + e.message, 'error') }
+    finally { setUploading(false); e.target.value = '' }
+  }
+  async function toggleDocVisible(doc) {
+    try { await db.updateProjectDocument(doc.id, { visible_to_client: !doc.visible_to_client }); refreshDocs() }
+    catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+  async function openDoc(doc) {
+    try { const url = await db.getProjectDocumentUrl(doc.storage_path); window.open(url, '_blank') }
+    catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+  async function removeDoc(doc) {
+    if (!confirm('Document verwijderen?')) return
+    try { await db.deleteProjectDocument(doc.id, doc.storage_path); refreshDocs() }
+    catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
 
   async function delProject() {
     if(!confirm('Project verwijderen?')) return
@@ -1016,6 +1056,28 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh }
               </div>
               <QuickTaskAdd projectId={project.id} onAdd={refreshTasks} />
             </div>
+            <div className="sc">
+              <div className="sc-head">
+                <span className="sc-title">Docs</span>
+                <button className="btn btn-ghost btn-sm" onClick={()=>fileRef.current.click()} disabled={uploading}>{uploading?'Uploaden…':'+ Bestand'}</button>
+                <input ref={fileRef} type="file" style={{display:'none'}} onChange={handleUpload} />
+              </div>
+              <div className="sc-body">
+                {!docs.length ? <div className="empty">Nog geen documenten</div> : docs.map(d => (
+                  <div key={d.id} className="info-row" style={{alignItems:'center'}}>
+                    <span className="info-val" style={{cursor:'pointer',color:'var(--blue-text)'}} onClick={()=>openDoc(d)}>{d.file_name}</span>
+                    <div style={{display:'flex',gap:8,alignItems:'center',flexShrink:0}}>
+                      <button
+                        type="button" onClick={()=>toggleDocVisible(d)}
+                        title={d.visible_to_client?'Zichtbaar voor klant':'Niet zichtbaar voor klant'}
+                        style={{color:d.visible_to_client?'var(--accent-text)':'var(--text-faint)',display:'flex',alignItems:'center'}}
+                      ><EyeIcon off={!d.visible_to_client} /></button>
+                      <button type="button" className="task-del" onClick={()=>removeDoc(d)} aria-label={`"${d.file_name}" verwijderen`}>×</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
           <div>
             <div className="sc">
@@ -1039,6 +1101,41 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh }
                 <div className="info-row"><span className="info-label">Voortgang</span><span className="info-val"><div style={{display:'flex',alignItems:'center',gap:8}}><div style={{flex:1,height:5,background:'var(--border)',borderRadius:99}}><div style={{height:'100%',width:pct+'%',background:project.color,borderRadius:99}}></div></div><span style={{fontSize:12,color:'var(--text-muted)'}}>{pct}%</span></div></span></div>
               </div>
             </div>
+            <div className="sc">
+              <div className="sc-head"><span className="sc-title">Team</span></div>
+              <div className="sc-body">
+                {!orgMembers.length ? <div className="empty">Geen collega's</div> : orgMembers.map(m => {
+                  const isMember = projectMembers.some(pm => pm.id === m.id)
+                  return (
+                    <label key={m.id} className="info-row" style={{cursor: myRole==='owner' ? 'pointer' : 'default',alignItems:'center'}}>
+                      <input type="checkbox" checked={isMember} disabled={myRole!=='owner'} onChange={()=>toggleMember(m.id, isMember)} style={{width:15,height:15,flexShrink:0}} />
+                      <span className="info-val">{m.full_name || m.id}{m.role==='owner'?' (eigenaar)':''}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+            {client && (
+              <div className="sc">
+                <div className="sc-head"><span className="sc-title">Klant</span></div>
+                <div className="sc-body">
+                  <div className="info-row"><span className="info-label">Contact</span><span className="info-val" style={{cursor:'pointer',color:'var(--blue-text)'}} onClick={()=>showView('client-detail',client.id)}>{client.fname} {client.lname}</span></div>
+                  <div className="info-row">
+                    <span className="info-label">Portaal</span>
+                    <span className="info-val">
+                      {clientAccess.includes(client.id)
+                        ? <span className="badge bg-green">Toegang tot dit project</span>
+                        : <span className="badge bg-gray">Geen toegang</span>}
+                    </span>
+                  </div>
+                  <div style={{marginTop:10}}>
+                    {clientAccess.includes(client.id)
+                      ? <button className="btn btn-ghost btn-xs" onClick={revokeClient}>Toegang intrekken</button>
+                      : <button className="btn btn-ghost btn-xs" onClick={inviteClient} disabled={inviting}>{inviting?'Versturen…':'Uitnodigen voor dit project'}</button>}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1281,7 +1378,7 @@ function NewWorkspaceModal({ open, onClose, onCreated }) {
     try {
       const { org } = await db.createOrganization(name.trim())
       setName(''); onClose(); onCreated(org.id)
-      showToast('Werkruimte "' + org.name + '" aangemaakt')
+      showToast('Bedrijf "' + org.name + '" aangemaakt')
     } catch (e) {
       showToast('Fout bij aanmaken: ' + e.message, 'error')
     } finally {
@@ -1289,28 +1386,11 @@ function NewWorkspaceModal({ open, onClose, onCreated }) {
     }
   }
   return (
-    <Modal open={open} onClose={onClose} title="Nieuwe werkruimte">
+    <Modal open={open} onClose={onClose} title="Nieuw bedrijf">
       <FG label="Naam"><input value={name} onChange={e=>setName(e.target.value)} placeholder="Bijv. Tweede bedrijf" autoFocus onKeyDown={e=>e.key==='Enter'&&save()} /></FG>
       <ModalActions onCancel={onClose} onSave={save} saving={saving} />
     </Modal>
   )
-}
-
-function PortalInviteButton({ client }) {
-  const [sending, setSending] = useState(false)
-  async function send() {
-    if (!client.email) return showToast('Vul eerst een e-mailadres in.', 'error')
-    setSending(true)
-    try {
-      await db.inviteClientPortal(client)
-      showToast('Portaaluitnodiging verstuurd naar ' + client.email)
-    } catch (e) {
-      showToast('Fout bij versturen: ' + e.message, 'error')
-    } finally {
-      setSending(false)
-    }
-  }
-  return <button className="btn btn-ghost btn-xs" onClick={send} disabled={sending || !client.email}>{sending ? 'Versturen…' : 'Portaaltoegang versturen'}</button>
 }
 
 function ClientModal({ client, onSave, trigger, activeOrgId }) {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import * as db from '../lib/db'
-import { money, fdate, Badge, MeetingTypeIcon, buildMeetingCalendarUrl, ToastProvider, showToast } from './Dashboard.jsx'
+import { fdate, Badge, MeetingTypeIcon, buildMeetingCalendarUrl, ToastProvider, showToast } from './Dashboard.jsx'
 
 const CSS = `
   .cp{min-height:100vh;background:var(--bg)}
@@ -55,8 +55,7 @@ export default function ClientPortal({ session, client }) {
   const [tasks, setTasks] = useState([])
   const [notes, setNotes] = useState([])
   const [meetings, setMeetings] = useState([])
-  const [invoices, setInvoices] = useState([])
-  const [hosting, setHosting] = useState([])
+  const [docs, setDocs] = useState([])
   const [loading, setLoading] = useState(true)
   const [newTask, setNewTask] = useState('')
 
@@ -72,15 +71,21 @@ export default function ClientPortal({ session, client }) {
   useEffect(() => {
     db.getNotes(client.id).then(setNotes)
     db.getMeetings(client.id).then(setMeetings)
-    db.getInvoices(client.id).then(setInvoices)
-    db.getClientHosting(client.id).then(setHosting)
   }, [client.id])
 
   const refreshTasks = useCallback(() => {
     if (activeProjectId) db.getTasks(activeProjectId).then(setTasks)
   }, [activeProjectId])
+  const refreshDocs = useCallback(() => {
+    if (activeProjectId) db.getProjectDocuments(activeProjectId).then(docs => setDocs(docs.filter(d => d.visible_to_client)))
+  }, [activeProjectId])
 
-  useEffect(() => { refreshTasks() }, [refreshTasks])
+  useEffect(() => { refreshTasks(); refreshDocs() }, [refreshTasks, refreshDocs])
+
+  async function openDoc(doc) {
+    try { const url = await db.getProjectDocumentUrl(doc.storage_path); window.open(url, '_blank') }
+    catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
 
   async function toggleTask(t) {
     await db.updateTask(t.id, { done: !t.done })
@@ -103,8 +108,6 @@ export default function ClientPortal({ session, client }) {
   const open = tasks.filter(t => !t.done)
   const done = tasks.filter(t => t.done)
   const pct = tasks.length ? Math.round(done.length / tasks.length * 100) : 0
-  const paidAmt = invoices.filter(i => i.status === 'betaald').reduce((s,i) => s + Number(i.amount), 0)
-  const openAmt = invoices.filter(i => ['verzonden','te laat'].includes(i.status)).reduce((s,i) => s + Number(i.amount), 0)
 
   return (
     <ToastProvider>
@@ -178,6 +181,17 @@ export default function ClientPortal({ session, client }) {
                   <button className="btn btn-ghost btn-sm" onClick={addTask}>Voeg toe</button>
                 </div>
               </div>
+
+              <div className="sc">
+                <div className="sc-head"><span className="sc-title">Docs</span></div>
+                <div className="sc-body">
+                  {!docs.length ? <div className="empty">Nog geen documenten gedeeld</div> : docs.map(d => (
+                    <div key={d.id} className="dl-item" style={{cursor:'pointer'}} onClick={()=>openDoc(d)}>
+                      <span style={{color:'var(--blue-text)'}}>{d.file_name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </>}
           </>
         )}
@@ -205,38 +219,6 @@ export default function ClientPortal({ session, client }) {
                   <div style={{fontSize:11,color:'var(--text-faint)'}}>{fdate(m.meeting_date)}{m.meeting_time ? ' · ' + m.meeting_time.slice(0,5) : ''}</div>
                 </div>
                 {m.status==='gepland' && <a href={buildMeetingCalendarUrl(m, client)} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>Inplannen</a>}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="sc">
-          <div className="sc-head"><span className="sc-title">Facturen</span></div>
-          <div className="sc-body">
-            {!invoices.length ? <div className="empty">Geen facturen</div> : invoices.map(i => (
-              <div key={i.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:'1px solid var(--border)'}}>
-                <div><div style={{fontSize:13,fontWeight:500}}>{i.description}</div><div style={{fontSize:11,color:'var(--text-faint)'}}>{fdate(i.date)}</div></div>
-                <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <span style={{fontFamily:'var(--mono-font)',fontSize:13}}>{money(i.amount)}</span>
-                  <Badge s={i.status} />
-                </div>
-              </div>
-            ))}
-          </div>
-          {invoices.length > 0 && <div className="total-bar"><span>Betaald <strong>{money(paidAmt)}</strong></span><span>Openstaand <strong style={{color:'var(--amber-text)'}}>{money(openAmt)}</strong></span></div>}
-        </div>
-
-        <div className="sc">
-          <div className="sc-head"><span className="sc-title">Hosting</span></div>
-          <div className="sc-body">
-            {!hosting.length ? <div className="empty">Geen hosting gekoppeld</div> : hosting.map(h => (
-              <div key={h.id} style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
-                <div style={{fontWeight:500,fontSize:13}}>{h.site_name}</div>
-                {h.url && <a href={h.url} target="_blank" rel="noreferrer" style={{fontSize:12,color:'var(--blue-text)'}}>{h.url}</a>}
-                <div style={{fontSize:11,color:'var(--text-faint)',marginTop:3}}>
-                  {h.domain && <span>{h.domain}</span>}
-                  {h.domain_expires && <span> · Domein verloopt {fdate(h.domain_expires)}</span>}
-                </div>
               </div>
             ))}
           </div>
