@@ -152,6 +152,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   const [orgMenuOpen, setOrgMenuOpen] = useState(false)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [showNewWorkspace, setShowNewWorkspace] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   function applyProfileTheme(p) {
     if (p.theme) setDarkMode(p.theme === 'dark')
@@ -238,31 +239,66 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
 
   const CSS = `
     .app{min-height:100vh;transition:background .2s}
-    .main{flex:1;min-height:100vh}
-    .topnav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;height:60px;display:flex;align-items:center;gap:20px;position:sticky;top:0;z-index:30;transition:background .2s,border .2s}
-    .topnav-left{display:flex;align-items:center;gap:10px;flex-shrink:0;position:relative;cursor:pointer;padding:6px;border-radius:var(--rsm);transition:background .1s}
-    .topnav-left:hover{background:var(--bg2)}
-    .org-icon{width:32px;height:32px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(61,182,142,0.3)}
-    .org-icon span{color:#fff;font-size:15px;font-family:var(--heading-font);font-weight:700}
-    .org-text h1{font-size:14px;font-weight:700;letter-spacing:-.02em;font-family:var(--heading-font);display:flex;align-items:center;gap:5px;white-space:nowrap}
-    .org-text span{font-size:10px;color:var(--text-faint);font-weight:400}
-    .org-menu,.profile-menu{position:absolute;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,.14);min-width:230px;max-height:360px;overflow-y:auto;z-index:50;padding:6px}
+    .main{margin-left:252px;padding-top:52px;min-height:100vh}
+
+    /* ── Donkere topbar (merk + workspace-switcher + profiel) ─────────────── */
+    .topbar-dark{position:fixed;top:0;left:0;right:0;height:52px;background:#0e0e10;color:#fff;display:flex;align-items:center;padding:0 16px;gap:10px;z-index:60}
+    .topbar-dark-logo{display:flex;align-items:center;gap:8px;flex-shrink:0;padding-right:8px;border-right:1px solid rgba(255,255,255,.12);margin-right:4px}
+    .topbar-dark-logo-icon{width:26px;height:26px;border-radius:7px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .topbar-dark-logo-icon span{color:#fff;font-size:12px;font-family:var(--heading-font);font-weight:700}
+    .topbar-dark-logo b{font-size:12.5px;font-weight:700;letter-spacing:.06em;white-space:nowrap}
+    .org-switcher{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;cursor:pointer;background:rgba(255,255,255,.06);position:relative;max-width:240px}
+    .org-switcher:hover{background:rgba(255,255,255,.13)}
+    .org-switcher-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .org-switcher .chev{color:rgba(255,255,255,.5);flex-shrink:0}
+    .org-menu,.profile-menu{position:absolute;top:calc(100% + 8px);background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--r);box-shadow:0 12px 28px rgba(0,0,0,.22);min-width:230px;max-height:360px;overflow-y:auto;z-index:80;padding:6px}
     .org-menu{left:0}
     .profile-menu{right:0;min-width:210px}
     .menu-item{padding:8px 10px;border-radius:6px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;color:var(--text)}
     .menu-item:hover{background:var(--accent-soft);color:var(--accent-text)}
     .menu-sep{height:1px;background:var(--border);margin:6px 2px}
-    .topnav-tabs{flex:1;display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
-    .topnav-tabs::-webkit-scrollbar{display:none}
-    .topnav-tab{display:flex;align-items:center;gap:6px;padding:8px 13px;border-radius:var(--rsm);color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;border:none;background:none;transition:all .12s}
-    .topnav-tab:hover{background:var(--accent-soft);color:var(--accent-text)}
-    .topnav-tab.active{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
-    .topnav-right{display:flex;align-items:center;gap:10px;flex-shrink:0;position:relative}
-    .profile-trigger{display:flex;align-items:center;cursor:pointer;padding:4px;border-radius:50%;transition:background .1s}
-    .profile-trigger:hover{background:var(--bg2)}
-    .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 26px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:60px;z-index:10;transition:background .2s,border .2s}
-    .topbar h2{font-size:16px;font-weight:700;letter-spacing:-.02em;font-family:var(--heading-font)}
-    .topbar-right{display:flex;align-items:center;gap:8px}
+    .hamburger-btn{display:none;width:32px;height:32px;border-radius:8px;background:none;border:none;cursor:pointer;align-items:center;justify-content:center;color:#fff;flex-shrink:0}
+    .hamburger-btn:hover{background:rgba(255,255,255,.12)}
+    .topbar-dark-right{margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0}
+    .topbar-dark-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.7);cursor:pointer;position:relative;background:none;border:none;flex-shrink:0}
+    .topbar-dark-icon:hover{background:rgba(255,255,255,.12);color:#fff}
+    .profile-trigger{display:flex;align-items:center;cursor:pointer;padding:2px;border-radius:50%;position:relative;flex-shrink:0}
+    .profile-trigger:hover{box-shadow:0 0 0 2px rgba(255,255,255,.25)}
+
+    /* ── Linker sidebar ─────────────────────────────────────────────────── */
+    .sidebar2{position:fixed;top:52px;left:0;bottom:0;width:252px;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;padding:18px 12px;z-index:40;transition:background .2s,border .2s}
+    .sidebar2-org{padding:2px 8px 14px}
+    .sidebar2-org h2{font-size:16px;font-weight:700;font-family:var(--heading-font);letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .sidebar2-org-role{font-size:12px;color:var(--text-muted);margin-top:2px}
+    .sidebar2-role-badge{display:inline-flex;align-items:center;gap:4px;margin-top:9px;padding:3px 10px;border-radius:6px;background:var(--accent-soft);color:var(--accent-text);font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+    .sidebar2-section{margin:6px 0;padding-top:10px;border-top:1px solid var(--border)}
+    .sidebar2-section:first-of-type{border-top:none;padding-top:0}
+    .sidebar2-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-radius:8px;font-size:13.5px;color:var(--text);cursor:pointer;margin-bottom:1px;border:none;background:none;width:100%;text-align:left}
+    .sidebar2-item:hover{background:var(--bg2)}
+    .sidebar2-item.active{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+    .sidebar2-item .chev{color:var(--text-faint);font-size:11px}
+
+    /* ── Paginakop + toolbar (gedeeld patroon voor elke view) ───────────── */
+    .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:22px 28px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;transition:background .2s,border .2s}
+    .topbar h2{font-size:26px;font-weight:800;letter-spacing:-.02em;font-family:var(--heading-font)}
+    .topbar p.page-sub{font-size:13px;color:var(--text-muted);margin-top:6px}
+    .topbar-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+    .page-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--surface)}
+    .page-toolbar .grow{flex:1}
+    .view-toggle{display:flex;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden;flex-shrink:0}
+    .view-toggle button{padding:7px 10px;background:var(--surface);border:none;cursor:pointer;color:var(--text-muted);display:flex;align-items:center}
+    .view-toggle button.active{background:var(--accent-soft);color:var(--accent-text)}
+    .folder-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;padding:18px 28px 4px}
+    .folder-card{display:flex;align-items:center;gap:10px;padding:13px 14px;border:1px solid var(--border);border-radius:12px;background:var(--surface);cursor:pointer;transition:border-color .15s,background .15s}
+    .folder-card:hover{border-color:var(--accent);background:var(--accent-soft)}
+    .folder-card-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff}
+    .folder-card-name{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .folder-card-count{font-size:11px;color:var(--text-faint)}
+    .item-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;padding:18px 28px 28px}
+    .item-card{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface);transition:box-shadow .15s,border-color .15s;cursor:pointer;display:flex;flex-direction:column}
+    .item-card:hover{border-color:var(--accent);box-shadow:var(--shadow-md)}
+    .item-card-thumb{height:96px;display:flex;align-items:center;justify-content:center;position:relative;flex-shrink:0}
+    .item-card-body{padding:12px 14px;flex:1}
     .bc{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-muted)}
     .bc .crumb{cursor:pointer;transition:color .1s}.bc .crumb:hover{color:var(--text)}
     .bc .sep{color:var(--text-faint);font-size:11px}
@@ -361,19 +397,23 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     }
     
     @media(max-width:768px){
-      .topnav{flex-wrap:wrap;height:auto;padding:10px 12px 0}
-      .topnav-left{order:1}
-      .topnav-right{order:2}
-      .topnav-tabs{order:3;flex-basis:100%;width:100%;margin-top:10px;padding:8px 0;border-top:1px solid var(--border)}
-      .org-text h1{font-size:13px}
+      .hamburger-btn{display:flex}
+      .sidebar2{transform:translateX(-100%);transition:transform .25s ease;box-shadow:0 0 0 0 transparent}
+      .sidebar2.open{transform:translateX(0);box-shadow:8px 0 24px rgba(0,0,0,.18)}
+      .sidebar-overlay{display:none;position:fixed;inset:0;top:52px;background:rgba(0,0,0,.45);z-index:39}
+      .sidebar-overlay.open{display:block}
+      .main{margin-left:0}
+      .topbar-dark-logo b{display:none}
+      .org-switcher{max-width:140px}
       .detail-grid{grid-template-columns:1fr}
       .stats-grid{grid-template-columns:1fr 1fr;gap:12px}
       .stat-card{padding:14px 16px}
       .stat-value{font-size:18px}
       .content{padding:16px}
-      .topbar{padding:0 14px;height:56px;position:static}
-      .topbar h2{font-size:14px}
+      .topbar{padding:16px 14px;flex-wrap:wrap}
+      .topbar h2{font-size:19px}
       .topbar-right{gap:6px}
+      .page-toolbar,.folder-grid,.item-card-grid{padding-left:14px;padding-right:14px}
       .btn{padding:6px 12px;font-size:12px}
       .btn-sm{padding:4px 9px;font-size:11px}
       .tabs{flex-wrap:wrap}
@@ -463,7 +503,6 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
       .detail-grid{gap:14px}
       .modal-actions{gap:6px}
       .topbar-right{gap:3px}
-      .topnav-tab{padding:7px 10px;font-size:12px}
     }
   `
 
@@ -482,17 +521,25 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
 
   if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--text-muted)',fontSize:13}}>Laden…</div>
 
+  const navItem = (key, label, activeWhen) => (
+    <button className={`sidebar2-item${activeWhen?' active':''}`} onClick={() => { showView(key); setSidebarOpen(false) }}>{label}</button>
+  )
+
   return (
     <ToastProvider>
     <div className="app">
       <style>{CSS}</style>
-      <header className="topnav">
-        <div className="topnav-left" onClick={() => { setOrgMenuOpen(o => !o); setProfileMenuOpen(false) }} onMouseLeave={() => setOrgMenuOpen(false)}>
-          <div className="org-icon"><span>S</span></div>
-          <div className="org-text">
-            <h1>{orgName || 'STN CRM'}<ChevronIcon/></h1>
-            <span>{curClient ? curClient.fname+' '+curClient.lname : 'Bedrijfsoverzicht'}</span>
-          </div>
+      <header className="topbar-dark">
+        <button className="hamburger-btn" onClick={() => setSidebarOpen(o => !o)} aria-label="Menu openen">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div className="topbar-dark-logo">
+          <div className="topbar-dark-logo-icon"><span>S</span></div>
+          <b>STN CRM</b>
+        </div>
+        <div className="org-switcher" onClick={() => { setOrgMenuOpen(o => !o); setProfileMenuOpen(false) }} onMouseLeave={() => setOrgMenuOpen(false)}>
+          <span className="org-switcher-name">{orgName || 'Bedrijf'}</span>
+          <span className="chev"><ChevronIcon/></span>
           {orgMenuOpen && (
             <div className="org-menu">
               <div style={{fontSize:10,fontWeight:600,color:'var(--text-faint)',textTransform:'uppercase',letterSpacing:'.06em',padding:'6px 10px 4px'}}>Bedrijven</div>
@@ -505,32 +552,23 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
               <div className="menu-item" onClick={() => { setOrgMenuOpen(false); setShowNewWorkspace(true) }}>+ Nieuw bedrijf</div>
               <div className="menu-sep"></div>
               <div className="menu-item" onClick={() => { showView('overview'); setOrgMenuOpen(false) }}>Bedrijfsoverzicht</div>
-              <div className="menu-sep"></div>
-              {!clients.length
-                ? <div className="menu-item" style={{color:'var(--text-faint)',cursor:'default'}}>Nog geen klanten</div>
-                : clients.map(c => (
-                  <div key={c.id} className="menu-item" onClick={() => { showView('client-detail', c.id); setOrgMenuOpen(false) }}>
-                    <span className={`avatar ${avC(c.id)}`} style={{width:22,height:22,fontSize:9,flexShrink:0}}>{ini(c)}</span>
-                    {c.fname} {c.lname}
-                  </div>
-                ))}
+              {clients.length > 0 && <div className="menu-sep"></div>}
+              {clients.map(c => (
+                <div key={c.id} className="menu-item" onClick={() => { showView('client-detail', c.id); setOrgMenuOpen(false) }}>
+                  <span className={`avatar ${avC(c.id)}`} style={{width:22,height:22,fontSize:9,flexShrink:0}}>{ini(c)}</span>
+                  {c.fname} {c.lname}
+                </div>
+              ))}
             </div>
           )}
         </div>
-        <nav className="topnav-tabs">
-          <button className={`topnav-tab${view==='overview'?' active':''}`} onClick={() => showView('overview')}>Dashboard</button>
-          <button className={`topnav-tab${['clients','client-detail'].includes(view)?' active':''}`} onClick={() => showView('clients')}>Klanten</button>
-          <button className={`topnav-tab${['projects','project-detail'].includes(view)?' active':''}`} onClick={() => showView('projects')}>Projecten</button>
-          <button className={`topnav-tab${view==='tasks'?' active':''}`} onClick={() => showView('tasks')}>Taken</button>
-          <button className={`topnav-tab${view==='finance'?' active':''}`} onClick={() => showView('finance')}>Financiën</button>
-          <button className={`topnav-tab${view==='hosting'?' active':''}`} onClick={() => showView('hosting')}>Hosting</button>
-          <button className={`topnav-tab${view==='pipeline'?' active':''}`} onClick={() => showView('pipeline')}>Pipeline</button>
-          {myRole === 'owner' && <button className={`topnav-tab${view==='team'?' active':''}`} onClick={() => showView('team')}>Team</button>}
-        </nav>
-        <div className="topnav-right" onMouseLeave={() => setProfileMenuOpen(false)}>
+        <div className="topbar-dark-right" onMouseLeave={() => setProfileMenuOpen(false)}>
+          <button className="topbar-dark-icon" aria-label="Meldingen" title="Meldingen">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          </button>
           <div className="profile-trigger" onClick={() => { setProfileMenuOpen(o => !o); setOrgMenuOpen(false) }}>
             <div style={{
-              width:32,height:32,borderRadius:'50%',flexShrink:0,overflow:'hidden',
+              width:30,height:30,borderRadius:'50%',flexShrink:0,overflow:'hidden',
               background:'var(--accent)',display:'flex',alignItems:'center',justifyContent:'center',
               fontSize:12,fontWeight:700,color:'#fff',fontFamily:'var(--heading-font)'
             }}>
@@ -539,27 +577,51 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
                 : (profile?.full_name || session.user.email)[0].toUpperCase()
               }
             </div>
+            {profileMenuOpen && (
+              <div className="profile-menu">
+                <div style={{padding:'8px 10px',marginBottom:4,borderBottom:'1px solid var(--border)'}}>
+                  <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{profile?.full_name || 'Profiel'}</div>
+                  <div style={{fontSize:11,color:'var(--text-faint)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{session.user.email}</div>
+                </div>
+                <div className="menu-item" onClick={() => { showView('profile'); setProfileMenuOpen(false) }}>Profiel</div>
+                {isPlatformAdmin && <div className="menu-item" onClick={() => { setProfileMenuOpen(false); onOpenAdminPanel() }}>Platform-admin</div>}
+                <div className="menu-item" style={{justifyContent:'space-between',cursor:'default'}}>
+                  <span>Donker thema</span>
+                  <button className={darkMode ? 'theme-toggle dark' : 'theme-toggle'} onClick={() => setDarkMode(!darkMode)} title={darkMode ? 'Licht thema' : 'Donker thema'}>
+                    <div className="theme-toggle-knob"></div>
+                  </button>
+                </div>
+                <div className="menu-sep"></div>
+                <div className="menu-item" onClick={logout} style={{color:'var(--red-text)'}}>Uitloggen</div>
+              </div>
+            )}
           </div>
-          {profileMenuOpen && (
-            <div className="profile-menu">
-              <div style={{padding:'8px 10px',marginBottom:4,borderBottom:'1px solid var(--border)'}}>
-                <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{profile?.full_name || 'Profiel'}</div>
-                <div style={{fontSize:11,color:'var(--text-faint)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{session.user.email}</div>
-              </div>
-              <div className="menu-item" onClick={() => { showView('profile'); setProfileMenuOpen(false) }}>Profiel</div>
-              {isPlatformAdmin && <div className="menu-item" onClick={() => { setProfileMenuOpen(false); onOpenAdminPanel() }}>Platform-admin</div>}
-              <div className="menu-item" style={{justifyContent:'space-between',cursor:'default'}}>
-                <span>Donker thema</span>
-                <button className={darkMode ? 'theme-toggle dark' : 'theme-toggle'} onClick={() => setDarkMode(!darkMode)} title={darkMode ? 'Licht thema' : 'Donker thema'}>
-                  <div className="theme-toggle-knob"></div>
-                </button>
-              </div>
-              <div className="menu-sep"></div>
-              <div className="menu-item" onClick={logout} style={{color:'var(--red-text)'}}>Uitloggen</div>
-            </div>
-          )}
         </div>
       </header>
+
+      <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)}></div>
+      <nav className={`sidebar2${sidebarOpen ? ' open' : ''}`}>
+        <div className="sidebar2-org">
+          <h2>{orgName || 'Bedrijf'}</h2>
+          <div className="sidebar2-org-role">{profile?.full_name || session.user.email}</div>
+          <span className="sidebar2-role-badge">{myRole === 'owner' ? 'Eigenaar' : 'Teamlid'}</span>
+        </div>
+        <div className="sidebar2-section">
+          {navItem('overview', 'Dashboard', view==='overview')}
+          {navItem('clients', 'Klanten', ['clients','client-detail'].includes(view))}
+          {navItem('projects', 'Projecten', ['projects','project-detail'].includes(view))}
+          {navItem('tasks', 'Taken', view==='tasks')}
+        </div>
+        <div className="sidebar2-section">
+          {navItem('pipeline', 'Pipeline', view==='pipeline')}
+          {navItem('finance', 'Financiën', view==='finance')}
+          {navItem('hosting', 'Hosting', view==='hosting')}
+        </div>
+        <div className="sidebar2-section">
+          {myRole === 'owner' && navItem('team', 'Team', view==='team')}
+          {navItem('profile', 'Profiel', view==='profile')}
+        </div>
+      </nav>
       <div className="main">
         {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} orgMembers={orgMembers} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
@@ -741,29 +803,75 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
 
 function ClientsView({ clients, projects, allTasks, showView, onRefresh, activeOrgId }) {
   const [q, setQ] = useState('')
-  const filtered = clients.filter(c => !q||(c.fname+c.lname+(c.company||'')+(c.email||'')).toLowerCase().includes(q.toLowerCase()))
+  const [viewMode, setViewMode] = useState('list')
+  const [statusFilter, setStatusFilter] = useState(null)
+  const filtered = clients.filter(c => (!q||(c.fname+c.lname+(c.company||'')+(c.email||'')).toLowerCase().includes(q.toLowerCase())) && (!statusFilter || (c.status||'actief')===statusFilter))
+  const statusGroups = [
+    { key:'actief', label:'Actief', color:'var(--green)' },
+    { key:'prospect', label:'Prospect', color:'var(--blue)' },
+    { key:'inactief', label:'Inactief', color:'var(--text-faint)' },
+  ].map(g => ({ ...g, count: clients.filter(c=>(c.status||'actief')===g.key).length }))
+
   return (
     <div>
-      <div className="topbar"><h2>Klanten</h2><div className="topbar-right"><div className="search-wrap"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div><ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Nieuwe klant</button>} /></div></div>
-      <div className="content">
-        <div className="sc" style={{padding:0}}>
-          <div className="cl-header"><div>Klant</div><div>Contact</div><div>Status</div><div>Omzet</div><div></div></div>
-          {!filtered.length ? <div className="empty">Geen klanten</div> : filtered.map((c,idx) => {
-            const pCount=projects.filter(p=>p.client_id===c.id).length
-            const openT=allTasks.filter(t=>!t.done&&projects.find(p=>p.id===t.project_id)?.client_id===c.id).length
-            return <div key={c.id} className="cl-row" onClick={()=>showView('client-detail',c.id)}>
-              <div className="cl-name-cell"><div className={`avatar ${avC(c.id)}`}>{ini(c)}</div><div><div style={{fontWeight:500,fontSize:14}}>{c.fname} {c.lname}</div><div style={{fontSize:11,color:'var(--text-muted)'}}>{c.company||'—'}</div></div></div>
-              <div style={{fontSize:13,color:'var(--text-muted)'}}>{c.email||'—'}</div>
-              <div><Badge s={c.status||'actief'} /></div>
-              <div style={{fontFamily:'var(--mono-font)',fontSize:13}}>—</div>
-              <div style={{textAlign:'right',display:'flex',gap:4,justifyContent:'flex-end',flexWrap:'wrap'}}>
-                {pCount>0&&<span className="badge bg-blue">{pCount} proj</span>}
-                {openT>0&&<span className="badge bg-amber">{openT} taken</span>}
-              </div>
-            </div>
-          })}
+      <div className="topbar">
+        <div><h2>Klanten</h2><p className="page-sub">Beheer en bekijk al je klanten op één plek.</p></div>
+        <div className="topbar-right"><ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Nieuwe klant</button>} /></div>
+      </div>
+      <div className="page-toolbar">
+        <div className="search-wrap"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div>
+        <div className="grow"></div>
+        <div className="view-toggle">
+          <button className={viewMode==='grid'?'active':''} onClick={()=>setViewMode('grid')} aria-label="Kaartweergave" title="Kaartweergave"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+          <button className={viewMode==='list'?'active':''} onClick={()=>setViewMode('list')} aria-label="Lijstweergave" title="Lijstweergave"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg></button>
         </div>
       </div>
+      <div className="folder-grid">
+        {statusGroups.map(g => (
+          <div key={g.key} className="folder-card" onClick={()=>setStatusFilter(statusFilter===g.key?null:g.key)} style={statusFilter===g.key?{borderColor:'var(--accent)',background:'var(--accent-soft)'}:{}}>
+            <div className="folder-card-icon" style={{background:g.color}}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+            </div>
+            <div><div className="folder-card-name">{g.label}</div><div className="folder-card-count">{g.count} klant{g.count!==1?'en':''}</div></div>
+          </div>
+        ))}
+      </div>
+      {viewMode === 'grid' ? (
+        <div className="item-card-grid">
+          {!filtered.length ? <div className="empty">Geen klanten</div> : filtered.map(c => (
+            <div key={c.id} className="item-card" onClick={()=>showView('client-detail',c.id)}>
+              <div className="item-card-thumb" style={{background:'var(--accent-soft)'}}>
+                <div className={`avatar ${avC(c.id)}`} style={{width:48,height:48,fontSize:16}}>{ini(c)}</div>
+              </div>
+              <div className="item-card-body">
+                <div style={{fontWeight:600,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.fname} {c.lname}</div>
+                <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:8,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.company || '—'}</div>
+                <Badge s={c.status||'actief'} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="content" style={{paddingTop:6}}>
+          <div className="sc" style={{padding:0}}>
+            <div className="cl-header"><div>Klant</div><div>Contact</div><div>Status</div><div>Omzet</div><div></div></div>
+            {!filtered.length ? <div className="empty">Geen klanten</div> : filtered.map((c,idx) => {
+              const pCount=projects.filter(p=>p.client_id===c.id).length
+              const openT=allTasks.filter(t=>!t.done&&projects.find(p=>p.id===t.project_id)?.client_id===c.id).length
+              return <div key={c.id} className="cl-row" onClick={()=>showView('client-detail',c.id)}>
+                <div className="cl-name-cell"><div className={`avatar ${avC(c.id)}`}>{ini(c)}</div><div><div style={{fontWeight:500,fontSize:14}}>{c.fname} {c.lname}</div><div style={{fontSize:11,color:'var(--text-muted)'}}>{c.company||'—'}</div></div></div>
+                <div style={{fontSize:13,color:'var(--text-muted)'}}>{c.email||'—'}</div>
+                <div><Badge s={c.status||'actief'} /></div>
+                <div style={{fontFamily:'var(--mono-font)',fontSize:13}}>—</div>
+                <div style={{textAlign:'right',display:'flex',gap:4,justifyContent:'flex-end',flexWrap:'wrap'}}>
+                  {pCount>0&&<span className="badge bg-blue">{pCount} proj</span>}
+                  {openT>0&&<span className="badge bg-amber">{openT} taken</span>}
+                </div>
+              </div>
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -949,29 +1057,83 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
 function ProjectsView({ projects, clients, clientName, showView, onRefresh, activeOrgId }) {
   const [q, setQ] = useState('')
   const [previewUrl, setPreviewUrl] = useState(null)
-  const filtered = projects.filter(p => !q||p.name.toLowerCase().includes(q.toLowerCase())||clientName(p.client_id).toLowerCase().includes(q.toLowerCase()))
+  const [viewMode, setViewMode] = useState('grid')
+  const [statusFilter, setStatusFilter] = useState(null)
+  const filtered = projects.filter(p => (!q||p.name.toLowerCase().includes(q.toLowerCase())||clientName(p.client_id).toLowerCase().includes(q.toLowerCase())) && (!statusFilter || p.status===statusFilter))
+  const statusGroups = [
+    { key:'actief', label:'Actief', color:'var(--accent)' },
+    { key:'on-hold', label:'On-hold', color:'var(--amber)' },
+    { key:'afgerond', label:'Afgerond', color:'var(--text-faint)' },
+  ].map(g => ({ ...g, count: projects.filter(p=>p.status===g.key).length }))
+
   return (
     <>
       <div>
-        <div className="topbar"><h2>Projecten</h2><div className="topbar-right"><div className="search-wrap"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div><ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Nieuw project</button>} /></div></div>
-        <div className="content">
-          <div className="sc" style={{padding:0}}>
-            <div className="pl-header"><div>Project</div><div>Klant</div><div>Deadline</div><div>Status</div><div>Info</div></div>
-            {!filtered.length ? <div className="empty">Geen projecten</div> : filtered.map(p => {
-              const dd=p.deadline?daysN(p.deadline):null; const dC=dd!=null?(dd<0?'var(--red-text)':dd<=7?'var(--amber-text)':'var(--text-muted)'):'var(--text-muted)'
-              return <div key={p.id} className="pl-row" onClick={()=>showView('project-detail',p.id)}>
-                <div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:10,height:10,borderRadius:'50%',background:p.color,flexShrink:0}}></div><div><div style={{fontWeight:500,fontSize:14}}>{p.name}</div>{p.url&&<div style={{fontSize:11,color:'var(--blue-text)'}}>{p.url.replace('https://','').replace('http://','')}</div>}</div></div>
-                <div style={{fontSize:13,color:'var(--text-muted)'}}>{clientName(p.client_id)||'—'}</div>
-                <div style={{fontSize:13,color:dC}}>{p.deadline?fdate(p.deadline):'—'}</div>
-                <div><Badge s={p.status} /></div>
-                <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                  {p.url&&<button onClick={e=>{e.stopPropagation();setPreviewUrl(p.url)}} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>Preview</button>}
-                  {p.url&&<a href={p.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>↗ Open</a>}
-                </div>
-              </div>
-            })}
+        <div className="topbar">
+          <div><h2>Projecten</h2><p className="page-sub">Al je projecten, per werkruimte.</p></div>
+          <div className="topbar-right"><ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Nieuw project</button>} /></div>
+        </div>
+        <div className="page-toolbar">
+          <div className="search-wrap"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div>
+          <div className="grow"></div>
+          <div className="view-toggle">
+            <button className={viewMode==='grid'?'active':''} onClick={()=>setViewMode('grid')} aria-label="Kaartweergave" title="Kaartweergave"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+            <button className={viewMode==='list'?'active':''} onClick={()=>setViewMode('list')} aria-label="Lijstweergave" title="Lijstweergave"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg></button>
           </div>
         </div>
+        <div className="folder-grid">
+          {statusGroups.map(g => (
+            <div key={g.key} className="folder-card" onClick={()=>setStatusFilter(statusFilter===g.key?null:g.key)} style={statusFilter===g.key?{borderColor:'var(--accent)',background:'var(--accent-soft)'}:{}}>
+              <div className="folder-card-icon" style={{background:g.color}}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+              </div>
+              <div><div className="folder-card-name">{g.label}</div><div className="folder-card-count">{g.count} project{g.count!==1?'en':''}</div></div>
+            </div>
+          ))}
+        </div>
+        {viewMode === 'grid' ? (
+          <div className="item-card-grid">
+            {!filtered.length ? <div className="empty">Geen projecten</div> : filtered.map(p => {
+              const dd=p.deadline?daysN(p.deadline):null; const dC=dd!=null?(dd<0?'var(--red-text)':dd<=7?'var(--amber-text)':'var(--text-muted)'):'var(--text-muted)'
+              return (
+                <div key={p.id} className="item-card" onClick={()=>showView('project-detail',p.id)}>
+                  <div className="item-card-thumb" style={{background:p.color}}>
+                    <span style={{color:'#fff',fontFamily:'var(--heading-font)',fontWeight:700,fontSize:22,opacity:.85}}>{p.name[0]?.toUpperCase()}</span>
+                    <span style={{position:'absolute',top:8,right:8}}><Badge s={p.status} /></span>
+                  </div>
+                  <div className="item-card-body">
+                    <div style={{fontWeight:600,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
+                    <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:6,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clientName(p.client_id)||'Geen klant'}</div>
+                    <div style={{fontSize:11,color:dC}}>{p.deadline?'Deadline: '+fdate(p.deadline):'Geen deadline'}</div>
+                    {p.url && <div style={{display:'flex',gap:6,marginTop:8}} onClick={e=>e.stopPropagation()}>
+                      <button onClick={()=>setPreviewUrl(p.url)} className="btn btn-ghost btn-xs">Preview</button>
+                      <a href={p.url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>↗ Open</a>
+                    </div>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="content" style={{paddingTop:6}}>
+            <div className="sc" style={{padding:0}}>
+              <div className="pl-header"><div>Project</div><div>Klant</div><div>Deadline</div><div>Status</div><div>Info</div></div>
+              {!filtered.length ? <div className="empty">Geen projecten</div> : filtered.map(p => {
+                const dd=p.deadline?daysN(p.deadline):null; const dC=dd!=null?(dd<0?'var(--red-text)':dd<=7?'var(--amber-text)':'var(--text-muted)'):'var(--text-muted)'
+                return <div key={p.id} className="pl-row" onClick={()=>showView('project-detail',p.id)}>
+                  <div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:10,height:10,borderRadius:'50%',background:p.color,flexShrink:0}}></div><div><div style={{fontWeight:500,fontSize:14}}>{p.name}</div>{p.url&&<div style={{fontSize:11,color:'var(--blue-text)'}}>{p.url.replace('https://','').replace('http://','')}</div>}</div></div>
+                  <div style={{fontSize:13,color:'var(--text-muted)'}}>{clientName(p.client_id)||'—'}</div>
+                  <div style={{fontSize:13,color:dC}}>{p.deadline?fdate(p.deadline):'—'}</div>
+                  <div><Badge s={p.status} /></div>
+                  <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                    {p.url&&<button onClick={e=>{e.stopPropagation();setPreviewUrl(p.url)}} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>Preview</button>}
+                    {p.url&&<a href={p.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>↗ Open</a>}
+                  </div>
+                </div>
+              })}
+            </div>
+          </div>
+        )}
       </div>
       <Modal open={!!previewUrl} onClose={()=>setPreviewUrl(null)} title="Website Preview">
         {previewUrl && <div style={{width:'100%',height:'500px',border:'1px solid var(--border)',borderRadius:'var(--r)',overflow:'hidden'}}>
