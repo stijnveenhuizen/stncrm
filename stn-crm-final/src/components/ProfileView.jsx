@@ -2,12 +2,11 @@ import React, { useState, useEffect, useRef } from 'react'
 import * as db from '../lib/db'
 
 const ACCENT_COLORS = [
-  { name: 'Indigo', value: '#6d5df6' },
+  { name: 'STN Groen', value: '#3db68e' },
   { name: 'Blauw', value: '#2563eb' },
   { name: 'Paars', value: '#9333ea' },
   { name: 'Roze', value: '#db2777' },
   { name: 'Oranje', value: '#ea580c' },
-  { name: 'Groen', value: '#10b981' },
   { name: 'Teal', value: '#0d9488' },
   { name: 'Zwart', value: '#1a1a18' },
 ]

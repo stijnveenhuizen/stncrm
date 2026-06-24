@@ -42,7 +42,7 @@ export default function Login({ onSignupClick }) {
           <div style={{
             display:'inline-flex', alignItems:'center', justifyContent:'center',
             width:52, height:52, borderRadius:14, background:'var(--accent)',
-            marginBottom:16, boxShadow:'0 4px 14px rgba(109,93,246,0.35)'
+            marginBottom:16, boxShadow:'0 4px 14px rgba(61,182,142,0.35)'
           }}>
             <span style={{color:'#fff', fontSize:24, fontFamily:'var(--heading-font)', fontWeight:700}}>S</span>
           </div>
@@ -84,7 +84,7 @@ export default function Login({ onSignupClick }) {
               borderRadius:'var(--rsm)', fontWeight:600, fontSize:14,
               fontFamily:'var(--heading-font)', cursor: loading?'not-allowed':'pointer',
               opacity: loading?.7:1, transition:'all .15s',
-              boxShadow:'0 2px 8px rgba(109,93,246,0.3)'
+              boxShadow:'0 2px 8px rgba(61,182,142,0.3)'
             }}>
               {loading ? 'Inloggen…' : 'Inloggen →'}
             </button>
