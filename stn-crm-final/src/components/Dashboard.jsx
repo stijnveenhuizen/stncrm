@@ -130,6 +130,29 @@ function ModalActions({ onCancel, onSave, saving }) {
   )
 }
 
+function SkeletonScreen() {
+  const bar = (w, h=14) => <div style={{width:w,height:h,borderRadius:6,background:'var(--bg2)',animation:'skeleton-pulse 1.4s ease-in-out infinite'}} />
+  return (
+    <div className="app">
+      <style>{`@keyframes skeleton-pulse{0%,100%{opacity:.6}50%{opacity:1}}`}</style>
+      <header className="topbar-dark" style={{display:'flex',alignItems:'center',gap:16,padding:'0 16px'}}>{bar(90,18)}</header>
+      <div style={{display:'flex'}}>
+        <nav style={{width:252,padding:16,display:'flex',flexDirection:'column',gap:10,position:'fixed',top:52,bottom:0,background:'var(--surface)',borderRight:'1px solid var(--border)'}}>
+          {bar(140,22)}{bar(100)}
+          <div style={{height:8}} />
+          {[1,2,3,4].map(i => bar('100%')) }
+        </nav>
+        <div style={{marginLeft:252,paddingTop:52,padding:24,flex:1}}>
+          <div style={{display:'flex',gap:16,marginBottom:20}}>
+            {[1,2,3,4].map(i => <div key={i} style={{flex:1,padding:16,borderRadius:'var(--r)',border:'1px solid var(--border)'}}>{bar(60,11)}<div style={{height:8}} />{bar(80,22)}</div>)}
+          </div>
+          {bar('100%',180)}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }) {
   const [view, setView] = useState('overview')
   const [profile, setProfile] = useState(null)
@@ -156,6 +179,21 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   const [companySettings, setCompanySettings] = useState(null)
   const [readNotifKeys, setReadNotifKeys] = useState([])
   const [notifMenuOpen, setNotifMenuOpen] = useState(false)
+  const [cmdKOpen, setCmdKOpen] = useState(false)
+  const [cmdKQuery, setCmdKQuery] = useState('')
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setCmdKOpen(o => !o)
+        setCmdKQuery('')
+      }
+      if (e.key === 'Escape') setCmdKOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   function applyProfileTheme(p) {
     if (p.theme) setDarkMode(p.theme === 'dark')
@@ -264,7 +302,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
 
   async function logout() { await supabase.auth.signOut() }
 
-  if (!orgsLoaded) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--text-muted)',fontSize:13}}>Laden…</div>
+  if (!orgsLoaded) return <SkeletonScreen />
 
   const curClient = clients.find(c => c.id === curClientId)
   const curProject = projects.find(p => p.id === curProjectId)
@@ -365,11 +403,11 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     .pl-row{display:grid;grid-template-columns:2fr 1.4fr 1fr 0.8fr 120px;padding:13px 20px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background .1s}
     .pl-row:last-child{border-bottom:none}.pl-row:hover{background:var(--accent-soft)}
     .fin-header{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 110px;padding:8px 18px;background:var(--bg);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
-    .fin-row{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 110px;gap:10px;align-items:center;padding:11px 18px;border-bottom:1px solid var(--border);font-size:13px}
-    .fin-row:last-child{border-bottom:none}
+    .fin-row{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 110px;gap:10px;align-items:center;padding:11px 18px;border-bottom:1px solid var(--border);font-size:13px;transition:background .1s}
+    .fin-row:last-child{border-bottom:none}.fin-row:hover{background:var(--accent-soft)}
     .host-header{display:grid;grid-template-columns:2fr 1.2fr 1fr 1fr 1fr 120px;padding:8px 18px;background:var(--bg);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
-    .host-row{display:grid;grid-template-columns:2fr 1.2fr 1fr 1fr 1fr 120px;padding:12px 18px;border-bottom:1px solid var(--border);align-items:center;font-size:13px}
-    .host-row:last-child{border-bottom:none}
+    .host-row{display:grid;grid-template-columns:2fr 1.2fr 1fr 1fr 1fr 120px;padding:12px 18px;border-bottom:1px solid var(--border);align-items:center;font-size:13px;transition:background .1s}
+    .host-row:last-child{border-bottom:none}.host-row:hover{background:var(--accent-soft)}
     .cl-name-cell{display:flex;align-items:center;gap:11px}
     .avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;font-family:var(--heading-font)}
     .av-b{background:#dbeafe;color:#1d4ed8}.av-g{background:#d1fae5;color:#065f46}
@@ -558,7 +596,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     </ToastProvider>
   )
 
-  if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--text-muted)',fontSize:13}}>Laden…</div>
+  if (loading) return <SkeletonScreen />
 
   const navItem = (key, label, activeWhen) => (
     <button className={`sidebar2-item${activeWhen?' active':''}`} onClick={() => { showView(key); setSidebarOpen(false) }}>{label}</button>
@@ -582,7 +620,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
           {orgMenuOpen && (
             <div className="org-menu">
               <div style={{fontSize:10,fontWeight:600,color:'var(--text-faint)',textTransform:'uppercase',letterSpacing:'.06em',padding:'6px 10px 4px'}}>Bedrijven</div>
-              {myOrganizations.map(o => (
+              {myOrganizations.filter(o => isPlatformAdmin || (o.name && o.name.trim())).map(o => (
                 <div key={o.id} className="menu-item" style={{justifyContent:'space-between'}} onClick={() => switchOrg(o.id)}>
                   <span>{o.name}</span>
                   {o.id === activeOrgId && <span style={{color:'var(--accent-text)'}}>✓</span>}
@@ -592,8 +630,8 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
               <div className="menu-sep"></div>
               <div className="menu-item" onClick={() => { showView('overview'); setOrgMenuOpen(false) }}>Bedrijfsoverzicht</div>
               {myRole === 'owner' && <div className="menu-item" onClick={() => { showView('company-settings'); setOrgMenuOpen(false) }}>Bedrijfsinstellingen</div>}
-              {clients.length > 0 && <div className="menu-sep"></div>}
-              {clients.map(c => (
+              {clients.filter(c => isPlatformAdmin || (c.fname && c.fname.trim() && c.lname && c.lname.trim())).length > 0 && <div className="menu-sep"></div>}
+              {clients.filter(c => isPlatformAdmin || (c.fname && c.fname.trim() && c.lname && c.lname.trim())).map(c => (
                 <div key={c.id} className="menu-item" onClick={() => { showView('client-detail', c.id); setOrgMenuOpen(false) }}>
                   <span className={`avatar ${avC(c.id)}`} style={{width:22,height:22,fontSize:9,flexShrink:0}}>{ini(c)}</span>
                   {c.fname} {c.lname}
@@ -708,6 +746,37 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         onClose={() => setShowNewWorkspace(false)}
         onCreated={orgId => { loadOrganizations(); switchOrg(orgId) }}
       />
+      {cmdKOpen && (
+        <div className="modal-bg open" style={{alignItems:'flex-start',paddingTop:'12vh'}} onClick={e => e.target === e.currentTarget && setCmdKOpen(false)}>
+          <div className="modal" style={{maxWidth:520,padding:0,overflow:'hidden'}}>
+            <input
+              autoFocus value={cmdKQuery} onChange={e => setCmdKQuery(e.target.value)}
+              placeholder="Zoek klanten, projecten, taken…"
+              style={{border:'none',borderBottom:'1px solid var(--border)',borderRadius:0,fontSize:15,padding:'16px 18px'}}
+            />
+            <div style={{maxHeight:360,overflowY:'auto',padding:6}}>
+              {(() => {
+                const q = cmdKQuery.trim().toLowerCase()
+                if (!q) return <div style={{padding:'14px 12px',fontSize:12,color:'var(--text-faint)'}}>Typ om te zoeken…</div>
+                const cR = clients.filter(c => `${c.fname} ${c.lname} ${c.company||''}`.toLowerCase().includes(q)).slice(0,6)
+                const pR = projects.filter(p => p.name.toLowerCase().includes(q)).slice(0,6)
+                const tR = allTasks.filter(t => t.description.toLowerCase().includes(q)).slice(0,6)
+                if (!cR.length && !pR.length && !tR.length) return <div style={{padding:'14px 12px',fontSize:12,color:'var(--text-faint)'}}>Niets gevonden</div>
+                return (
+                  <>
+                    {cR.length > 0 && <div style={{fontSize:10,fontWeight:600,color:'var(--text-faint)',textTransform:'uppercase',letterSpacing:'.06em',padding:'8px 10px 2px'}}>Klanten</div>}
+                    {cR.map(c => <div key={c.id} className="menu-item" onClick={() => { showView('client-detail', c.id); setCmdKOpen(false) }}>{c.fname} {c.lname}{c.company?' · '+c.company:''}</div>)}
+                    {pR.length > 0 && <div style={{fontSize:10,fontWeight:600,color:'var(--text-faint)',textTransform:'uppercase',letterSpacing:'.06em',padding:'8px 10px 2px'}}>Projecten</div>}
+                    {pR.map(p => <div key={p.id} className="menu-item" onClick={() => { showView('project-detail', p.id); setCmdKOpen(false) }}>{p.name}</div>)}
+                    {tR.length > 0 && <div style={{fontSize:10,fontWeight:600,color:'var(--text-faint)',textTransform:'uppercase',letterSpacing:'.06em',padding:'8px 10px 2px'}}>Taken</div>}
+                    {tR.map(t => <div key={t.id} className="menu-item" onClick={() => { showView('tasks'); setCmdKOpen(false) }}>{t.description}</div>)}
+                  </>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     </ToastProvider>
   )
