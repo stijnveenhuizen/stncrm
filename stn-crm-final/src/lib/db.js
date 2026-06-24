@@ -132,6 +132,11 @@ export async function linkTeamMemberAccount(organizationId) {
   if (error) throw error
   return data
 }
+export async function updateOrganization(organizationId, updates) {
+  const { data, error } = await supabase.from('organizations').update(updates).eq('id', organizationId).select().single()
+  if (error) throw error
+  return data
+}
 export async function getMyOrganizations() {
   const { data, error } = await supabase
     .from('memberships').select('role, organizations(*)').order('created_at', { ascending: true })

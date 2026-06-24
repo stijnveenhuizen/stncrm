@@ -153,6 +153,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [showNewWorkspace, setShowNewWorkspace] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [companySettings, setCompanySettings] = useState(null)
 
   function applyProfileTheme(p) {
     if (p.theme) setDarkMode(p.theme === 'dark')
@@ -207,6 +208,12 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     db.getOrgMembers(activeOrgId).then(setOrgMembers).catch(() => {})
   }, [activeOrgId])
   useEffect(() => { loadMembers() }, [loadMembers])
+
+  const loadCompanySettings = useCallback(() => {
+    if (!activeOrgId) return
+    db.getCompanySettings(activeOrgId).then(setCompanySettings).catch(() => setCompanySettings(null))
+  }, [activeOrgId])
+  useEffect(() => { loadCompanySettings() }, [loadCompanySettings])
 
   const orgName = myOrganizations.find(o => o.id === activeOrgId)?.name || ''
   const myRole = myOrganizations.find(o => o.id === activeOrgId)?.myRole
@@ -552,6 +559,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
               <div className="menu-item" onClick={() => { setOrgMenuOpen(false); setShowNewWorkspace(true) }}>+ Nieuw bedrijf</div>
               <div className="menu-sep"></div>
               <div className="menu-item" onClick={() => { showView('overview'); setOrgMenuOpen(false) }}>Bedrijfsoverzicht</div>
+              {myRole === 'owner' && <div className="menu-item" onClick={() => { showView('company-settings'); setOrgMenuOpen(false) }}>Bedrijfsinstellingen</div>}
               {clients.length > 0 && <div className="menu-sep"></div>}
               {clients.map(c => (
                 <div key={c.id} className="menu-item" onClick={() => { showView('client-detail', c.id); setOrgMenuOpen(false) }}>
@@ -602,7 +610,10 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
       <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)}></div>
       <nav className={`sidebar2${sidebarOpen ? ' open' : ''}`}>
         <div className="sidebar2-org">
-          <h2>{orgName || 'Bedrijf'}</h2>
+          {companySettings?.logo_url
+            ? <img src={companySettings.logo_url} alt={orgName} style={{maxHeight:28,maxWidth:'100%',objectFit:'contain',marginBottom:4}} />
+            : <h2>{orgName || 'Bedrijf'}</h2>
+          }
           <div className="sidebar2-org-role">{profile?.full_name || session.user.email}</div>
           <span className="sidebar2-role-badge">{myRole === 'owner' ? 'Eigenaar' : 'Teamlid'}</span>
         </div>
@@ -634,6 +645,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} />}
         {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} organizationId={activeOrgId} />}
         {view==='team' && myRole === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} myProfile={profile} activeOrgId={activeOrgId} />}
+        {view==='company-settings' && myRole === 'owner' && <CompanySettingsView activeOrgId={activeOrgId} orgName={orgName} settings={companySettings} onRefresh={() => { loadCompanySettings(); loadOrganizations() }} />}
       </div>
       <NewWorkspaceModal
         open={showNewWorkspace}
@@ -1620,6 +1632,112 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function CompanySettingsView({ activeOrgId, orgName, settings, onRefresh }) {
+  const [form, setForm] = useState({
+    name: orgName || '',
+    primary_color: settings?.primary_color || '#3db68e',
+    vat_number: settings?.vat_number || '',
+    coc_number: settings?.coc_number || '',
+    invoice_address: settings?.invoice_address || '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef()
+  const f = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
+
+  useEffect(() => {
+    setForm({
+      name: orgName || '',
+      primary_color: settings?.primary_color || '#3db68e',
+      vat_number: settings?.vat_number || '',
+      coc_number: settings?.coc_number || '',
+      invoice_address: settings?.invoice_address || '',
+    })
+  }, [orgName, settings])
+
+  async function save() {
+    setSaving(true)
+    try {
+      await db.updateOrganization(activeOrgId, { name: form.name })
+      await db.upsertCompanySettings(activeOrgId, {
+        primary_color: form.primary_color, vat_number: form.vat_number || null,
+        coc_number: form.coc_number || null, invoice_address: form.invoice_address || null,
+      })
+      onRefresh()
+      showToast('Bedrijfsinstellingen opgeslagen')
+    } catch(e) { showToast('Fout: ' + e.message, 'error') }
+    finally { setSaving(false) }
+  }
+
+  async function handleLogoUpload(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) { showToast('Logo mag max 2MB zijn.', 'error'); return }
+    setUploading(true)
+    try {
+      const url = await db.uploadCompanyLogo(activeOrgId, file)
+      await db.upsertCompanySettings(activeOrgId, { logo_url: url })
+      onRefresh()
+      showToast('Logo bijgewerkt')
+    } catch(e) { showToast('Fout bij uploaden: ' + e.message, 'error') }
+    finally { setUploading(false) }
+  }
+
+  return (
+    <div>
+      <div className="topbar"><h2>Bedrijfsinstellingen</h2></div>
+      <div className="content" style={{ maxWidth: 680 }}>
+        <div className="sc">
+          <div className="sc-head"><span className="sc-title">Bedrijfsprofiel</span></div>
+          <div className="sc-body">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20 }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: 'var(--rsm)', flexShrink: 0,
+                background: 'var(--bg2)', border: '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden'
+              }}>
+                {settings?.logo_url
+                  ? <img src={settings.logo_url} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                  : <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>Geen logo</span>
+                }
+              </div>
+              <div>
+                <button className="btn btn-ghost btn-sm" onClick={() => fileRef.current.click()} disabled={uploading}>
+                  {uploading ? 'Uploaden…' : 'Logo uploaden'}
+                </button>
+                <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleLogoUpload} />
+                <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 6 }}>Vervangt de bedrijfsnaam in de zijbalk. Max 2MB.</div>
+              </div>
+            </div>
+            <div className="form-group"><label>Bedrijfsnaam</label><input value={form.name} onChange={f('name')} /></div>
+            <div className="form-group">
+              <label>Primaire kleur</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input type="color" value={form.primary_color} onChange={f('primary_color')} style={{ width: 44, height: 36, padding: 2 }} />
+                <input value={form.primary_color} onChange={f('primary_color')} style={{ flex: 1 }} />
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 4 }}>Voor toekomstige white-label weergave.</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="sc">
+          <div className="sc-head"><span className="sc-title">Facturatiegegevens</span></div>
+          <div className="sc-body">
+            <div className="form-row">
+              <div className="form-group"><label>BTW-nummer</label><input value={form.vat_number} onChange={f('vat_number')} placeholder="NL000000000B01" /></div>
+              <div className="form-group"><label>KVK-nummer</label><input value={form.coc_number} onChange={f('coc_number')} placeholder="12345678" /></div>
+            </div>
+            <div className="form-group"><label>Factuuradres</label><textarea value={form.invoice_address} onChange={f('invoice_address')} rows={3} placeholder="Straatnaam 1&#10;1234 AB Plaats" /></div>
+          </div>
+        </div>
+
+        <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Opslaan…' : 'Instellingen opslaan'}</button>
       </div>
     </div>
   )
