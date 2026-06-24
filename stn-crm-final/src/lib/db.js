@@ -215,7 +215,7 @@ export async function getTasks(projectId) {
 }
 export async function getAllTasks(organizationId) {
   const { data, error } = await supabase
-    .from('tasks').select('*, projects!inner(id, name, color, client_id, clients!inner(organization_id))').eq('projects.clients.organization_id', organizationId).order('created_at', { ascending: true })
+    .from('tasks').select('*, projects!inner(id, name, color, client_id, clients!inner(organization_id)), assignee:profiles!tasks_assigned_to_fkey(full_name)').eq('projects.clients.organization_id', organizationId).order('created_at', { ascending: true })
   if (error) throw error
   return data
 }

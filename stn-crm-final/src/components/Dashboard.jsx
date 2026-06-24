@@ -1377,7 +1377,7 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
         <div className="detail-grid">
           <div>
             <div className="sc">
-              <div className="sc-head"><span className="sc-title">Taken</span><TaskModal projectId={project.id} onSave={refreshTasks} trigger={<button className="btn btn-ghost btn-sm">+ Taak</button>} /></div>
+              <div className="sc-head"><span className="sc-title">Taken</span><TaskModal projectId={project.id} onSave={refreshTasks} members={projectMembers} trigger={<button className="btn btn-ghost btn-sm">+ Taak</button>} /></div>
               <div className="sc-body">
                 {!tasks.length ? <div className="empty">Nog geen taken</div> : <>
                   {open.map(t=><TaskItem key={t.id} task={t} onToggle={refreshTasks} onDelete={refreshTasks} />)}
@@ -1476,24 +1476,59 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
 
 function TasksView({ allTasks, showView }) {
   const [filter, setFilter] = useState('open')
-  const filtered = allTasks.filter(t => filter==='all'?true:filter==='done'?t.done:!t.done)
+  const [priorityFilter, setPriorityFilter] = useState('all')
+  const [dueFilter, setDueFilter] = useState('all')
+  const filtered = allTasks.filter(t => {
+    if (filter==='done' ? !t.done : filter==='open' ? t.done : false) return false
+    if (priorityFilter!=='all' && (t.priority||'normaal')!==priorityFilter) return false
+    if (dueFilter!=='all') {
+      const dd = t.due_date ? daysN(t.due_date) : null
+      if (dueFilter==='overdue' && !(dd!==null && dd<0)) return false
+      if (dueFilter==='today' && dd!==0) return false
+      if (dueFilter==='week' && !(dd!==null && dd>=0 && dd<=7)) return false
+    }
+    return true
+  })
+  const PRIO_COLOR = { hoog:'var(--red)', normaal:'var(--blue)', laag:'var(--text-faint)' }
   return (
     <div>
       <div className="topbar"><h2>Alle taken</h2><div className="topbar-right"><div className="tabs"><button className={`tab${filter==='open'?' active':''}`} onClick={()=>setFilter('open')}>Open</button><button className={`tab${filter==='done'?' active':''}`} onClick={()=>setFilter('done')}>Afgerond</button><button className={`tab${filter==='all'?' active':''}`} onClick={()=>setFilter('all')}>Alles</button></div></div></div>
+      <div className="page-toolbar">
+        <select value={priorityFilter} onChange={e=>setPriorityFilter(e.target.value)} style={{width:'auto'}}>
+          <option value="all">Alle prioriteiten</option>
+          <option value="hoog">Hoog</option>
+          <option value="normaal">Midden</option>
+          <option value="laag">Laag</option>
+        </select>
+        <select value={dueFilter} onChange={e=>setDueFilter(e.target.value)} style={{width:'auto'}}>
+          <option value="all">Alle deadlines</option>
+          <option value="overdue">Vervallen</option>
+          <option value="today">Vandaag</option>
+          <option value="week">Deze week</option>
+        </select>
+      </div>
       <div className="content">
         <div className="sc"><div className="sc-body">
-          {!filtered.length ? <div className="empty">Geen taken</div> : filtered.map(t => (
-            <div key={t.id} className="task-item">
-              <div className={`task-check${t.done?' done':''}`} style={{display:'flex',alignItems:'center',justifyContent:'center'}}>{t.done&&<span style={{color:'#fff',fontSize:10}}>✓</span>}</div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13,textDecoration:t.done?'line-through':'none',color:t.done?'var(--text-faint)':'var(--text)'}}>{t.description}</div>
-                <div className="task-meta" style={{cursor:'pointer'}} onClick={()=>showView('project-detail',t.project_id)}>
-                  {t.project&&<span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'1px 7px',borderRadius:99,fontSize:11,fontWeight:500,background:t.project.color+'18',color:t.project.color}}>{t.project.name}</span>}
-                  {t.due_date&&' · '+fdate(t.due_date)}
+          {!filtered.length ? <div className="empty">Geen taken</div> : filtered.map(t => {
+            const dd = t.due_date ? daysN(t.due_date) : null
+            const overdue = dd !== null && dd < 0 && !t.done
+            return (
+              <div key={t.id} className="task-item">
+                <div className={`task-check${t.done?' done':''}`} style={{display:'flex',alignItems:'center',justifyContent:'center'}}>{t.done&&<span style={{color:'#fff',fontSize:10}}>✓</span>}</div>
+                <div style={{flex:1}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{width:6,height:6,borderRadius:'50%',background:PRIO_COLOR[t.priority||'normaal'],flexShrink:0}}></span>
+                    <div style={{fontSize:13,textDecoration:t.done?'line-through':'none',color:t.done?'var(--text-faint)':overdue?'var(--red-text)':'var(--text)'}}>{t.description}</div>
+                  </div>
+                  <div className="task-meta">
+                    {t.project&&<span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'1px 7px',borderRadius:99,fontSize:11,fontWeight:500,background:t.project.color+'18',color:t.project.color,cursor:'pointer'}} onClick={()=>showView('project-detail',t.project_id)}>{t.project.name}</span>}
+                    {t.due_date && <span style={{color:overdue?'var(--red-text)':'inherit',fontWeight:overdue?600:400}}>{overdue?'Te laat · ':''}{fdate(t.due_date)}</span>}
+                    {t.assignee?.full_name && <span style={{display:'inline-flex',alignItems:'center',gap:3}}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{t.assignee.full_name}</span>}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div></div>
       </div>
     </div>
@@ -1817,16 +1852,16 @@ function ClientVisibleCheckbox({ checked, onChange, label = 'Zichtbaar voor klan
   )
 }
 
-function TaskModal({ projectId, onSave, trigger }) {
+function TaskModal({ projectId, onSave, trigger, members = [] }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ description:'', due_date:'', priority:'normaal', visible_to_client:false })
+  const [form, setForm] = useState({ description:'', due_date:'', priority:'normaal', assigned_to:'', visible_to_client:false })
   const f = k => e => setForm(p=>({...p,[k]:e.target.value}))
   async function save() {
     if(!form.description.trim()) return
     setSaving(true)
     try {
-      await db.createTask({ project_id: projectId, description: form.description.trim(), due_date: form.due_date||null, priority: form.priority, done: false, visible_to_client: form.visible_to_client, created_by: 'staff' })
+      await db.createTask({ project_id: projectId, description: form.description.trim(), due_date: form.due_date||null, priority: form.priority, assigned_to: form.assigned_to||null, done: false, visible_to_client: form.visible_to_client, created_by: 'staff' })
       setOpen(false); onSave()
     } catch(e) {
       showToast('Fout bij opslaan: ' + e.message, 'error')
@@ -1835,10 +1870,16 @@ function TaskModal({ projectId, onSave, trigger }) {
     }
   }
   return <>
-    {React.cloneElement(trigger,{onClick:()=>{setForm({description:'',due_date:'',priority:'normaal',visible_to_client:false});setOpen(true)}})}
+    {React.cloneElement(trigger,{onClick:()=>{setForm({description:'',due_date:'',priority:'normaal',assigned_to:'',visible_to_client:false});setOpen(true)}})}
     <Modal open={open} onClose={()=>setOpen(false)} title="Nieuwe taak">
       <FG label="Omschrijving"><textarea value={form.description} onChange={f('description')} autoFocus /></FG>
       <FR><FG label="Deadline"><input type="date" value={form.due_date} onChange={f('due_date')} /></FG><FG label="Prioriteit"><select value={form.priority} onChange={f('priority')}><option value="normaal">Normaal</option><option value="hoog">Hoog</option><option value="laag">Laag</option></select></FG></FR>
+      <FG label="Toegewezen aan">
+        <select value={form.assigned_to} onChange={f('assigned_to')}>
+          <option value="">— Niemand specifiek —</option>
+          {members.map(m=><option key={m.id} value={m.id}>{m.full_name || m.id}</option>)}
+        </select>
+      </FG>
       <ClientVisibleCheckbox checked={form.visible_to_client} onChange={v=>setForm(p=>({...p,visible_to_client:v}))} />
       <ModalActions onCancel={()=>setOpen(false)} onSave={save} saving={saving} />
     </Modal>
