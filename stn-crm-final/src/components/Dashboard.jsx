@@ -154,6 +154,8 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   const [showNewWorkspace, setShowNewWorkspace] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [companySettings, setCompanySettings] = useState(null)
+  const [readNotifKeys, setReadNotifKeys] = useState([])
+  const [notifMenuOpen, setNotifMenuOpen] = useState(false)
 
   function applyProfileTheme(p) {
     if (p.theme) setDarkMode(p.theme === 'dark')
@@ -214,6 +216,36 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     db.getCompanySettings(activeOrgId).then(setCompanySettings).catch(() => setCompanySettings(null))
   }, [activeOrgId])
   useEffect(() => { loadCompanySettings() }, [loadCompanySettings])
+
+  useEffect(() => { db.getReadNotificationKeys().then(setReadNotifKeys).catch(() => {}) }, [])
+
+  const notifications = (() => {
+    const items = []
+    allHosting.forEach(h => {
+      const dd = h.domain_expires ? daysN(h.domain_expires) : null
+      if (dd !== null && dd <= 30) items.push({ key: `domain-${h.id}`, text: `Domein ${h.domain || h.site_name || ''} verloopt ${dd<0?'is verlopen':dd===0?'vandaag':`over ${dd}d`}`, severity: dd<14?'red':'amber', date: h.domain_expires, view: 'hosting' })
+      const sd = h.ssl_expires ? daysN(h.ssl_expires) : null
+      if (sd !== null && sd <= 30) items.push({ key: `ssl-${h.id}`, text: `SSL van ${h.site_name || h.domain || ''} verloopt ${sd<0?'is verlopen':sd===0?'vandaag':`over ${sd}d`}`, severity: sd<14?'red':'amber', date: h.ssl_expires, view: 'hosting' })
+    })
+    allInvoices.forEach(i => {
+      if (i.status !== 'betaald' && i.due_date && daysN(i.due_date) < 0) {
+        items.push({ key: `invoice-${i.id}`, text: `Factuur ${i.invoice_number || i.description} is over de vervaldatum`, severity: 'red', date: i.due_date, view: 'finance' })
+      }
+    })
+    allTasks.forEach(t => {
+      if (!t.done && t.due_date && daysN(t.due_date) < 0) {
+        items.push({ key: `task-${t.id}`, text: `Taak "${t.description}" is over de deadline`, severity: 'red', date: t.due_date, view: 'tasks' })
+      }
+    })
+    return items.sort((a,b) => (a.date||'').localeCompare(b.date||''))
+  })()
+  const unreadNotifications = notifications.filter(n => !readNotifKeys.includes(n.key))
+
+  async function markNotifRead(key) {
+    if (readNotifKeys.includes(key)) return
+    setReadNotifKeys(k => [...k, key])
+    try { await db.markNotificationRead(key) } catch(e) {}
+  }
 
   const orgName = myOrganizations.find(o => o.id === activeOrgId)?.name || ''
   const myRole = myOrganizations.find(o => o.id === activeOrgId)?.myRole
@@ -571,10 +603,34 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
           )}
         </div>
         <div className="topbar-dark-right" onMouseLeave={() => setProfileMenuOpen(false)}>
-          <button className="topbar-dark-icon" aria-label="Meldingen" title="Meldingen">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-          </button>
-          <div className="profile-trigger" onClick={() => { setProfileMenuOpen(o => !o); setOrgMenuOpen(false) }}>
+          <div className="profile-trigger" onMouseLeave={() => setNotifMenuOpen(false)}>
+            <button className="topbar-dark-icon" aria-label="Meldingen" title="Meldingen" style={{position:'relative'}} onClick={() => { setNotifMenuOpen(o => !o); setOrgMenuOpen(false); setProfileMenuOpen(false) }}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+              {unreadNotifications.length > 0 && <span style={{position:'absolute',top:2,right:2,background:'var(--red)',color:'#fff',borderRadius:99,fontSize:9,fontWeight:700,minWidth:14,height:14,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px'}}>{unreadNotifications.length}</span>}
+            </button>
+            {notifMenuOpen && (
+              <div className="profile-menu" style={{width:320,right:0}}>
+                <div style={{padding:'8px 10px',marginBottom:4,borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span style={{fontSize:13,fontWeight:600}}>Meldingen</span>
+                  {unreadNotifications.length > 0 && <span style={{fontSize:11,color:'var(--text-faint)'}}>{unreadNotifications.length} ongelezen</span>}
+                </div>
+                {!notifications.length ? (
+                  <div style={{padding:'16px 10px',fontSize:12,color:'var(--text-faint)',textAlign:'center'}}>Geen meldingen</div>
+                ) : notifications.slice(0,20).map(n => {
+                  const isRead = readNotifKeys.includes(n.key)
+                  return (
+                    <div key={n.key} className="menu-item" style={{alignItems:'flex-start',gap:8,opacity:isRead?0.55:1}}
+                      onClick={() => { markNotifRead(n.key); showView(n.view); setNotifMenuOpen(false) }}
+                    >
+                      <span style={{width:7,height:7,borderRadius:'50%',marginTop:5,flexShrink:0,background:n.severity==='red'?'var(--red)':'var(--amber)'}}></span>
+                      <span style={{fontSize:12,lineHeight:1.4}}>{n.text}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+          <div className="profile-trigger" onClick={() => { setProfileMenuOpen(o => !o); setOrgMenuOpen(false); setNotifMenuOpen(false) }}>
             <div style={{
               width:30,height:30,borderRadius:'50%',flexShrink:0,overflow:'hidden',
               background:'var(--accent)',display:'flex',alignItems:'center',justifyContent:'center',
