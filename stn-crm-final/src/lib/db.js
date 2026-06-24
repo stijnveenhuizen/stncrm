@@ -1,9 +1,9 @@
 import { supabase } from './supabase'
 
 // ── Clients ────────────────────────────────────────────────────────────────────
-export async function getClients() {
+export async function getClients(organizationId) {
   const { data, error } = await supabase
-    .from('clients').select('*').order('created_at', { ascending: false })
+    .from('clients').select('*').eq('organization_id', organizationId).order('created_at', { ascending: false })
   if (error) throw error
   return data
 }
@@ -53,37 +53,46 @@ export async function revokeClientPortal(clientId) {
   return data
 }
 
-// ── Organisaties & team ──────────────────────────────────────────────────────────
+// ── Organisaties & team (een account kan lid zijn van meerdere organisaties) ────
 export async function createOrganization(name) {
-  const existing = await getProfile((await supabase.auth.getUser()).data.user.id)
-  if (existing) throw new Error('Dit account heeft al een team-profiel.')
+  const userId = (await supabase.auth.getUser()).data.user.id
+  // Profiel is nu puur persoonlijke voorkeuren (naam/thema/etc) — los van organisaties.
+  await supabase.from('profiles').upsert({ id: userId }, { onConflict: 'id', ignoreDuplicates: true })
   const { data: org, error: orgErr } = await supabase.from('organizations').insert([{ name }]).select().single()
   if (orgErr) throw orgErr
-  const userId = (await supabase.auth.getUser()).data.user.id
-  const { data: profile, error: profErr } = await supabase
-    .from('profiles').insert([{ id: userId, organization_id: org.id, role: 'owner' }]).select().single()
-  if (profErr) throw profErr
-  return { org, profile }
+  const { data: membership, error: memErr } = await supabase
+    .from('memberships').insert([{ user_id: userId, organization_id: org.id, role: 'owner' }]).select().single()
+  if (memErr) throw memErr
+  return { org, membership }
 }
 export async function linkTeamMemberAccount(organizationId) {
   const userId = (await supabase.auth.getUser()).data.user.id
+  await supabase.from('profiles').upsert({ id: userId }, { onConflict: 'id', ignoreDuplicates: true })
   const { data, error } = await supabase
-    .from('profiles').insert([{ id: userId, organization_id: organizationId, role: 'member' }]).select().single()
+    .from('memberships').insert([{ user_id: userId, organization_id: organizationId, role: 'member' }]).select().single()
   if (error) throw error
   return data
 }
-export async function getOrgMembers() {
-  const { data, error } = await supabase.from('profiles').select('*').order('role', { ascending: true })
+export async function getMyOrganizations() {
+  const { data, error } = await supabase
+    .from('memberships').select('role, organizations(*)').order('created_at', { ascending: true })
   if (error) throw error
-  return data
+  return data.map(m => ({ ...m.organizations, myRole: m.role }))
+}
+export async function getOrgMembers(organizationId) {
+  const { data, error } = await supabase
+    .from('memberships').select('role, profiles(*)').eq('organization_id', organizationId).order('role', { ascending: true })
+  if (error) throw error
+  return data.map(m => ({ ...m.profiles, role: m.role }))
 }
 export async function getOrganization(id) {
   const { data, error } = await supabase.from('organizations').select('*').eq('id', id).single()
   if (error) throw error
   return data
 }
-export async function updateMemberRole(profileId, role) {
-  const { data, error } = await supabase.from('profiles').update({ role }).eq('id', profileId).select().single()
+export async function updateMemberRole(userId, organizationId, role) {
+  const { data, error } = await supabase
+    .from('memberships').update({ role }).eq('user_id', userId).eq('organization_id', organizationId).select().single()
   if (error) throw error
   return data
 }
@@ -107,11 +116,17 @@ export async function adminImpersonate(email) {
 }
 
 // ── Projects ───────────────────────────────────────────────────────────────────
-export async function getProjects() {
-  const { data, error } = await supabase
-    .from('projects').select('*').order('created_at', { ascending: false })
+// Projects hebben zelf geen organization_id (die hangt af van hun klant) — gescoped
+// via een inner join op clients. Projecten zonder klant horen hierdoor bij geen
+// enkele werkruimte (zelfde beperking als de RLS-policy in WORKSPACES_SETUP.sql).
+// organizationId is optioneel: het klantenportaal (ClientPortal.jsx) heeft geen
+// werkruimte-besef, daar regelt RLS (auth_user_id van de klant) de scoping al.
+export async function getProjects(organizationId) {
+  let query = supabase.from('projects').select('*, clients!inner(organization_id)').order('created_at', { ascending: false })
+  if (organizationId) query = query.eq('clients.organization_id', organizationId)
+  const { data, error } = await query
   if (error) throw error
-  return data
+  return data.map(({ clients, ...p }) => p)
 }
 export async function createProject(project) {
   const { data, error } = await supabase.from('projects').insert([project]).select().single()
@@ -135,9 +150,9 @@ export async function getTasks(projectId) {
   if (error) throw error
   return data
 }
-export async function getAllTasks() {
+export async function getAllTasks(organizationId) {
   const { data, error } = await supabase
-    .from('tasks').select('*, projects(id, name, color, client_id)').order('created_at', { ascending: true })
+    .from('tasks').select('*, projects!inner(id, name, color, client_id, clients!inner(organization_id))').eq('projects.clients.organization_id', organizationId).order('created_at', { ascending: true })
   if (error) throw error
   return data
 }
@@ -163,9 +178,9 @@ export async function getInvoices(clientId) {
   if (error) throw error
   return data
 }
-export async function getAllInvoices() {
+export async function getAllInvoices(organizationId) {
   const { data, error } = await supabase
-    .from('invoices').select('*, clients(fname, lname, company)').order('date', { ascending: false })
+    .from('invoices').select('*, clients!inner(fname, lname, company, organization_id)').eq('clients.organization_id', organizationId).order('date', { ascending: false })
   if (error) throw error
   return data
 }
@@ -191,9 +206,9 @@ export async function getRecurring(clientId) {
   if (error) throw error
   return data
 }
-export async function getAllRecurring() {
+export async function getAllRecurring(organizationId) {
   const { data, error } = await supabase
-    .from('recurring').select('*, clients(fname, lname)').order('created_at', { ascending: false })
+    .from('recurring').select('*, clients!inner(fname, lname, organization_id)').eq('clients.organization_id', organizationId).order('created_at', { ascending: false })
   if (error) throw error
   return data
 }
@@ -283,9 +298,9 @@ export function calcMRR(recurringList) {
 }
 
 // ── Hosting ────────────────────────────────────────────────────────────────────
-export async function getAllHosting() {
+export async function getAllHosting(organizationId) {
   const { data, error } = await supabase
-    .from('hosting').select('*, clients(fname, lname, company)').order('domain_expires', { ascending: true, nullsFirst: false })
+    .from('hosting').select('*, clients!inner(fname, lname, company, organization_id)').eq('clients.organization_id', organizationId).order('domain_expires', { ascending: true, nullsFirst: false })
   if (error) throw error
   return data
 }
@@ -352,9 +367,9 @@ export async function getMeetings(clientId) {
   if (error) throw error
   return data
 }
-export async function getAllMeetings() {
+export async function getAllMeetings(organizationId) {
   const { data, error } = await supabase
-    .from('meetings').select('*, clients(fname, lname, company)').order('meeting_date', { ascending: true })
+    .from('meetings').select('*, clients!inner(fname, lname, company, organization_id)').eq('clients.organization_id', organizationId).order('meeting_date', { ascending: true })
   if (error) throw error
   return data
 }
@@ -374,9 +389,9 @@ export async function deleteMeeting(id) {
 }
 
 // ── Pipeline ───────────────────────────────────────────────────────────────────
-export async function getPipeline() {
+export async function getPipeline(organizationId) {
   const { data, error } = await supabase
-    .from('pipeline').select('*').order('created_at', { ascending: false })
+    .from('pipeline').select('*').eq('organization_id', organizationId).order('created_at', { ascending: false })
   if (error) throw error
   return data
 }
@@ -395,7 +410,7 @@ export async function deleteProspect(id) {
   if (error) throw error
 }
 export async function convertToClient(prospect) {
-  // Create client from prospect
+  // Create client from prospect (zelfde organisatie als de lead)
   const { data: client, error } = await supabase.from('clients').insert([{
     fname: prospect.fname,
     lname: prospect.lname,
@@ -403,7 +418,8 @@ export async function convertToClient(prospect) {
     email: prospect.email || null,
     phone: prospect.phone || null,
     website: prospect.website || null,
-    status: 'actief'
+    status: 'actief',
+    organization_id: prospect.organization_id
   }]).select().single()
   if (error) throw error
   // Mark prospect as converted

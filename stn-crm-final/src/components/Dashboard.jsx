@@ -133,7 +133,9 @@ function ModalActions({ onCancel, onSave, saving }) {
 export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }) {
   const [view, setView] = useState('overview')
   const [profile, setProfile] = useState(null)
-  const [orgName, setOrgName] = useState('')
+  const [myOrganizations, setMyOrganizations] = useState([])
+  const [activeOrgId, setActiveOrgId] = useState(null)
+  const [orgsLoaded, setOrgsLoaded] = useState(false)
   const [darkMode, setDarkMode] = useState(() => { try { return localStorage.getItem('stn_theme') === 'dark' } catch(e) { return false } })
   const [curClientId, setCurClientId] = useState(null)
   const [curProjectId, setCurProjectId] = useState(null)
@@ -149,6 +151,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   const [loading, setLoading] = useState(true)
   const [orgMenuOpen, setOrgMenuOpen] = useState(false)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [showNewWorkspace, setShowNewWorkspace] = useState(false)
 
   function applyProfileTheme(p) {
     if (p.theme) setDarkMode(p.theme === 'dark')
@@ -164,23 +167,52 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   }
 
   const loadAll = useCallback(async () => {
+    if (!activeOrgId) return
     try {
       const [c, p, i, r, t, h, m, pl] = await Promise.all([
-        db.getClients(), db.getProjects(), db.getAllInvoices(), db.getAllRecurring(), db.getAllTasks(), db.getAllHosting(), db.getAllMeetings(), db.getPipeline()
+        db.getClients(activeOrgId), db.getProjects(activeOrgId), db.getAllInvoices(activeOrgId), db.getAllRecurring(activeOrgId),
+        db.getAllTasks(activeOrgId), db.getAllHosting(activeOrgId), db.getAllMeetings(activeOrgId), db.getPipeline(activeOrgId)
       ])
       setClients(c); setProjects(p); setAllInvoices(i); setAllRecurring(r); setAllHosting(h); setAllMeetings(m); setPipeline(pl)
       setAllTasks(t.map(task => ({ ...task, project: task.projects })))
     } catch(e) { console.error(e) }
     setLoading(false)
-  }, [])
+  }, [activeOrgId])
 
   useEffect(() => { loadAll() }, [loadAll])
   useEffect(() => { db.getProfile(session.user.id).then(p => { if(p) { setProfile(p); applyProfileTheme(p) } }) }, [session.user.id])
-  const loadMembers = useCallback(() => { db.getOrgMembers().then(setOrgMembers).catch(() => {}) }, [])
+
+  const loadOrganizations = useCallback(() => {
+    db.getMyOrganizations().then(orgs => {
+      setMyOrganizations(orgs)
+      setOrgsLoaded(true)
+      setActiveOrgId(prev => {
+        if (prev && orgs.some(o => o.id === prev)) return prev
+        let stored
+        try { stored = localStorage.getItem('stn_active_org') } catch(e) {}
+        if (stored && orgs.some(o => o.id === stored)) return stored
+        return orgs[0]?.id || null
+      })
+    }).catch(() => setOrgsLoaded(true))
+  }, [])
+  useEffect(() => { loadOrganizations() }, [loadOrganizations])
+
+  function switchOrg(orgId) {
+    setActiveOrgId(orgId)
+    try { localStorage.setItem('stn_active_org', orgId) } catch(e) {}
+    setView('overview')
+    setOrgMenuOpen(false)
+  }
+
+  const loadMembers = useCallback(() => {
+    if (!activeOrgId) return
+    db.getOrgMembers(activeOrgId).then(setOrgMembers).catch(() => {})
+  }, [activeOrgId])
   useEffect(() => { loadMembers() }, [loadMembers])
-  useEffect(() => {
-    if (profile?.organization_id) db.getOrganization(profile.organization_id).then(o => setOrgName(o.name)).catch(() => {})
-  }, [profile?.organization_id])
+
+  const orgName = myOrganizations.find(o => o.id === activeOrgId)?.name || ''
+  const myRole = myOrganizations.find(o => o.id === activeOrgId)?.myRole
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
     try { localStorage.setItem('stn_theme', darkMode ? 'dark' : 'light') } catch(e) {}
@@ -195,7 +227,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
 
   async function logout() { await supabase.auth.signOut() }
 
-  if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--text-muted)',fontSize:13}}>Laden…</div>
+  if (!orgsLoaded) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--text-muted)',fontSize:13}}>Laden…</div>
 
   const curClient = clients.find(c => c.id === curClientId)
   const curProject = projects.find(p => p.id === curProjectId)
@@ -435,6 +467,21 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     }
   `
 
+  if (!myOrganizations.length) return (
+    <ToastProvider>
+      <style>{CSS}</style>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:14}}>
+        <div style={{fontSize:15,fontWeight:600}}>Je hebt nog geen werkruimte</div>
+        <div style={{fontSize:13,color:'var(--text-muted)'}}>Maak een werkruimte aan om klanten en projecten te beheren.</div>
+        <button className="btn btn-primary btn-sm" onClick={() => setShowNewWorkspace(true)}>+ Werkruimte aanmaken</button>
+        <button className="btn btn-ghost btn-xs" onClick={logout}>Uitloggen</button>
+        <NewWorkspaceModal open={showNewWorkspace} onClose={() => setShowNewWorkspace(false)} onCreated={orgId => { loadOrganizations(); switchOrg(orgId) }} />
+      </div>
+    </ToastProvider>
+  )
+
+  if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--text-muted)',fontSize:13}}>Laden…</div>
+
   return (
     <ToastProvider>
     <div className="app">
@@ -448,6 +495,15 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
           </div>
           {orgMenuOpen && (
             <div className="org-menu">
+              <div style={{fontSize:10,fontWeight:600,color:'var(--text-faint)',textTransform:'uppercase',letterSpacing:'.06em',padding:'6px 10px 4px'}}>Werkruimtes</div>
+              {myOrganizations.map(o => (
+                <div key={o.id} className="menu-item" style={{justifyContent:'space-between'}} onClick={() => switchOrg(o.id)}>
+                  <span>{o.name}</span>
+                  {o.id === activeOrgId && <span style={{color:'var(--accent-text)'}}>✓</span>}
+                </div>
+              ))}
+              <div className="menu-item" onClick={() => { setOrgMenuOpen(false); setShowNewWorkspace(true) }}>+ Nieuwe werkruimte</div>
+              <div className="menu-sep"></div>
               <div className="menu-item" onClick={() => { showView('overview'); setOrgMenuOpen(false) }}>Bedrijfsoverzicht</div>
               <div className="menu-sep"></div>
               {!clients.length
@@ -469,7 +525,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
           <button className={`topnav-tab${view==='finance'?' active':''}`} onClick={() => showView('finance')}>Financiën</button>
           <button className={`topnav-tab${view==='hosting'?' active':''}`} onClick={() => showView('hosting')}>Hosting</button>
           <button className={`topnav-tab${view==='pipeline'?' active':''}`} onClick={() => showView('pipeline')}>Pipeline</button>
-          {profile?.role === 'owner' && <button className={`topnav-tab${view==='team'?' active':''}`} onClick={() => showView('team')}>Team</button>}
+          {myRole === 'owner' && <button className={`topnav-tab${view==='team'?' active':''}`} onClick={() => showView('team')}>Team</button>}
         </nav>
         <div className="topnav-right" onMouseLeave={() => setProfileMenuOpen(false)}>
           <div className="profile-trigger" onClick={() => { setProfileMenuOpen(o => !o); setOrgMenuOpen(false) }}>
@@ -505,24 +561,29 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         </div>
       </header>
       <div className="main">
-        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} />}
-        {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
-        {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} members={orgMembers} myProfile={profile} />}
+        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} />}
+        {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
+        {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} members={orgMembers} myRole={myRole} activeOrgId={activeOrgId} />}
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
         {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} />}
         {view==='hosting' && <HostingView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} />}
         {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} />}
-        {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} />}
-        {view==='team' && profile?.role === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} myProfile={profile} />}
+        {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} organizationId={activeOrgId} />}
+        {view==='team' && myRole === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} myProfile={profile} activeOrgId={activeOrgId} />}
       </div>
+      <NewWorkspaceModal
+        open={showNewWorkspace}
+        onClose={() => setShowNewWorkspace(false)}
+        onCreated={orgId => { loadOrganizations(); switchOrg(orgId) }}
+      />
     </div>
     </ToastProvider>
   )
 }
 
-function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, allHosting = [], pipeline = [], totalPaid, totalOpen, totalMRR, showView, onRefresh, myProfile }) {
+function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, allHosting = [], pipeline = [], totalPaid, totalOpen, totalMRR, showView, onRefresh, myProfile, myRole, activeOrgId }) {
   const openTasks = allTasks.filter(t => !t.done)
   const myClients = myProfile ? clients.filter(c => c.assigned_to === myProfile.id) : []
   const pDL = projects.filter(p => p.deadline && p.status !== 'afgerond').map(p => ({ name: p.name, deadline: p.deadline, sub: 'Project', tv: 'project-detail', tid: p.id, color: p.color }))
@@ -536,10 +597,10 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
 
   return (
     <div>
-      <div className="topbar"><h2>Welkom{myProfile?.full_name ? ', ' + myProfile.full_name.split(' ')[0] : ''}</h2><div className="topbar-right"><ClientModal onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Klant</button>} /><ProjectModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-ghost btn-sm">+ Project</button>} /></div></div>
+      <div className="topbar"><h2>Welkom{myProfile?.full_name ? ', ' + myProfile.full_name.split(' ')[0] : ''}</h2><div className="topbar-right"><ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Klant</button>} /><ProjectModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-ghost btn-sm">+ Project</button>} /></div></div>
       <div className="content">
         <div className="stats-grid">
-          <div className="stat-card"><div className="stat-label">Klanten</div><div className="stat-value">{clients.length}</div><div className="stat-sub">{clients.filter(c=>c.status==='actief').length} actief{myProfile?.role!=='owner' && ` · ${myClients.length} aan jou toegewezen`}</div></div>
+          <div className="stat-card"><div className="stat-label">Klanten</div><div className="stat-value">{clients.length}</div><div className="stat-sub">{clients.filter(c=>c.status==='actief').length} actief{myRole!=='owner' && ` · ${myClients.length} aan jou toegewezen`}</div></div>
           <div className="stat-card"><div className="stat-label">Projecten</div><div className="stat-value">{projects.length}</div><div className="stat-sub">{projects.filter(p=>p.status==='actief').length} actief</div></div>
           <div className="stat-card"><div className="stat-label">Omzet betaald</div><div className="stat-value" style={{fontSize:18}}>{money(totalPaid)}</div>{totalOpen>0&&<div className="stat-sub" style={{color:'var(--amber-text)'}}>{money(totalOpen)} nog te ontvangen</div>}</div>
           <div className="stat-card"><div className="stat-label">MRR</div><div className="stat-value" style={{fontSize:18}}>{money(totalMRR)}</div><div className="stat-sub">per maand</div></div>
@@ -640,12 +701,12 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
   )
 }
 
-function ClientsView({ clients, projects, allTasks, showView, onRefresh }) {
+function ClientsView({ clients, projects, allTasks, showView, onRefresh, activeOrgId }) {
   const [q, setQ] = useState('')
   const filtered = clients.filter(c => !q||(c.fname+c.lname+(c.company||'')+(c.email||'')).toLowerCase().includes(q.toLowerCase()))
   return (
     <div>
-      <div className="topbar"><h2>Klanten</h2><div className="topbar-right"><div className="search-wrap"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div><ClientModal onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Nieuwe klant</button>} /></div></div>
+      <div className="topbar"><h2>Klanten</h2><div className="topbar-right"><div className="search-wrap"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div><ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Nieuwe klant</button>} /></div></div>
       <div className="content">
         <div className="sc" style={{padding:0}}>
           <div className="cl-header"><div>Klant</div><div>Contact</div><div>Status</div><div>Omzet</div><div></div></div>
@@ -669,7 +730,7 @@ function ClientsView({ clients, projects, allTasks, showView, onRefresh }) {
   )
 }
 
-function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeetings = [], showView, onRefresh, members = [], myProfile }) {
+function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeetings = [], showView, onRefresh, members = [], myRole, activeOrgId }) {
   const [activeTab, setActiveTab] = useState('projects')
   const [invoices, setInvoices] = useState([])
   const [recurring, setRecurring] = useState([])
@@ -784,7 +845,7 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
                 </div>
               )}
               {activeTab==='hosting' && (
-                <ClientHostingTab clientId={client.id} onRefresh={onRefresh} />
+                <ClientHostingTab clientId={client.id} onRefresh={onRefresh} activeOrgId={activeOrgId} />
               )}
               {activeTab==='meetings' && (
                 <ClientMeetingsTab client={client} onRefresh={onRefresh} />
@@ -819,7 +880,7 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
                   <div className="info-row">
                     <span className="info-label">Toegewezen aan</span>
                     <span className="info-val">
-                      {myProfile?.role === 'owner' ? (
+                      {myRole === 'owner' ? (
                         <select value={client.assigned_to || ''} onChange={e=>db.updateClient(client.id, { assigned_to: e.target.value || null }).then(onRefresh)} style={{fontSize:13,padding:'5px 8px'}}>
                           <option value="">— Niemand specifiek —</option>
                           {members.map(m => <option key={m.id} value={m.id}>{m.full_name || m.id}{m.role==='owner'?' (eigenaar)':''}</option>)}
@@ -1057,7 +1118,7 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
   )
 }
 
-function TeamView({ members, onRefresh, myProfile }) {
+function TeamView({ members, onRefresh, myProfile, activeOrgId }) {
   const [email, setEmail] = useState('')
   const [inviting, setInviting] = useState(false)
   const ownerCount = members.filter(m => m.role === 'owner').length
@@ -1068,7 +1129,7 @@ function TeamView({ members, onRefresh, myProfile }) {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: { shouldCreateUser: true, data: { invite_organization_id: myProfile.organization_id } }
+        options: { shouldCreateUser: true, data: { invite_organization_id: activeOrgId } }
       })
       if (error) throw error
       showToast('Uitnodiging verstuurd naar ' + email)
@@ -1085,7 +1146,7 @@ function TeamView({ members, onRefresh, myProfile }) {
       return showToast('Een organisatie moet minstens één eigenaar hebben.', 'error')
     }
     try {
-      await db.updateMemberRole(member.id, role)
+      await db.updateMemberRole(member.id, activeOrgId, role)
       onRefresh()
       showToast('Rol bijgewerkt')
     } catch (e) {
@@ -1211,6 +1272,30 @@ function RecMenu({ onStatus, onDelete }) {
   )
 }
 
+function NewWorkspaceModal({ open, onClose, onCreated }) {
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+  async function save() {
+    if (!name.trim()) return showToast('Vul een naam in.', 'error')
+    setSaving(true)
+    try {
+      const { org } = await db.createOrganization(name.trim())
+      setName(''); onClose(); onCreated(org.id)
+      showToast('Werkruimte "' + org.name + '" aangemaakt')
+    } catch (e) {
+      showToast('Fout bij aanmaken: ' + e.message, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <Modal open={open} onClose={onClose} title="Nieuwe werkruimte">
+      <FG label="Naam"><input value={name} onChange={e=>setName(e.target.value)} placeholder="Bijv. Tweede bedrijf" autoFocus onKeyDown={e=>e.key==='Enter'&&save()} /></FG>
+      <ModalActions onCancel={onClose} onSave={save} saving={saving} />
+    </Modal>
+  )
+}
+
 function PortalInviteButton({ client }) {
   const [sending, setSending] = useState(false)
   async function send() {
@@ -1228,7 +1313,7 @@ function PortalInviteButton({ client }) {
   return <button className="btn btn-ghost btn-xs" onClick={send} disabled={sending || !client.email}>{sending ? 'Versturen…' : 'Portaaltoegang versturen'}</button>
 }
 
-function ClientModal({ client, onSave, trigger }) {
+function ClientModal({ client, onSave, trigger, activeOrgId }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const init = { fname:'', lname:'', company:'', email:'', phone:'', website:'', status:'actief' }
@@ -1240,7 +1325,7 @@ function ClientModal({ client, onSave, trigger }) {
     setSaving(true)
     try {
       if(client) await db.updateClient(client.id, form)
-      else await db.createClient(form)
+      else await db.createClient({ ...form, organization_id: activeOrgId })
       setOpen(false); onSave(); showToast(client ? 'Klant bijgewerkt' : 'Klant aangemaakt')
     } catch(e) {
       showToast('Fout bij opslaan: ' + e.message, 'error')
@@ -1513,14 +1598,14 @@ function HostingView({ allHosting, clients, showView, onRefresh }) {
 }
 
 // ── Client Hosting Tab ─────────────────────────────────────────────────────────
-function ClientHostingTab({ clientId, onRefresh }) {
+function ClientHostingTab({ clientId, onRefresh, activeOrgId }) {
   const [hosting, setHosting] = useState([])
   const [clients, setClients] = useState([])
 
   useEffect(() => {
     db.getHostingForClient(clientId).then(setHosting)
-    db.getClients().then(setClients)
-  }, [clientId])
+    db.getClients(activeOrgId).then(setClients)
+  }, [clientId, activeOrgId])
 
   const refresh = () => db.getHostingForClient(clientId).then(setHosting)
 

@@ -27,7 +27,7 @@ function ini(p) { return ((p.fname||'?')[0]+(p.lname||'?')[0]).toUpperCase() }
 const AVC=['av-b','av-g','av-p','av-a','av-r','av-t']
 function avColor(p) { const n=p.fname.charCodeAt(0)||0; return AVC[n%AVC.length] }
 
-export default function PipelineView({ showView, onRefresh }) {
+export default function PipelineView({ showView, onRefresh, organizationId }) {
   const [pipeline, setPipeline] = useState([])
   const [openTasks, setOpenTasks] = useState([])
   const [view, setView] = useState('lijst') // lijst | kanban
@@ -38,12 +38,12 @@ export default function PipelineView({ showView, onRefresh }) {
   const [dragging, setDragging] = useState(null)
   const [taskView, setTaskView] = useState(false)
 
-  useEffect(() => { 
-    db.getPipeline().then(setPipeline)
+  useEffect(() => {
+    db.getPipeline(organizationId).then(setPipeline)
     db.getAllPipelineTasks().then(setOpenTasks)
-  }, [])
+  }, [organizationId])
   const refresh = () => {
-    db.getPipeline().then(setPipeline)
+    db.getPipeline(organizationId).then(setPipeline)
     db.getAllPipelineTasks().then(setOpenTasks)
   }
 
@@ -180,6 +180,7 @@ export default function PipelineView({ showView, onRefresh }) {
       {showModal && (
         <ProspectModal
           prospect={editProspect}
+          organizationId={organizationId}
           onClose={() => setShowModal(false)}
           onSave={() => { refresh(); setShowModal(false) }}
         />
@@ -322,7 +323,7 @@ function KanbanView({ pipeline, onDragStart, onDrop, dragging, onEdit, onConvert
 }
 
 // ── Prospect Modal ─────────────────────────────────────────────────────────────
-function ProspectModal({ prospect, onClose, onSave }) {
+function ProspectModal({ prospect, organizationId, onClose, onSave }) {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     fname: prospect?.fname || '',
@@ -347,7 +348,7 @@ function ProspectModal({ prospect, onClose, onSave }) {
     try {
       const data = { ...form, deal_value: form.deal_value ? parseFloat(form.deal_value) : null, last_contact: form.last_contact || null, next_followup: form.next_followup || null }
       if (prospect) await db.updateProspect(prospect.id, data)
-      else await db.createProspect(data)
+      else await db.createProspect({ ...data, organization_id: organizationId })
       onSave()
     } catch(e) { alert('Fout: ' + e.message) }
     finally { setSaving(false) }

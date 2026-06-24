@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
 import * as db from '../lib/db'
-import { supabase } from '../lib/supabase'
 
 const ACCENT_COLORS = [
   { name: 'STN Groen', value: '#3db68e' },
@@ -19,9 +18,6 @@ export default function ProfileView({ session, onProfileUpdate }) {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [msg, setMsg] = useState('')
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviting, setInviting] = useState(false)
-  const [inviteMsg, setInviteMsg] = useState('')
   const fileRef = useRef()
 
   useEffect(() => {
@@ -66,29 +62,6 @@ export default function ProfileView({ session, onProfileUpdate }) {
       setMsg('Fout bij uploaden: ' + e.message)
     } finally {
       setUploading(false)
-    }
-  }
-
-  async function handleInvite(e) {
-    e.preventDefault()
-    if (!inviteEmail.trim()) return
-    if (!profile?.organization_id) { setInviteMsg('Fout: geen team-organisatie gevonden voor je account.'); return }
-    setInviting(true)
-    setInviteMsg('')
-    try {
-      // Use Supabase magic link instead of admin invite (works without service key)
-      const { error } = await supabase.auth.signInWithOtp({
-        email: inviteEmail.trim(),
-        options: { shouldCreateUser: true, data: { invite_organization_id: profile.organization_id } }
-      })
-      if (error) throw error
-      setInviteMsg('Uitnodiging verstuurd naar ' + inviteEmail)
-      setInviteEmail('')
-      setTimeout(() => setInviteMsg(''), 5000)
-    } catch(e) {
-      setInviteMsg('Fout: ' + e.message)
-    } finally {
-      setInviting(false)
     }
   }
 
@@ -230,39 +203,6 @@ export default function ProfileView({ session, onProfileUpdate }) {
               <button className="btn btn-primary" onClick={saveProfile} disabled={saving}>
                 {saving ? 'Opslaan…' : 'Instellingen opslaan'}
               </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Gebruikers uitnodigen */}
-        <div className="sc">
-          <div className="sc-head"><span className="sc-title">Gebruikers uitnodigen</span></div>
-          <div className="sc-body">
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-              Stuur een uitnodigingslink naar een collega. Zij kunnen daarna inloggen en het dashboard gebruiken.
-            </p>
-            <form onSubmit={handleInvite} style={{ display: 'flex', gap: 10 }}>
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={e => setInviteEmail(e.target.value)}
-                placeholder="collega@bedrijf.nl"
-                style={{ flex: 1 }}
-                required
-              />
-              <button type="submit" className="btn btn-primary" disabled={inviting} style={{ flexShrink: 0 }}>
-                {inviting ? 'Versturen…' : 'Uitnodigen'}
-              </button>
-            </form>
-            {inviteMsg && (
-              <div style={{
-                background: inviteMsg.startsWith('Fout') ? 'var(--red-soft)' : 'var(--green-soft)',
-                color: inviteMsg.startsWith('Fout') ? 'var(--red-text)' : 'var(--green-text)',
-                borderRadius: 'var(--rsm)', padding: '9px 12px', fontSize: 13, marginTop: 12
-              }}>{inviteMsg}</div>
-            )}
-            <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--bg2)', borderRadius: 'var(--rsm)', fontSize: 12, color: 'var(--text-muted)' }}>
-              De uitgenodigde persoon ontvangt een e-mail met een inloglink. Ze hoeven geen wachtwoord in te stellen — de link logt ze direct in.
             </div>
           </div>
         </div>
