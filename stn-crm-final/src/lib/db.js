@@ -88,6 +88,24 @@ export async function updateMemberRole(profileId, role) {
   return data
 }
 
+// ── Platform-admin (impersonatie) ───────────────────────────────────────────────
+async function authedFetch(path, options = {}) {
+  const { data } = await supabase.auth.getSession()
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token}`, ...(options.headers || {}) }
+  })
+  const body = await res.json()
+  if (!res.ok) throw new Error(body.error || 'Serverfout')
+  return body
+}
+export async function adminListAccounts() {
+  return authedFetch('/api/admin-list-accounts')
+}
+export async function adminImpersonate(email) {
+  return authedFetch('/api/admin-impersonate', { method: 'POST', body: JSON.stringify({ email }) })
+}
+
 // ── Projects ───────────────────────────────────────────────────────────────────
 export async function getProjects() {
   const { data, error } = await supabase

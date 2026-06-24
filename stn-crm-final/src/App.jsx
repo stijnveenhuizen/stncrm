@@ -5,6 +5,9 @@ import Login from './components/Login.jsx'
 import Signup from './components/Signup.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import ClientPortal from './components/ClientPortal.jsx'
+import AdminPanel from './components/AdminPanel.jsx'
+
+const ADMIN_SESSION_KEY = 'stn_admin_original_session'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -13,6 +16,24 @@ export default function App() {
   const [roleError, setRoleError] = useState(false)
   const [showSignup, setShowSignup] = useState(false)
   const [fatalError, setFatalError] = useState('')
+  const [showAdminPanel, setShowAdminPanel] = useState(false)
+  const [restoringSession, setRestoringSession] = useState(false)
+
+  const isPlatformAdmin = !!session?.user?.email && session.user.email === import.meta.env.VITE_PLATFORM_ADMIN_EMAIL
+  const impersonationActive = !!sessionStorage.getItem(ADMIN_SESSION_KEY)
+
+  async function stopImpersonating() {
+    const raw = sessionStorage.getItem(ADMIN_SESSION_KEY)
+    if (!raw) return
+    setRestoringSession(true)
+    try {
+      const { access_token, refresh_token } = JSON.parse(raw)
+      await supabase.auth.setSession({ access_token, refresh_token })
+    } finally {
+      sessionStorage.removeItem(ADMIN_SESSION_KEY)
+      setRestoringSession(false)
+    }
+  }
 
   async function resolveRole(session) {
     if (!session) { setRole(null); return }
@@ -77,7 +98,18 @@ export default function App() {
     </div>
   )
 
-  if (role === 'staff') return <Dashboard session={session} />
-  if (role && role.client) return <ClientPortal session={session} client={role.client} />
+  if (showAdminPanel) return <AdminPanel onClose={() => setShowAdminPanel(false)} onImpersonated={() => setShowAdminPanel(false)} />
+
+  const banner = impersonationActive && (
+    <div style={{background:'var(--amber)',color:'#1a1a18',fontSize:13,fontWeight:600,textAlign:'center',padding:'8px 16px',display:'flex',alignItems:'center',justifyContent:'center',gap:12,position:'sticky',top:0,zIndex:200}}>
+      <span>Je kijkt als {session.user.email}</span>
+      <button onClick={stopImpersonating} disabled={restoringSession} style={{padding:'4px 10px',borderRadius:6,border:'1px solid rgba(0,0,0,.25)',background:'rgba(255,255,255,.4)',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+        {restoringSession ? 'Terugschakelen…' : 'Stop impersoneren'}
+      </button>
+    </div>
+  )
+
+  if (role === 'staff') return <>{banner}<Dashboard session={session} isPlatformAdmin={isPlatformAdmin} onOpenAdminPanel={() => setShowAdminPanel(true)} /></>
+  if (role && role.client) return <>{banner}<ClientPortal session={session} client={role.client} /></>
   return null
 }

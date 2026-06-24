@@ -130,7 +130,7 @@ function ModalActions({ onCancel, onSave, saving }) {
   )
 }
 
-export default function Dashboard({ session }) {
+export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }) {
   const [view, setView] = useState('overview')
   const [profile, setProfile] = useState(null)
   const [orgName, setOrgName] = useState('')
@@ -491,6 +491,7 @@ export default function Dashboard({ session }) {
                 <div style={{fontSize:11,color:'var(--text-faint)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{session.user.email}</div>
               </div>
               <div className="menu-item" onClick={() => { showView('profile'); setProfileMenuOpen(false) }}>Profiel</div>
+              {isPlatformAdmin && <div className="menu-item" onClick={() => { setProfileMenuOpen(false); onOpenAdminPanel() }}>Platform-admin</div>}
               <div className="menu-item" style={{justifyContent:'space-between',cursor:'default'}}>
                 <span>Donker thema</span>
                 <button className={darkMode ? 'theme-toggle dark' : 'theme-toggle'} onClick={() => setDarkMode(!darkMode)} title={darkMode ? 'Licht thema' : 'Donker thema'}>
