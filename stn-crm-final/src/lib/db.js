@@ -22,6 +22,32 @@ export async function deleteClient(id) {
   if (error) throw error
 }
 
+// ── Client portal ──────────────────────────────────────────────────────────────
+export async function inviteClientPortal(client) {
+  const { data, error } = await supabase.auth.signInWithOtp({
+    email: client.email,
+    options: { shouldCreateUser: true, emailRedirectTo: window.location.origin, data: { portal_client_id: client.id } }
+  })
+  if (error) throw error
+  return data
+}
+export async function linkClientPortalAccount(clientId) {
+  const { data, error } = await supabase.from('clients').update({ auth_user_id: (await supabase.auth.getUser()).data.user.id }).eq('id', clientId).select().single()
+  if (error) throw error
+  return data
+}
+export async function getClientByAuthUserId(authUserId) {
+  const { data, error } = await supabase.from('clients').select('*').eq('auth_user_id', authUserId).maybeSingle()
+  if (error) throw error
+  return data
+}
+export async function getClientHosting(clientId) {
+  const { data, error } = await supabase
+    .from('client_hosting').select('*').eq('client_id', clientId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
 // ── Projects ───────────────────────────────────────────────────────────────────
 export async function getProjects() {
   const { data, error } = await supabase

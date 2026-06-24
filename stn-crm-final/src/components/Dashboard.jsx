@@ -4,10 +4,10 @@ import * as db from '../lib/db'
 import ProfileView from './ProfileView.jsx'
 import PipelineView from './PipelineView.jsx'
 
-const money = n => '€\u202f' + Number(n).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fdate = d => { if (!d) return '—'; return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) }
-const today = () => new Date().toISOString().slice(0, 10)
-const daysN = d => { if (!d) return null; return Math.ceil((new Date(d) - new Date(today())) / 86400000) }
+export const money = n => '€\u202f' + Number(n).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+export const fdate = d => { if (!d) return '—'; return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) }
+export const today = () => new Date().toISOString().slice(0, 10)
+export const daysN = d => { if (!d) return null; return Math.ceil((new Date(d) - new Date(today())) / 86400000) }
 const AVC = ['av-b','av-g','av-p','av-a','av-r','av-t']
 const avC = id => { const n = parseInt(String(id).replace(/-/g,'').slice(0,8), 16); return AVC[n % AVC.length] }
 const ini = c => ((c.fname||'?')[0] + (c.lname||'?')[0]).toUpperCase()
@@ -15,9 +15,9 @@ const PROJ_COLORS = ['#2563eb','#7c3aed','#0d9488','#d97706','#dc2626','#16a34a'
 const FREQ_MONTHS = { maandelijks: 1, kwartaallijks: 3, jaarlijks: 12 }
 
 let _toastFn = null
-function showToast(msg, type = 'success') { if (_toastFn) _toastFn(msg, type) }
+export function showToast(msg, type = 'success') { if (_toastFn) _toastFn(msg, type) }
 
-function ToastProvider({ children }) {
+export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
   useEffect(() => {
     _toastFn = (msg, type) => {
@@ -46,12 +46,12 @@ function ToastProvider({ children }) {
   )
 }
 
-function Badge({ s }) {
+export function Badge({ s }) {
   const m = { actief:'bg-green',prospect:'bg-blue',inactief:'bg-gray',betaald:'bg-green',verzonden:'bg-blue','te laat':'bg-red',concept:'bg-gray','on-hold':'bg-amber',afgerond:'bg-green',hoog:'bg-red',laag:'bg-gray',normaal:'bg-blue',gepauzeerd:'bg-amber',gestopt:'bg-gray',maandelijks:'bg-teal',kwartaallijks:'bg-purple',jaarlijks:'bg-blue' }
   return <span className={`badge ${m[s]||'bg-gray'}`}>{s}</span>
 }
 
-function MeetingTypeIcon({ type, size = 14 }) {
+export function MeetingTypeIcon({ type, size = 14 }) {
   const p = { width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:2, strokeLinecap:'round', strokeLinejoin:'round' }
   if (type === 'videocall') return <svg {...p}><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
   if (type === 'bel') return <svg {...p}><path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"/></svg>
@@ -59,7 +59,33 @@ function MeetingTypeIcon({ type, size = 14 }) {
   return <svg {...p}><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
 }
 
-function EyeIcon({ off, size = 13 }) {
+export function buildMeetingCalendarUrl(m, client) {
+  const base = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+  const title = encodeURIComponent(m.title + ' — ' + client.fname + ' ' + client.lname)
+  const date = m.meeting_date.replace(/-/g, '')
+  let dates = ''
+  if (m.meeting_time) {
+    const [h, min] = m.meeting_time.split(':')
+    const start = date + 'T' + h.padStart(2,'0') + min.padStart(2,'0') + '00'
+    const endMin = parseInt(min) + (m.duration_minutes % 60)
+    const endH = parseInt(h) + Math.floor(m.duration_minutes / 60) + Math.floor(endMin / 60)
+    const end = date + 'T' + String(endH).padStart(2,'0') + String(endMin % 60).padStart(2,'0') + '00'
+    dates = `&dates=${start}/${end}`
+  } else {
+    dates = `&dates=${date}/${date}`
+  }
+  const details = encodeURIComponent([
+    m.notes || '',
+    m.location ? 'Locatie: ' + m.location : '',
+    'Klant: ' + client.fname + ' ' + client.lname,
+    client.email ? 'Email: ' + client.email : '',
+    client.phone ? 'Tel: ' + client.phone : ''
+  ].filter(Boolean).join('\n'))
+  const location = m.location ? '&location=' + encodeURIComponent(m.location) : ''
+  return `${base}&text=${title}${dates}&details=${details}${location}`
+}
+
+export function EyeIcon({ off, size = 13 }) {
   const p = { width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:2, strokeLinecap:'round', strokeLinejoin:'round' }
   if (off) return <svg {...p}><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
   return <svg {...p}><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
@@ -740,7 +766,7 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
                     {!notes.length ? <div className="empty">Geen notities</div> : notes.map(n => (
                       <div key={n.id} style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
                         <div style={{fontSize:13,lineHeight:1.6}}>{n.content.split('\n').map((l,i)=><span key={i}>{l}<br/></span>)}</div>
-                        <div style={{display:'flex',justifyContent:'space-between',marginTop:5}}><div style={{fontSize:11,color:'var(--text-faint)'}}>{fdate(n.created_at?.slice(0,10))}</div><button onClick={()=>db.deleteNote(n.id).then(refreshNotes)} style={{fontSize:11,color:'var(--text-faint)',cursor:'pointer'}}>Verwijderen</button></div>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:5}}><div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:'var(--text-faint)'}}>{fdate(n.created_at?.slice(0,10))}{n.visible_to_client&&<span style={{display:'inline-flex',alignItems:'center',gap:3,color:'var(--accent-text)'}}><EyeIcon size={11} /> Klant</span>}</div><button onClick={()=>db.deleteNote(n.id).then(refreshNotes)} style={{fontSize:11,color:'var(--text-faint)',cursor:'pointer'}}>Verwijderen</button></div>
                       </div>
                     ))}
                   </div>
@@ -758,6 +784,10 @@ function ClientDetailView({ client, projects, allTasks, showView, onRefresh }) {
                   {client.email&&<div className="info-row"><span className="info-label">E-mail</span><a href={`mailto:${client.email}`} style={{color:'var(--blue-text)',fontSize:13}}>{client.email}</a></div>}
                   {client.phone&&<div className="info-row"><span className="info-label">Telefoon</span><span className="info-val">{client.phone}</span></div>}
                   {client.website&&<div className="info-row"><span className="info-label">Website</span><a href={client.website} target="_blank" rel="noreferrer" style={{color:'var(--blue-text)',fontSize:13}}>{client.website}</a></div>}
+                </div>
+                <div style={{marginTop:14,paddingTop:12,borderTop:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                  <span className={`badge ${client.auth_user_id?'bg-green':'bg-gray'}`}>{client.auth_user_id?'Portaal actief':'Geen portaaltoegang'}</span>
+                  {!client.auth_user_id && <PortalInviteButton client={client} />}
                 </div>
               </div>
             </div>
@@ -987,7 +1017,11 @@ function TaskItem({ task, onToggle, onDelete }) {
       >{task.done&&<span style={{color:'#fff',fontSize:10}}>✓</span>}</button>
       <div style={{flex:1}}>
         <div style={{fontSize:13,textDecoration:task.done?'line-through':'none',color:task.done?'var(--text-faint)':'var(--text)'}}>{task.description}</div>
-        {task.due_date&&<div className="task-meta">{fdate(task.due_date)}</div>}
+        <div className="task-meta">
+          {task.due_date&&<span>{fdate(task.due_date)}</span>}
+          {task.visible_to_client&&<span style={{display:'inline-flex',alignItems:'center',gap:3,color:'var(--accent-text)'}}><EyeIcon size={11} /> Klant</span>}
+          {task.created_by==='client'&&<span className="badge bg-blue" style={{fontSize:10}}>Via klant</span>}
+        </div>
       </div>
       <button type="button" className="task-del" onClick={del} aria-label={`Taak "${task.description}" verwijderen`}>×</button>
     </div>
@@ -997,15 +1031,23 @@ function TaskItem({ task, onToggle, onDelete }) {
 function QuickTaskAdd({ projectId, onAdd }) {
   const [desc, setDesc] = useState('')
   const [date, setDate] = useState('')
+  const [visible, setVisible] = useState(false)
   async function add() {
     if (!desc.trim()) return
-    await db.createTask({ project_id: projectId, description: desc.trim(), due_date: date||null, priority: 'normaal', done: false })
+    await db.createTask({ project_id: projectId, description: desc.trim(), due_date: date||null, priority: 'normaal', done: false, visible_to_client: visible, created_by: 'staff' })
     setDesc(''); setDate(''); onAdd()
   }
   return (
     <div className="quick-add">
       <input type="text" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Snel taak toevoegen…" onKeyDown={e=>e.key==='Enter'&&add()} />
       <input type="date" value={date} onChange={e=>setDate(e.target.value)} />
+      <button
+        type="button"
+        onClick={()=>setVisible(v=>!v)}
+        aria-label={visible ? 'Zichtbaar voor klant — klik om te verbergen' : 'Niet zichtbaar voor klant — klik om te tonen'}
+        title={visible ? 'Zichtbaar voor klant' : 'Niet zichtbaar voor klant'}
+        style={{color: visible ? 'var(--accent-text)' : 'var(--text-faint)', display:'flex',alignItems:'center',padding:'0 6px'}}
+      ><EyeIcon off={!visible} /></button>
       <button className="btn btn-ghost btn-sm" onClick={add}>Voeg toe</button>
     </div>
   )
@@ -1037,6 +1079,23 @@ function RecMenu({ onStatus, onDelete }) {
       </div>}
     </div>
   )
+}
+
+function PortalInviteButton({ client }) {
+  const [sending, setSending] = useState(false)
+  async function send() {
+    if (!client.email) return showToast('Vul eerst een e-mailadres in.', 'error')
+    setSending(true)
+    try {
+      await db.inviteClientPortal(client)
+      showToast('Portaaluitnodiging verstuurd naar ' + client.email)
+    } catch (e) {
+      showToast('Fout bij versturen: ' + e.message, 'error')
+    } finally {
+      setSending(false)
+    }
+  }
+  return <button className="btn btn-ghost btn-xs" onClick={send} disabled={sending || !client.email}>{sending ? 'Versturen…' : 'Portaaltoegang versturen'}</button>
 }
 
 function ClientModal({ client, onSave, trigger }) {
@@ -1116,16 +1175,25 @@ function ProjectModal({ project, clients, defaultClientId, onSave, trigger }) {
   </>
 }
 
+function ClientVisibleCheckbox({ checked, onChange, label = 'Zichtbaar voor klant' }) {
+  return (
+    <label style={{display:'flex',alignItems:'center',gap:7,cursor:'pointer',fontSize:12,fontWeight:600,color:'var(--text-muted)',textTransform:'none',letterSpacing:0,marginBottom:14}}>
+      <input type="checkbox" checked={checked} onChange={e=>onChange(e.target.checked)} style={{width:15,height:15}} />
+      {label}
+    </label>
+  )
+}
+
 function TaskModal({ projectId, onSave, trigger }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ description:'', due_date:'', priority:'normaal' })
+  const [form, setForm] = useState({ description:'', due_date:'', priority:'normaal', visible_to_client:false })
   const f = k => e => setForm(p=>({...p,[k]:e.target.value}))
   async function save() {
     if(!form.description.trim()) return
     setSaving(true)
     try {
-      await db.createTask({ project_id: projectId, description: form.description.trim(), due_date: form.due_date||null, priority: form.priority, done: false })
+      await db.createTask({ project_id: projectId, description: form.description.trim(), due_date: form.due_date||null, priority: form.priority, done: false, visible_to_client: form.visible_to_client, created_by: 'staff' })
       setOpen(false); onSave()
     } catch(e) {
       showToast('Fout bij opslaan: ' + e.message, 'error')
@@ -1134,10 +1202,11 @@ function TaskModal({ projectId, onSave, trigger }) {
     }
   }
   return <>
-    {React.cloneElement(trigger,{onClick:()=>{setForm({description:'',due_date:'',priority:'normaal'});setOpen(true)}})}
+    {React.cloneElement(trigger,{onClick:()=>{setForm({description:'',due_date:'',priority:'normaal',visible_to_client:false});setOpen(true)}})}
     <Modal open={open} onClose={()=>setOpen(false)} title="Nieuwe taak">
       <FG label="Omschrijving"><textarea value={form.description} onChange={f('description')} autoFocus /></FG>
       <FR><FG label="Deadline"><input type="date" value={form.due_date} onChange={f('due_date')} /></FG><FG label="Prioriteit"><select value={form.priority} onChange={f('priority')}><option value="normaal">Normaal</option><option value="hoog">Hoog</option><option value="laag">Laag</option></select></FG></FR>
+      <ClientVisibleCheckbox checked={form.visible_to_client} onChange={v=>setForm(p=>({...p,visible_to_client:v}))} />
       <ModalActions onCancel={()=>setOpen(false)} onSave={save} saving={saving} />
     </Modal>
   </>
@@ -1204,16 +1273,18 @@ function NoteModal({ clientId, onSave, trigger }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [content, setContent] = useState('')
+  const [visible, setVisible] = useState(false)
   async function save() {
     if(!content.trim()) return
     setSaving(true)
-    await db.createNote({ client_id: clientId, content: content.trim() })
+    await db.createNote({ client_id: clientId, content: content.trim(), visible_to_client: visible })
     setSaving(false); setOpen(false); onSave()
   }
   return <>
-    {React.cloneElement(trigger,{onClick:()=>{setContent('');setOpen(true)}})}
+    {React.cloneElement(trigger,{onClick:()=>{setContent('');setVisible(false);setOpen(true)}})}
     <Modal open={open} onClose={()=>setOpen(false)} title="Nieuwe notitie">
       <FG label="Notitie"><textarea value={content} onChange={e=>setContent(e.target.value)} rows={5} autoFocus /></FG>
+      <ClientVisibleCheckbox checked={visible} onChange={setVisible} />
       <ModalActions onCancel={()=>setOpen(false)} onSave={save} saving={saving} />
     </Modal>
   </>
@@ -1494,37 +1565,13 @@ function ClientMeetingsTab({ client, onRefresh }) {
   const [meetings, setMeetings] = useState([])
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ title:'', meeting_date:'', meeting_time:'', duration_minutes:60, type:'videocall', location:'', notes:'', status:'gepland' })
+  const [form, setForm] = useState({ title:'', meeting_date:'', meeting_time:'', duration_minutes:60, type:'videocall', location:'', notes:'', status:'gepland', visible_to_client:true })
   const f = k => e => setForm(p => ({...p, [k]: e.target.value}))
 
   useEffect(() => { db.getMeetings(client.id).then(setMeetings) }, [client.id])
   const refresh = () => db.getMeetings(client.id).then(setMeetings)
 
-  function buildCalendarUrl(m) {
-    const base = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
-    const title = encodeURIComponent(m.title + ' — ' + client.fname + ' ' + client.lname)
-    const date = m.meeting_date.replace(/-/g, '')
-    let dates = ''
-    if (m.meeting_time) {
-      const [h, min] = m.meeting_time.split(':')
-      const start = date + 'T' + h.padStart(2,'0') + min.padStart(2,'0') + '00'
-      const endMin = parseInt(min) + (m.duration_minutes % 60)
-      const endH = parseInt(h) + Math.floor(m.duration_minutes / 60) + Math.floor(endMin / 60)
-      const end = date + 'T' + String(endH).padStart(2,'0') + String(endMin % 60).padStart(2,'0') + '00'
-      dates = `&dates=${start}/${end}`
-    } else {
-      dates = `&dates=${date}/${date}`
-    }
-    const details = encodeURIComponent([
-      m.notes || '',
-      m.location ? 'Locatie: ' + m.location : '',
-      'Klant: ' + client.fname + ' ' + client.lname,
-      client.email ? 'Email: ' + client.email : '',
-      client.phone ? 'Tel: ' + client.phone : ''
-    ].filter(Boolean).join('\n'))
-    const location = m.location ? '&location=' + encodeURIComponent(m.location) : ''
-    return `${base}&text=${title}${dates}&details=${details}${location}`
-  }
+  const buildCalendarUrl = m => buildMeetingCalendarUrl(m, client)
 
   async function saveMeeting() {
     if (!form.title.trim() || !form.meeting_date) return showToast('Vul een titel en datum in.','error')
@@ -1532,7 +1579,7 @@ function ClientMeetingsTab({ client, onRefresh }) {
     try {
       await db.createMeeting({ client_id: client.id, ...form, duration_minutes: parseInt(form.duration_minutes) || 60 })
       setShowModal(false)
-      setForm({ title:'', meeting_date:'', meeting_time:'', duration_minutes:60, type:'videocall', location:'', notes:'', status:'gepland' })
+      setForm({ title:'', meeting_date:'', meeting_time:'', duration_minutes:60, type:'videocall', location:'', notes:'', status:'gepland', visible_to_client:true })
       refresh()
     } catch(e) { showToast('Fout: ' + e.message, 'error') }
     finally { setSaving(false) }
@@ -1595,6 +1642,7 @@ function ClientMeetingsTab({ client, onRefresh }) {
             </div>
             <div className="form-group"><label>Locatie / link</label><input value={form.location} onChange={f('location')} placeholder="Bijv. https://meet.google.com/… of adres" /></div>
             <div className="form-group"><label>Notities</label><textarea value={form.notes} onChange={f('notes')} rows={3} placeholder="Agendapunten, voorbereiding…" /></div>
+            <ClientVisibleCheckbox checked={form.visible_to_client} onChange={v=>setForm(p=>({...p,visible_to_client:v}))} />
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setShowModal(false)}>Annuleren</button>
               <button className="btn btn-primary" onClick={saveMeeting} disabled={saving}>{saving ? 'Opslaan…' : 'Opslaan'}</button>
@@ -1634,6 +1682,7 @@ function MeetingRow({ m, past, onToggle, onDelete, calUrl }) {
           <MeetingTypeIcon type={m.type} /> {m.title}
           {isToday && <span className="badge bg-green" style={{fontSize:10}}>Vandaag</span>}
           {isTomorrow && <span className="badge bg-amber" style={{fontSize:10}}>Morgen</span>}
+          {!m.visible_to_client && <span style={{fontSize:10,color:'var(--text-faint)'}} title="Niet zichtbaar voor klant">(intern)</span>}
         </div>
         <div style={{fontSize:11,color:'var(--text-faint)',marginTop:2}}>
           {m.meeting_time ? m.meeting_time.slice(0,5) + ' · ' : ''}{m.duration_minutes} min
