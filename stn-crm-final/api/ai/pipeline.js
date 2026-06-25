@@ -20,7 +20,7 @@ async function callGroq(prompt, { system, temperature = 0.4 } = {}) {
   return (data.choices?.[0]?.message?.content || '').trim()
 }
 
-const DAILY_LIMIT = 10
+const DAILY_LIMIT = 50
 const SYSTEM_PROMPT = 'Je antwoordt altijd direct en zakelijk in het Nederlands, zonder inleidende zinnen zoals "Hier is..." of "Natuurlijk,". Geen markdown-opmaak, geen opsommingen, gewoon platte tekst.'
 
 // Bepaalt rot-status (zelfde logica als db.rotLevel/daysInStage client-side) zodat
