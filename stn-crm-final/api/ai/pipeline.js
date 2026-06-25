@@ -73,7 +73,7 @@ module.exports = async (req, res) => {
       const e = new Error('AI is niet geconfigureerd op de server (GEMINI_API_KEY ontbreekt).'); e.status = 500; throw e
     }
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
     const prompt = buildPrompt(type, payload)
     const result = await model.generateContent(prompt)
     const text = result.response.text().trim()
