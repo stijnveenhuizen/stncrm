@@ -1,5 +1,25 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai')
 const { requireUser } = require('../_shared')
+
+// Groq biedt een écht gratis API-tier (geen betaalmethode nodig), in
+// tegenstelling tot Gemini waar de gratis tier voor EU/EEA-accounts op 0 staat.
+// OpenAI-compatibele chat-completions endpoint, dus geen extra SDK nodig.
+async function callGroq(prompt) {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.4,
+    }),
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    const e = new Error(`Groq-fout (${res.status}): ${body.slice(0, 300)}`); e.status = 502; throw e
+  }
+  const data = await res.json()
+  return (data.choices?.[0]?.message?.content || '').trim()
+}
 
 const DAILY_LIMIT = 10
 
@@ -69,14 +89,11 @@ module.exports = async (req, res) => {
       return res.status(429).json({ error: `Je hebt vandaag het maximum aantal AI-analyses bereikt (${DAILY_LIMIT}/${DAILY_LIMIT}). Morgen kun je weer verder.` })
     }
 
-    if (!process.env.GEMINI_API_KEY) {
-      const e = new Error('AI is niet geconfigureerd op de server (GEMINI_API_KEY ontbreekt).'); e.status = 500; throw e
+    if (!process.env.GROQ_API_KEY) {
+      const e = new Error('AI is niet geconfigureerd op de server (GROQ_API_KEY ontbreekt).'); e.status = 500; throw e
     }
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
     const prompt = buildPrompt(type, payload)
-    const result = await model.generateContent(prompt)
-    const text = result.response.text().trim()
+    const text = await callGroq(prompt)
 
     if (usage) await service.from('ai_usage').update({ count: usage.count + 1 }).eq('user_id', user.id).eq('date', today)
     else await service.from('ai_usage').insert([{ user_id: user.id, date: today, count: 1 }])

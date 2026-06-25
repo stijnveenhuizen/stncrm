@@ -853,7 +853,7 @@ export async function duplicateProspect(prospect, options) {
   return copy
 }
 
-// ── AI-assistent (Gemini, via server-side route) ────────────────────────────────
+// ── AI-assistent (Groq/Llama, via server-side route) ────────────────────────────
 export async function callPipelineAI(type, payload) {
   return authedFetch('/api/ai/pipeline', { method: 'POST', body: JSON.stringify({ type, ...payload }) })
 }
