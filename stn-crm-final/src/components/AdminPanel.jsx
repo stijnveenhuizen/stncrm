@@ -2,17 +2,27 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import * as db from '../lib/db'
 
+const STEP_LABELS = {
+  welcome: 'Welkom', company_setup: 'Bedrijf', first_client: 'Eerste klant',
+  first_project: 'Eerste project', demo_tour: 'Rondleiding', completed: 'Klaar',
+}
+
 export default function AdminPanel({ onClose, onImpersonated }) {
   const [users, setUsers] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)
+  const [obStats, setObStats] = useState(null)
+  const [obError, setObError] = useState('')
 
   useEffect(() => {
     db.adminListAccounts()
       .then(d => setUsers(d.users))
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
+    db.adminGetOnboardingStats()
+      .then(setObStats)
+      .catch(e => setObError(e.message))
   }, [])
 
   async function impersonate(user) {
@@ -72,6 +82,52 @@ export default function AdminPanel({ onClose, onImpersonated }) {
           ))}
           {!loading && !users.length && <div style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-faint)' }}>Geen accounts gevonden.</div>}
         </div>
+
+        <h2 style={{ fontFamily: 'var(--heading-font)', fontSize: 17, fontWeight: 700, margin: '32px 0 14px' }}>Onboarding statistieken</h2>
+        {obError && <div style={{ background: 'var(--red-soft)', color: 'var(--red-text)', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>{obError}</div>}
+        {!obStats && !obError && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Laden…</div>}
+        {obStats && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Gestart</div>
+                <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--heading-font)', marginTop: 4 }}>{obStats.totalStarted}</div>
+              </div>
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Afgerond</div>
+                <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--heading-font)', marginTop: 4, color: 'var(--green-text)' }}>{obStats.totalCompleted}</div>
+              </div>
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Geskipt</div>
+                <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--heading-font)', marginTop: 4, color: 'var(--amber-text)' }}>{obStats.totalSkipped}</div>
+              </div>
+            </div>
+
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '18px 20px' }}>
+              {obStats.steps.map((s, i) => {
+                const maxViewed = obStats.steps[0]?.viewed || 1
+                const widthPct = Math.max(6, Math.round((s.viewed / maxViewed) * 100))
+                return (
+                  <div key={s.step} style={{ marginBottom: i === obStats.steps.length - 1 ? 0 : 18 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
+                      <span style={{ fontWeight: 600 }}>{i + 1}. {STEP_LABELS[s.step] || s.step}</span>
+                      <span style={{ color: 'var(--text-faint)' }}>
+                        {s.viewed} gezien · {s.completed} voltooid · {s.skipped} geskipt
+                        {s.avgDurationSeconds != null ? ` · gem. ${Math.round(s.avgDurationSeconds)}s` : ''}
+                      </span>
+                    </div>
+                    <div style={{ height: 22, background: 'var(--bg2)', borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
+                      <div style={{ height: '100%', width: widthPct + '%', background: 'var(--accent)', borderRadius: 6, transition: 'width .3s' }}></div>
+                    </div>
+                    {i > 0 && s.dropoffPct > 0 && (
+                      <div style={{ fontSize: 11, color: 'var(--red-text)', marginTop: 4 }}>−{s.dropoffPct}% drop-off t.o.v. vorige stap</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
