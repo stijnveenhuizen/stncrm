@@ -603,7 +603,9 @@ export async function deleteMeeting(id) {
 // ── Pipeline ───────────────────────────────────────────────────────────────────
 export async function getPipeline(organizationId) {
   const { data, error } = await supabase
-    .from('pipeline').select('*').eq('organization_id', organizationId).order('created_at', { ascending: false })
+    .from('pipeline')
+    .select('*, pipeline_stages(*), pipelines(*), assignee:profiles!pipeline_assigned_to_fkey(full_name)')
+    .eq('organization_id', organizationId).order('created_at', { ascending: false })
   if (error) throw error
   return data
 }
@@ -637,6 +639,165 @@ export async function convertToClient(prospect) {
   // Mark prospect as converted
   await supabase.from('pipeline').update({ stage: 'klant', converted_client_id: client.id }).eq('id', prospect.id)
   return client
+}
+
+// ── Pipelines (configuratielaag: funnels + fases) ───────────────────────────────
+const DEFAULT_STAGES = [
+  { name: 'Benaderd', sort_order: 0, win_probability: 10, color: '#6b7280' },
+  { name: 'Interesse', sort_order: 1, win_probability: 25, color: '#2563eb' },
+  { name: 'Gesprek', sort_order: 2, win_probability: 50, color: '#7c3aed' },
+  { name: 'Offerte', sort_order: 3, win_probability: 75, color: '#d97706' },
+  { name: 'Akkoord', sort_order: 4, win_probability: 90, color: '#3db68e' },
+  { name: 'Klant gewonnen', sort_order: 5, win_probability: 100, color: '#16a34a', is_won: true },
+  { name: 'Afgewezen', sort_order: 6, win_probability: 0, color: '#dc2626', is_lost: true },
+]
+export async function getPipelines(organizationId) {
+  const { data, error } = await supabase.from('pipelines').select('*, pipeline_stages(*)').eq('workspace_id', organizationId).order('created_at', { ascending: true })
+  if (error) throw error
+  data.forEach(p => p.pipeline_stages.sort((a, b) => a.sort_order - b.sort_order))
+  return data
+}
+export async function createPipeline(organizationId, name, stages = DEFAULT_STAGES) {
+  const { data: pipeline, error } = await supabase.from('pipelines').insert([{ workspace_id: organizationId, name }]).select().single()
+  if (error) throw error
+  const rows = stages.map((s, i) => ({ pipeline_id: pipeline.id, sort_order: i, win_probability: 0, color: '#6b7280', ...s }))
+  const { error: stageErr } = await supabase.from('pipeline_stages').insert(rows)
+  if (stageErr) throw stageErr
+  return pipeline
+}
+export async function updatePipeline(id, updates) {
+  const { data, error } = await supabase.from('pipelines').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function setDefaultPipeline(organizationId, pipelineId) {
+  await supabase.from('pipelines').update({ is_default: false }).eq('workspace_id', organizationId)
+  const { error } = await supabase.from('pipelines').update({ is_default: true }).eq('id', pipelineId)
+  if (error) throw error
+}
+export async function deletePipeline(id) {
+  const { error } = await supabase.from('pipelines').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function createPipelineStage(pipelineId, data) {
+  const { data: stage, error } = await supabase.from('pipeline_stages').insert([{ pipeline_id: pipelineId, ...data }]).select().single()
+  if (error) throw error
+  return stage
+}
+export async function updatePipelineStage(id, updates) {
+  const { data, error } = await supabase.from('pipeline_stages').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function reorderPipelineStages(stages) {
+  await Promise.all(stages.map((s, i) => supabase.from('pipeline_stages').update({ sort_order: i }).eq('id', s.id)))
+}
+export async function deletePipelineStage(id, fallbackStageId) {
+  if (fallbackStageId) await supabase.from('pipeline').update({ stage_id: fallbackStageId }).eq('stage_id', id)
+  const { error } = await supabase.from('pipeline_stages').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Prospect-activiteiten ────────────────────────────────────────────────────────
+export async function getProspectActivities(prospectId) {
+  const { data, error } = await supabase.from('prospect_activities').select('*').eq('prospect_id', prospectId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createProspectActivity(activity) {
+  const userId = (await supabase.auth.getUser()).data.user?.id
+  const { data, error } = await supabase.from('prospect_activities').insert([{ user_id: userId, ...activity }]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateProspectActivity(id, updates) {
+  const { data, error } = await supabase.from('prospect_activities').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteProspectActivity(id) {
+  const { error } = await supabase.from('prospect_activities').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Pipeline-automatiseringen ────────────────────────────────────────────────────
+export async function getPipelineAutomations(pipelineId) {
+  const { data, error } = await supabase.from('pipeline_automations').select('*').eq('pipeline_id', pipelineId).order('created_at', { ascending: true })
+  if (error) throw error
+  return data
+}
+export async function createAutomation(automation) {
+  const { data, error } = await supabase.from('pipeline_automations').insert([automation]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateAutomation(id, updates) {
+  const { data, error } = await supabase.from('pipeline_automations').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteAutomation(id) {
+  const { error } = await supabase.from('pipeline_automations').delete().eq('id', id)
+  if (error) throw error
+}
+
+// Voert alle actieve automatiseringen uit die matchen met deze trigger, en logt
+// het resultaat als activiteit in de tijdlijn van de prospect.
+export async function runAutomationsForTransition(prospect, event, stageId) {
+  if (!prospect.pipeline_id) return
+  const { data: automations, error } = await supabase
+    .from('pipeline_automations').select('*').eq('pipeline_id', prospect.pipeline_id).eq('trigger_event', event).eq('is_active', true)
+  if (error || !automations) return
+  for (const a of automations) {
+    if (a.trigger_stage_id && stageId && a.trigger_stage_id !== stageId) continue
+    const cfg = a.action_config || {}
+    try {
+      if (a.action_type === 'create_task') {
+        const due = new Date(); due.setDate(due.getDate() + (parseInt(cfg.daysFromNow) || 1))
+        await createProspectActivity({ prospect_id: prospect.id, type: 'taak', title: cfg.taskName || 'Taak', description: 'Automatisch aangemaakt', scheduled_at: due.toISOString(), is_completed: false })
+      } else if (a.action_type === 'create_reminder') {
+        const due = new Date(); due.setDate(due.getDate() + (parseInt(cfg.daysFromNow) || 1))
+        await createProspectActivity({ prospect_id: prospect.id, type: 'herinnering', title: cfg.text || 'Herinnering', scheduled_at: due.toISOString(), is_completed: false })
+      } else if (a.action_type === 'send_notification') {
+        // notificaties worden live berekend in de UI; we loggen de intentie als activiteit zodat het zichtbaar is.
+        await createProspectActivity({ prospect_id: prospect.id, type: 'notitie', title: `Notificatie naar teamlid: ${cfg.text || ''}`, is_completed: true, completed_at: new Date().toISOString() })
+      }
+      await createProspectActivity({ prospect_id: prospect.id, type: 'automatisering', title: `Automatisering uitgevoerd: ${a.name}`, is_completed: true, completed_at: new Date().toISOString() })
+    } catch (e) { /* een falende automatisering mag de fase-wissel zelf niet blokkeren */ }
+  }
+}
+
+// Wijzigt de fase van een prospect, logt de wissel, zet won_at/lost_at, en
+// triggert automatiseringen voor entered_stage/left_stage/deal_won/deal_lost.
+export async function moveProspectToStage(prospect, newStage, extra = {}) {
+  const oldStageId = prospect.stage_id
+  const updates = { stage_id: newStage.id, win_probability: newStage.win_probability, ...extra }
+  if (newStage.is_won) updates.won_at = new Date().toISOString()
+  if (newStage.is_lost) updates.lost_at = new Date().toISOString()
+  const updated = await updateProspect(prospect.id, updates)
+
+  await createProspectActivity({ prospect_id: prospect.id, type: 'fase_wisseling', title: `Fase gewijzigd naar "${newStage.name}"`, is_completed: true, completed_at: new Date().toISOString() })
+
+  if (oldStageId) await runAutomationsForTransition(updated, 'left_stage', oldStageId)
+  await runAutomationsForTransition(updated, 'entered_stage', newStage.id)
+  if (newStage.is_won) await runAutomationsForTransition(updated, 'deal_won', newStage.id)
+  if (newStage.is_lost) await runAutomationsForTransition(updated, 'deal_lost', newStage.id)
+
+  return updated
+}
+
+// ── Offertes gekoppeld aan een prospect (verkoopfase, nog geen klant) ──────────
+export async function getProspectQuotes(prospectId) {
+  const { data, error } = await supabase.from('quotes').select('*').eq('prospect_id', prospectId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createProspectQuote(quote) {
+  const total = quote.total ?? quote.subtotal
+  const { data, error } = await supabase.from('quotes').insert([{ ...quote, client_id: null, amount: total, status: quote.status || 'concept' }]).select().single()
+  if (error) throw error
+  return data
 }
 
 // ── Pipeline Tasks ─────────────────────────────────────────────────────────────
