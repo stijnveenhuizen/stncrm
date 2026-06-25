@@ -35,15 +35,19 @@ export function ToastProvider({ children }) {
       <div style={{position:'fixed',bottom:24,right:24,zIndex:999,display:'flex',flexDirection:'column',gap:8,alignItems:'flex-end'}}>
         {toasts.map(t => (
           <div key={t.id} style={{
-            background: t.type === 'error' ? 'var(--red-text)' : 'var(--text)',
-            color:'#fff', padding:'10px 16px', borderRadius:'var(--rsm)',
-            fontSize:13, fontWeight:500, boxShadow:'0 4px 16px rgba(0,0,0,.18)',
+            display:'flex',alignItems:'flex-start',gap:10,
+            background:'var(--bg-base)', border:'1px solid var(--border-default)', borderLeft:`4px solid ${t.type==='error'?'var(--danger)':'var(--success)'}`,
+            color:'var(--text-primary)', padding:'12px 16px', borderRadius:'var(--radius-lg)',
+            fontSize:13, boxShadow:'var(--shadow-lg)',
             animation:'toast-in .2s cubic-bezier(.16,1,.3,1)',
-            maxWidth:320, lineHeight:1.4
-          }}>{t.msg}</div>
+            width:320, lineHeight:1.4
+          }}>
+            <span style={{flexShrink:0,fontWeight:700,color:t.type==='error'?'var(--danger)':'var(--success)'}}>{t.type==='error'?'✕':'✓'}</span>
+            <span>{t.msg}</span>
+          </div>
         ))}
       </div>
-      <style>{`@keyframes toast-in{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
+      <style>{`@keyframes toast-in{from{transform:translateX(40px);opacity:0}to{transform:translateX(0);opacity:1}}`}</style>
     </>
   )
 }
@@ -383,44 +387,45 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
 
   const CSS = `
     .app{min-height:100vh;transition:background .2s}
-    .main{margin-left:252px;padding-top:52px;min-height:100vh}
+    .main{margin-left:220px;padding-top:48px;min-height:100vh}
 
-    /* ── Donkere topbar (merk + workspace-switcher + profiel) ─────────────── */
-    .topbar-dark{position:fixed;top:0;left:0;right:0;height:52px;background:#0e0e10;color:#fff;display:flex;align-items:center;padding:0 16px;gap:10px;z-index:60}
-    .topbar-dark-logo{display:flex;align-items:center;gap:8px;flex-shrink:0;padding-right:8px;border-right:1px solid rgba(255,255,255,.12);margin-right:4px}
-    .topbar-dark-logo-icon{width:26px;height:26px;border-radius:7px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-    .topbar-dark-logo-icon span{color:#fff;font-size:12px;font-family:var(--heading-font);font-weight:700}
-    .topbar-dark-logo b{font-size:12.5px;font-weight:700;letter-spacing:.06em;white-space:nowrap}
-    .org-switcher{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;cursor:pointer;background:rgba(255,255,255,.06);position:relative;max-width:240px}
-    .org-switcher:hover{background:rgba(255,255,255,.13)}
-    .org-switcher-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .org-switcher .chev{color:rgba(255,255,255,.5);flex-shrink:0}
-    .org-menu,.profile-menu{position:absolute;top:calc(100% + 8px);background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--r);box-shadow:0 12px 28px rgba(0,0,0,.22);min-width:230px;max-height:360px;overflow-y:auto;z-index:80;padding:6px}
+    /* ── Topbar (wit, Linear/Vercel-stijl) ─────────────────────────────────── */
+    .topbar-dark{position:fixed;top:0;left:0;right:0;height:48px;background:var(--bg-base);color:var(--text-primary);display:flex;align-items:center;padding:0 20px;gap:10px;z-index:60;border-bottom:1px solid var(--border-default)}
+    .topbar-dark-logo{display:flex;align-items:center;gap:8px;flex-shrink:0;padding-right:10px;border-right:1px solid var(--border-default);margin-right:4px}
+    .topbar-dark-logo-icon{width:24px;height:24px;border-radius:6px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .topbar-dark-logo-icon span{color:#fff;font-size:11px;font-family:var(--heading-font);font-weight:700}
+    .topbar-dark-logo b{font-size:13px;font-weight:700;letter-spacing:0;white-space:nowrap;color:var(--text-primary)}
+    .org-switcher{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--radius-md);cursor:pointer;background:transparent;position:relative;max-width:240px}
+    .org-switcher:hover{background:var(--bg-subtle)}
+    .org-switcher-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary)}
+    .org-switcher .chev{color:var(--text-muted-tok);flex-shrink:0}
+    .org-menu,.profile-menu{position:absolute;top:calc(100% + 8px);background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border-default);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);min-width:230px;max-height:360px;overflow-y:auto;z-index:80;padding:4px}
     .org-menu{left:0}
     .profile-menu{right:0;min-width:210px}
-    .menu-item{padding:8px 10px;border-radius:6px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;color:var(--text)}
-    .menu-item:hover{background:var(--accent-soft);color:var(--accent-text)}
-    .menu-sep{height:1px;background:var(--border);margin:6px 2px}
-    .hamburger-btn{display:none;width:32px;height:32px;border-radius:8px;background:none;border:none;cursor:pointer;align-items:center;justify-content:center;color:#fff;flex-shrink:0}
-    .hamburger-btn:hover{background:rgba(255,255,255,.12)}
+    .menu-item{padding:6px 10px;border-radius:var(--radius-sm);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;color:var(--text-primary)}
+    .menu-item:hover{background:var(--bg-subtle)}
+    .menu-sep{height:1px;background:var(--border-default);margin:4px 2px}
+    .hamburger-btn{display:none;width:32px;height:32px;border-radius:var(--radius-md);background:none;border:none;cursor:pointer;align-items:center;justify-content:center;color:var(--text-secondary);flex-shrink:0}
+    .hamburger-btn:hover{background:var(--bg-subtle)}
     .topbar-dark-right{margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0}
-    .topbar-dark-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.7);cursor:pointer;position:relative;background:none;border:none;flex-shrink:0}
-    .topbar-dark-icon:hover{background:rgba(255,255,255,.12);color:#fff}
+    .topbar-dark-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);cursor:pointer;position:relative;background:none;border:none;flex-shrink:0}
+    .topbar-dark-icon:hover{background:var(--bg-subtle);color:var(--text-primary)}
     .profile-trigger{display:flex;align-items:center;cursor:pointer;padding:2px;border-radius:50%;position:relative;flex-shrink:0}
-    .profile-trigger:hover{box-shadow:0 0 0 2px rgba(255,255,255,.25)}
+    .profile-trigger:hover{box-shadow:0 0 0 2px var(--border-default)}
 
     /* ── Linker sidebar ─────────────────────────────────────────────────── */
-    .sidebar2{position:fixed;top:52px;left:0;bottom:0;width:252px;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;padding:18px 12px;z-index:40;transition:background .2s,border .2s}
-    .sidebar2-org{padding:2px 8px 14px}
-    .sidebar2-org h2{font-size:16px;font-weight:700;font-family:var(--heading-font);letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .sidebar2-org-role{font-size:12px;color:var(--text-muted);margin-top:2px}
-    .sidebar2-role-badge{display:inline-flex;align-items:center;gap:4px;margin-top:9px;padding:3px 10px;border-radius:6px;background:var(--accent-soft);color:var(--accent-text);font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
-    .sidebar2-section{margin:6px 0;padding-top:10px;border-top:1px solid var(--border)}
-    .sidebar2-section:first-of-type{border-top:none;padding-top:0}
-    .sidebar2-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-radius:8px;font-size:13.5px;color:var(--text);cursor:pointer;margin-bottom:1px;border:none;background:none;width:100%;text-align:left}
-    .sidebar2-item:hover{background:var(--bg2)}
-    .sidebar2-item.active{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
-    .sidebar2-item .chev{color:var(--text-faint);font-size:11px}
+    .sidebar2{position:fixed;top:48px;left:0;bottom:0;width:220px;background:var(--bg-base);border-right:1px solid var(--border-default);overflow-y:auto;padding:12px 8px;z-index:40;transition:background .2s,border .2s}
+    .sidebar2-org{padding:8px 8px 16px;border-bottom:1px solid var(--border-default);margin-bottom:8px}
+    .sidebar2-org h2{font-size:13px;font-weight:600;font-family:var(--heading-font);letter-spacing:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-primary)}
+    .sidebar2-org-role{font-size:11px;color:var(--text-muted-tok);margin-top:2px}
+    .sidebar2-role-badge{display:inline-flex;align-items:center;gap:4px;margin-top:9px;padding:2px 6px;border-radius:var(--radius-full);background:var(--accent-subtle);color:var(--accent);font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+    .sidebar2-section{margin:6px 0;padding-top:10px}
+    .sidebar2-section:first-of-type{padding-top:0}
+    .sidebar2-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:var(--radius-md);font-size:13px;font-weight:500;color:var(--text-secondary);cursor:pointer;margin-bottom:1px;border:none;background:none;width:100%;text-align:left;transition:all 120ms ease}
+    .sidebar2-item:hover{background:var(--bg-subtle);color:var(--text-primary)}
+    .sidebar2-item.active{background:var(--accent-subtle);color:var(--accent);font-weight:600}
+    .sidebar2-item .chev{color:var(--text-muted-tok);font-size:11px}
+    .sidebar2-section-label{font-size:10px;font-weight:600;color:var(--text-muted-tok);letter-spacing:.06em;text-transform:uppercase;padding:12px 10px 4px}
 
     /* ── Paginakop + toolbar (gedeeld patroon voor elke view) ───────────── */
     .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:22px 28px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;transition:background .2s,border .2s}
@@ -447,11 +452,11 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     .bc .crumb{cursor:pointer;transition:color .1s}.bc .crumb:hover{color:var(--text)}
     .bc .sep{color:var(--text-faint);font-size:11px}
     .bc .bactive{color:var(--text);font-weight:600;font-family:var(--heading-font)}
-    .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--rsm);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;border:1px solid transparent;line-height:1;white-space:nowrap}
-    .btn-primary{background:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(61,182,142,0.25)}.btn-primary:hover{background:var(--accent-hover);box-shadow:0 3px 10px rgba(61,182,142,0.35)}.btn-primary:disabled{opacity:.5;cursor:not-allowed}
-    .btn-ghost{background:none;border-color:var(--border-strong);color:var(--text-muted)}.btn-ghost:hover{background:var(--accent-soft);color:var(--accent-text);border-color:var(--accent)}
-    .btn-danger{background:var(--red-soft);color:var(--red-text);border-color:transparent}.btn-danger:hover{opacity:.85}
-    .btn-sm{padding:5px 11px;font-size:12px}.btn-xs{padding:3px 8px;font-size:11px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border-radius:var(--radius-md);font-size:13px;font-weight:500;cursor:pointer;transition:all 120ms ease;border:1px solid transparent;line-height:1;white-space:nowrap}
+    .btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent-hover);box-shadow:var(--shadow-sm)}.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+    .btn-ghost{background:var(--bg-base);border-color:var(--border-default);color:var(--text-primary)}.btn-ghost:hover{background:var(--bg-subtle)}
+    .btn-danger{background:var(--danger);color:#fff;border-color:transparent}.btn-danger:hover{background:#B91C1C}
+    .btn-sm{height:24px;padding:0 10px;font-size:12px}.btn-xs{height:22px;padding:0 8px;font-size:11px}
     .content{padding:26px}
     .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
     .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;transition:background .2s,border .2s;box-shadow:var(--shadow)}
@@ -468,26 +473,26 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     .cl-header .sortable{cursor:pointer;user-select:none;display:flex;align-items:center;gap:3px}
     .cl-header .sortable:hover{color:var(--accent-text)}
     .cl-row{display:grid;grid-template-columns:2fr 1.2fr 0.8fr 1fr 1fr 100px;padding:13px 20px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background .1s}
-    .cl-row:last-child{border-bottom:none}.cl-row:hover{background:var(--accent-soft)}
+    .cl-row:last-child{border-bottom:none}.cl-row:hover{background:var(--bg-subtle)}
     .pl-header{display:grid;grid-template-columns:2fr 1.4fr 1fr 0.8fr 120px;padding:9px 20px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em}
     .pl-row{display:grid;grid-template-columns:2fr 1.4fr 1fr 0.8fr 120px;padding:13px 20px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background .1s}
-    .pl-row:last-child{border-bottom:none}.pl-row:hover{background:var(--accent-soft)}
+    .pl-row:last-child{border-bottom:none}.pl-row:hover{background:var(--bg-subtle)}
     .fin-header{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 110px;padding:8px 18px;background:var(--bg);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
     .fin-row{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 110px;gap:10px;align-items:center;padding:11px 18px;border-bottom:1px solid var(--border);font-size:13px;transition:background .1s}
-    .fin-row:last-child{border-bottom:none}.fin-row:hover{background:var(--accent-soft)}
+    .fin-row:last-child{border-bottom:none}.fin-row:hover{background:var(--bg-subtle)}
     .host-header{display:grid;grid-template-columns:2fr 1.2fr 1fr 1fr 1fr 120px;padding:8px 18px;background:var(--bg);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
     .host-row{display:grid;grid-template-columns:2fr 1.2fr 1fr 1fr 1fr 120px;padding:12px 18px;border-bottom:1px solid var(--border);align-items:center;font-size:13px;transition:background .1s}
-    .host-row:last-child{border-bottom:none}.host-row:hover{background:var(--accent-soft)}
+    .host-row:last-child{border-bottom:none}.host-row:hover{background:var(--bg-subtle)}
     .cl-name-cell{display:flex;align-items:center;gap:11px}
     .avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;font-family:var(--heading-font)}
     .av-b{background:#dbeafe;color:#1d4ed8}.av-g{background:#d1fae5;color:#065f46}
     .av-p{background:#ede9fe;color:#6d28d9}.av-a{background:#fef3c7;color:#b45309}
     .av-r{background:#fee2f2;color:#9d174d}.av-t{background:#ccfbf1;color:#0f766e}
-    .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:500;line-height:1.5}
-    .bg-green{background:var(--green-soft);color:var(--green-text)}.bg-amber{background:var(--amber-soft);color:var(--amber-text)}
-    .bg-red{background:var(--red-soft);color:var(--red-text)}.bg-blue{background:var(--blue-soft);color:var(--blue-text)}
-    .bg-purple{background:var(--purple-soft);color:var(--purple-text)}.bg-teal{background:var(--teal-soft);color:var(--teal-text)}
-    .bg-gray{background:var(--bg2);color:var(--text-muted)}
+    .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:var(--radius-full);font-size:11px;font-weight:500;line-height:1.6;border:1px solid transparent}
+    .bg-green{background:var(--green-soft);color:var(--green-text);border-color:#BBF7D0}.bg-amber{background:var(--amber-soft);color:var(--amber-text);border-color:#FDE68A}
+    .bg-red{background:var(--red-soft);color:var(--red-text);border-color:#FECACA}.bg-blue{background:var(--blue-soft);color:var(--blue-text);border-color:#BFDBFE}
+    .bg-purple{background:var(--purple-soft);color:var(--purple-text);border-color:#e9d5ff}.bg-teal{background:var(--teal-soft);color:var(--teal-text);border-color:#99f6e4}
+    .bg-gray{background:var(--bg2);color:var(--text-muted);border-color:var(--border-default)}
     .task-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
     .task-item:last-child{border-bottom:none}
     .task-check{width:18px;height:18px;border:1.5px solid var(--border-strong);border-radius:5px;flex-shrink:0;margin-top:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
@@ -504,20 +509,21 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     .total-bar strong{font-family:var(--mono-font)}
     .search-wrap{position:relative}.search-wrap input{padding-left:32px;width:240px}
     .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-faint);font-size:14px;pointer-events:none}
-    .tabs{display:flex;gap:2px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--rsm);padding:3px}
-    .tab{padding:5px 13px;border-radius:5px;font-size:12px;font-weight:500;color:var(--text-muted);cursor:pointer;border:none;background:none;transition:all .1s}
-    .tab.active{background:var(--surface);color:var(--text);box-shadow:var(--shadow);font-weight:600}
+    .tabs{display:flex;gap:0;border-bottom:1px solid var(--border-default)}
+    .tab{padding:8px 14px;margin-bottom:-1px;font-size:13px;font-weight:500;color:var(--text-muted-tok);cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;transition:all 120ms ease}
+    .tab:hover{color:var(--text-secondary);background:var(--bg-subtle)}
+    .tab.active{color:var(--text-primary);border-bottom-color:var(--accent);font-weight:500;background:none}
     .client-tabs{display:flex;border-bottom:1px solid var(--border);overflow-x:auto;background:var(--surface2)}
     .client-tab{padding:11px 16px;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;white-space:nowrap;transition:all .1s}
     .client-tab:hover{color:var(--text)}.client-tab.active{color:var(--accent-text);border-bottom-color:var(--accent);font-weight:600}
-    .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center;backdrop-filter:blur(3px);opacity:0;transition:opacity .2s}
+    .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;backdrop-filter:blur(4px);opacity:0;transition:opacity .2s}
     .modal-bg.open{display:flex;animation:modal-bg-in .2s ease forwards}
     @keyframes modal-bg-in{from{opacity:0}to{opacity:1}}
-    .modal{background:var(--surface);border-radius:var(--r);padding:26px;width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.22);border:1px solid var(--border);animation:modal-in .2s cubic-bezier(.16,1,.3,1) forwards}
+    .modal{background:var(--bg-base);border-radius:var(--radius-xl);padding:24px;width:520px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-xl);border:1px solid var(--border-default);animation:modal-in .2s cubic-bezier(.16,1,.3,1) forwards}
     @keyframes modal-in{from{transform:translateY(12px) scale(.97);opacity:0}to{transform:translateY(0) scale(1);opacity:1}}
-    .modal h3{font-size:16px;font-weight:700;margin-bottom:20px;letter-spacing:-.02em;font-family:var(--heading-font)}
+    .modal h3{font-size:16px;font-weight:600;margin-bottom:16px;padding-bottom:16px;letter-spacing:0;font-family:var(--heading-font);border-bottom:1px solid var(--border-default)}
     .form-group{margin-bottom:14px}.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+    .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border-default)}
     .empty{text-align:center;padding:32px 16px;color:var(--text-faint);font-size:13px}
     .quick-add{display:flex;gap:8px;padding:0 18px 14px}
     .quick-add input[type=text]{flex:1}.quick-add input[type=date]{width:130px}
@@ -547,7 +553,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
       .hamburger-btn{display:flex}
       .sidebar2{transform:translateX(-100%);transition:transform .25s ease;box-shadow:0 0 0 0 transparent}
       .sidebar2.open{transform:translateX(0);box-shadow:8px 0 24px rgba(0,0,0,.18)}
-      .sidebar-overlay{display:none;position:fixed;inset:0;top:52px;background:rgba(0,0,0,.45);z-index:39}
+      .sidebar-overlay{display:none;position:fixed;inset:0;top:48px;background:rgba(0,0,0,.45);z-index:39}
       .sidebar-overlay.open{display:block}
       .main{margin-left:0}
       .topbar-dark-logo b{display:none}
@@ -798,12 +804,14 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
           <span className="sidebar2-role-badge">{myRole === 'owner' ? 'Eigenaar' : 'Teamlid'}</span>
         </div>
         <div className="sidebar2-section">
+          <div className="sidebar2-section-label">Overzicht</div>
           {navItem('overview', 'Dashboard', view==='overview')}
           {navItem('clients', 'Klanten', ['clients','client-detail'].includes(view))}
           {navItem('projects', 'Projecten', ['projects','project-detail'].includes(view))}
           {navItem('tasks', 'Taken', view==='tasks')}
         </div>
         <div className="sidebar2-section">
+          <div className="sidebar2-section-label">Beheer</div>
           {navItem('pipeline', 'Pipeline', view==='pipeline')}
           {navItem('finance', 'Financiën', view==='finance')}
           {navItem('hosting', 'Hosting', view==='hosting')}
