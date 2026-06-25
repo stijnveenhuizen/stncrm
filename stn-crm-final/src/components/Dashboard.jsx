@@ -1158,6 +1158,15 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
   const [notes, setNotes] = useState([])
   const clientProjects = projects.filter(p => p.client_id === client.id)
   const clientTasks = allTasks.filter(t => clientProjects.some(p => p.id === t.project_id))
+  const clientMeetings = allMeetings.filter(m => m.client_id === client.id)
+
+  const activity = [
+    { date: client.created_at, text: 'Klant toegevoegd', color: 'var(--accent)' },
+    ...clientProjects.map(p => ({ date: p.created_at, text: `Project gestart: ${p.name}`, color: 'var(--blue)' })),
+    ...clientTasks.filter(t => t.done).map(t => ({ date: t.created_at, text: `Taak afgerond: ${t.description}`, color: 'var(--green)' })),
+    ...invoices.map(i => ({ date: i.created_at || i.date, text: `Factuur ${i.invoice_number ? i.invoice_number+' ' : ''}${i.status==='betaald'?'betaald':'aangemaakt'}: ${i.description}`, color: 'var(--teal)' })),
+    ...clientMeetings.map(m => ({ date: m.meeting_date, text: `Meeting: ${m.title}`, color: 'var(--purple)' })),
+  ].filter(a => a.date).sort((a,b) => (b.date||'').localeCompare(a.date||''))
 
   useEffect(() => {
     db.processRecurringForClient(client.id).then(() => {
@@ -1191,7 +1200,7 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
           <div>
             <div className="sc">
               <div className="client-tabs">
-                {[['projects','Projecten'],['tasks','Taken'],['invoices','Facturen'],['recurring','Terugkerend'],['hosting','Hosting'],['meetings','Meetings'],['notes','Notities']].map(([tab,label]) => (
+                {[['projects','Projecten'],['tasks','Taken'],['invoices','Facturen'],['recurring','Terugkerend'],['hosting','Hosting'],['meetings','Meetings'],['notes','Notities'],['activity','Activiteit']].map(([tab,label]) => (
                   <button key={tab} className={`client-tab${activeTab===tab?' active':''}`} onClick={()=>setActiveTab(tab)}>{label}</button>
                 ))}
               </div>
@@ -1282,6 +1291,17 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+              {activeTab==='activity' && (
+                <div className="sc-body">
+                  {!activity.length ? <div className="empty">Geen activiteit</div> : activity.map((a,i) => (
+                    <div key={i} className="dl-item">
+                      <div className="dl-dot" style={{background:a.color}}></div>
+                      <div style={{flex:1,fontSize:13}}>{a.text}</div>
+                      <div style={{fontSize:11,color:'var(--text-faint)',whiteSpace:'nowrap'}}>{fdate(a.date?.slice(0,10))}</div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
