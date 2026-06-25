@@ -32,10 +32,17 @@ export default function PipelineSettingsModal({ organizationId, pipelines, activ
 }
 
 function PipelinesTab({ organizationId, pipelines, activePipelineId, onRefresh, onSwitchPipeline, onSelectForStages }) {
-  async function rename(p) {
-    const name = window.prompt('Nieuwe naam:', p.name)
-    if (!name || !name.trim()) return
-    try { await db.updatePipeline(p.id, { name: name.trim() }); onRefresh() } catch (e) { showToast('Fout: ' + e.message, 'error') }
+  const [renamingId, setRenamingId] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  function startRename(p) { setRenamingId(p.id); setRenameValue(p.name) }
+  async function commitRename(p) {
+    setRenamingId(null)
+    if (!renameValue.trim() || renameValue.trim() === p.name) return
+    try { await db.updatePipeline(p.id, { name: renameValue.trim() }); onRefresh() } catch (e) { showToast('Fout: ' + e.message, 'error') }
   }
   async function remove(p) {
     if (!confirm(`"${p.name}" verwijderen? Eventuele prospects in deze pipeline raken hun koppeling kwijt.`)) return
@@ -44,22 +51,42 @@ function PipelinesTab({ organizationId, pipelines, activePipelineId, onRefresh, 
   async function setDefault(p) {
     try { await db.setDefaultPipeline(organizationId, p.id); onRefresh() } catch (e) { showToast('Fout: ' + e.message, 'error') }
   }
+  async function createPipeline() {
+    if (!newName.trim()) return
+    setSaving(true)
+    try { await db.createPipeline(organizationId, newName.trim()); setNewName(''); setCreating(false); onRefresh() }
+    catch (e) { showToast('Fout: ' + e.message, 'error') }
+    finally { setSaving(false) }
+  }
   return (
     <div>
       {pipelines.map(p => (
         <div key={p.id} className="info-row" style={{ alignItems: 'center' }}>
           <div style={{ flex: 1 }}>
-            <span className="info-val" style={{ cursor: 'pointer' }} onClick={() => onSwitchPipeline(p.id)}>{p.name}</span>
+            {renamingId === p.id ? (
+              <input autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)} onBlur={() => commitRename(p)} onKeyDown={e => e.key === 'Enter' && commitRename(p)} style={{ width: 200, height: 26, fontSize: 13 }} />
+            ) : (
+              <span className="info-val" style={{ cursor: 'pointer' }} onClick={() => onSwitchPipeline(p.id)}>{p.name}</span>
+            )}
             {p.is_default && <span className="badge bg-green" style={{ marginLeft: 8, fontSize: 10 }}>Standaard</span>}
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             <button className="btn btn-ghost btn-xs" onClick={() => onSelectForStages(p.id)}>Fases</button>
-            <button className="btn btn-ghost btn-xs" onClick={() => rename(p)}>Hernoemen</button>
+            <button className="btn btn-ghost btn-xs" onClick={() => startRename(p)}>Hernoemen</button>
             {!p.is_default && <button className="btn btn-ghost btn-xs" onClick={() => setDefault(p)}>Maak standaard</button>}
             {!p.is_default && <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} onClick={() => remove(p)}>×</button>}
           </div>
         </div>
       ))}
+      {creating ? (
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+          <input autoFocus value={newName} onChange={e => setNewName(e.target.value)} placeholder="Naam van de pipeline" onKeyDown={e => e.key === 'Enter' && createPipeline()} style={{ flex: 1 }} />
+          <button className="btn btn-primary btn-sm" onClick={createPipeline} disabled={saving || !newName.trim()}>{saving ? 'Aanmaken…' : 'Aanmaken'}</button>
+          <span onClick={() => { setCreating(false); setNewName('') }} style={{ fontSize: 12, color: 'var(--text-muted-tok)', cursor: 'pointer' }}>Annuleren</span>
+        </div>
+      ) : (
+        <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={() => setCreating(true)}>+ Nieuwe pipeline</button>
+      )}
     </div>
   )
 }

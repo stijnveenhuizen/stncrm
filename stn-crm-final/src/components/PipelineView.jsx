@@ -12,7 +12,7 @@ import StatsView from './pipeline/StatsView.jsx'
 
 export const SOURCES = ['LinkedIn', 'Website', 'Doorverwijzing', 'Cold outreach', 'Mailmeteor', 'Koude acquisitie', 'Referral', 'Instagram', 'Anders']
 export const LOST_REASONS = ['Te duur', 'Gekozen voor concurrent', 'Geen budget', 'Geen reactie meer', 'Timing niet goed', 'Anders']
-export const PRIORITY_COLORS = { hoog: 'var(--red)', normaal: 'var(--amber)', laag: 'var(--text-faint)' }
+export const PRIORITY_COLORS = { hoog: 'var(--priority-high)', normaal: 'var(--priority-medium)', laag: 'var(--priority-low)' }
 export const ini = p => ((p.fname || '?')[0] + (p.lname || '?')[0]).toUpperCase()
 const AVC = ['av-b', 'av-g', 'av-p', 'av-a', 'av-r', 'av-t']
 export const avColor = p => { const n = (p.fname || '?').charCodeAt(0) || 0; return AVC[n % AVC.length] }
@@ -28,6 +28,7 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
   const [detailProspectId, setDetailProspectId] = useState(null)
   const [pendingMove, setPendingMove] = useState(null) // { prospect, stage, mode: 'won'|'lost' }
   const [loading, setLoading] = useState(true)
+  const [newPipelineOpen, setNewPipelineOpen] = useState(false)
 
   const refreshAll = useCallback(async () => {
     if (!organizationId) return
@@ -85,6 +86,11 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
 
   return (
     <div>
+      <style>{`
+        .kanban-card:hover{box-shadow:var(--shadow-md);border-color:var(--border-strong)}
+        .kanban-empty{border:2px dashed var(--border-default);border-radius:var(--radius-lg);padding:20px;text-align:center;font-size:12px;color:var(--text-muted-tok);cursor:pointer;transition:all 120ms ease}
+        .kanban-empty:hover{border-color:var(--accent);color:var(--accent)}
+      `}</style>
       <div className="topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <h2>Pipeline</h2>
@@ -93,7 +99,7 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
               {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
-          <button className="btn btn-ghost btn-xs" onClick={() => { const n = window.prompt('Naam van de nieuwe pipeline:'); if (n && n.trim()) handleCreatePipeline(n.trim()) }}>+ Nieuwe pipeline</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setNewPipelineOpen(true)}>+ Nieuwe pipeline</button>
         </div>
         <div className="topbar-right">
           <div className="tabs">
@@ -124,6 +130,7 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
               <ListTable
                 prospects={pipelineProspects} stages={stages} pipelines={pipelines}
                 onOpen={p => setDetailProspectId(p.id)} onRefresh={refreshAll} organizationId={organizationId}
+                onCreate={() => setDetailProspectId('new:' + (stages[0]?.id || ''))}
               />
             )}
             {view === 'forecast' && <ForecastView prospects={pipelineProspects} stages={stages} />}
@@ -161,6 +168,15 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
       </AnimatePresence>
 
       <AnimatePresence>
+        {newPipelineOpen && (
+          <NewPipelineModal
+            onClose={() => setNewPipelineOpen(false)}
+            onCreate={async name => { setNewPipelineOpen(false); await handleCreatePipeline(name) }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {pendingMove && (
           <WonLostModals
             pendingMove={pendingMove} organizationId={organizationId}
@@ -173,23 +189,50 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
   )
 }
 
+function NewPipelineModal({ onClose, onCreate }) {
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+  async function create() {
+    if (!name.trim()) return
+    setSaving(true)
+    await onCreate(name.trim())
+    setSaving(false)
+  }
+  return (
+    <div className="modal-bg open" onClick={e => e.target === e.currentTarget && onClose()}>
+      <motion.div className="modal" style={{ maxWidth: 420 }} initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} transition={{ duration: 0.2 }}>
+        <h3>Nieuwe pipeline</h3>
+        <div className="form-group">
+          <label>Naam van de pipeline</label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="bijv. Onderhoud leads" autoFocus onKeyDown={e => e.key === 'Enter' && create()} />
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Wordt aangemaakt met de 7 standaardfases (Benaderd t/m Klant gewonnen/Afgewezen) — die kun je daarna aanpassen via Pipeline instellingen.</div>
+        <div className="modal-actions">
+          <button className="btn btn-ghost" onClick={onClose}>Annuleren</button>
+          <button className="btn btn-primary" onClick={create} disabled={saving || !name.trim()}>{saving ? 'Aanmaken…' : 'Aanmaken'}</button>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
 function KanbanColumn({ stage, prospects, activityCounts, onCardClick, onCreate, onMove }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
   const totalValue = prospects.reduce((s, p) => s + Number(p.deal_value || 0), 0)
   return (
-    <div ref={setNodeRef} style={{ minWidth: 264, flex: '0 0 264px', background: isOver ? 'var(--accent-soft)' : 'transparent', borderRadius: 12, transition: 'background .15s' }}>
-      <div style={{ padding: '10px 10px 12px', borderTop: `3px solid ${stage.color}`, marginBottom: 8 }}>
+    <div ref={setNodeRef} style={{ minWidth: 260, maxWidth: 300, flex: '0 0 280px', height: 'calc(100vh - 220px)', overflowY: 'auto', background: isOver ? 'var(--accent-subtle)' : 'transparent', borderRadius: 'var(--radius-lg)', transition: 'background .15s' }}>
+      <div style={{ padding: '12px', borderBottom: `3px solid ${stage.color}`, marginBottom: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 600, fontSize: 13, fontFamily: 'var(--heading-font)' }}>{stage.name}</span>
-          <span style={{ fontSize: 11, color: 'var(--text-faint)', background: 'var(--bg2)', padding: '1px 7px', borderRadius: 99 }}>{prospects.length}</span>
+          <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{stage.name}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)', background: 'var(--bg-subtle)', padding: '1px 7px', borderRadius: 'var(--radius-full)', fontWeight: 600 }}>{prospects.length}</span>
         </div>
-        {totalValue > 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--mono-font)', marginTop: 2 }}>{money(totalValue)}</div>}
+        {totalValue > 0 && <div style={{ fontSize: 11, color: 'var(--text-muted-tok)', fontFamily: 'var(--mono-font)', marginTop: 4 }}>{money(totalValue)}</div>}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 80, padding: '0 2px' }}>
         {!prospects.length ? (
-          <div onClick={() => onCreate(stage.id)} style={{ border: '2px dashed var(--border)', borderRadius: 10, padding: '18px 10px', textAlign: 'center', fontSize: 12, color: 'var(--text-faint)', cursor: 'pointer' }}>+ Prospect toevoegen</div>
+          <div onClick={() => onCreate(stage.id)} className="kanban-empty">+ Prospect toevoegen</div>
         ) : prospects.map(p => <ProspectCard key={p.id} prospect={p} stage={stage} activityCount={activityCounts[p.id] || 0} onClick={() => onCardClick(p)} />)}
-        {prospects.length > 0 && <button onClick={() => onCreate(stage.id)} style={{ fontSize: 12, color: 'var(--text-faint)', padding: '6px 4px', cursor: 'pointer', textAlign: 'left' }}>+ Prospect</button>}
+        {prospects.length > 0 && <button onClick={() => onCreate(stage.id)} style={{ fontSize: 12, color: 'var(--text-muted-tok)', padding: '6px 4px', cursor: 'pointer', textAlign: 'left' }}>+ Prospect</button>}
       </div>
     </div>
   )
@@ -201,31 +244,36 @@ function ProspectCard({ prospect: p, activityCount, onClick }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: p.id })
   const overdue = p.expected_close_date && daysN(p.expected_close_date) < 0 && !p.won_at && !p.lost_at
   const style = {
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    opacity: isDragging ? 0.4 : 1, zIndex: isDragging ? 50 : 'auto',
-    background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px 11px',
-    cursor: 'grab', boxShadow: 'var(--shadow)', borderLeft: `3px solid ${PRIORITY_COLORS[p.priority] || PRIORITY_COLORS.normaal}`,
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0) rotate(2deg)` : undefined,
+    opacity: isDragging ? 0.95 : 1, zIndex: isDragging ? 50 : 'auto',
+    background: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: 12, marginBottom: 8,
+    cursor: 'grab', boxShadow: isDragging ? 'var(--shadow-xl)' : 'var(--shadow-sm)', borderLeft: `3px solid ${PRIORITY_COLORS[p.priority] || PRIORITY_COLORS.normaal}`,
+    transition: 'box-shadow 120ms ease, border-color 120ms ease',
   }
   return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes} onClick={onClick}>
-      <div style={{ fontWeight: 600, fontSize: 13 }}>{p.fname} {p.lname}</div>
-      {p.company && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{p.company}</div>}
+    <div ref={setNodeRef} className="kanban-card" style={style} {...listeners} {...attributes} onClick={onClick}>
+      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{p.fname} {p.lname}</div>
+      {p.company && <div style={{ fontSize: 12, color: 'var(--text-muted-tok)', marginBottom: 6 }}>{p.company}</div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-        <span style={{ fontSize: 12, fontFamily: 'var(--mono-font)', color: 'var(--accent-text)', fontWeight: 500 }}>{p.deal_value ? money(p.deal_value) : ''}</span>
-        {p.source && <span title={p.source} style={{ fontSize: 10, color: 'var(--text-faint)', background: 'var(--bg2)', padding: '1px 5px', borderRadius: 4 }}>{SOURCE_ICON[p.source] || p.source.slice(0, 2)}</span>}
+        <span style={{ fontSize: 13, fontFamily: 'var(--mono-font)', color: 'var(--text-primary)', fontWeight: 600 }}>{p.deal_value ? money(p.deal_value) : ''}</span>
+        <span className="badge bg-gray" style={{ fontSize: 10 }}>{p.win_probability ?? 0}%</span>
       </div>
-      {p.expected_close_date && <div style={{ fontSize: 10, marginTop: 4, color: overdue ? 'var(--red-text)' : 'var(--text-faint)', fontWeight: overdue ? 600 : 400 }}>{fdate(p.expected_close_date)}</div>}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+        <span style={{ fontSize: 11, color: overdue ? 'var(--danger)' : 'var(--text-muted-tok)', fontWeight: overdue ? 600 : 400 }}>{p.expected_close_date ? fdate(p.expected_close_date) : ''}</span>
+        {p.source && <span title={p.source} style={{ fontSize: 10, color: 'var(--text-secondary)', background: 'var(--bg-subtle)', padding: '1px 5px', borderRadius: 4 }}>{SOURCE_ICON[p.source] || p.source.slice(0, 2)}</span>}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {p.assignee?.full_name && <span className={`avatar ${avColor(p)}`} style={{ width: 20, height: 20, fontSize: 9 }}>{p.assignee.full_name.slice(0, 2).toUpperCase()}</span>}
+          {p.assignee?.full_name && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{p.assignee.full_name.split(' ')[0]}</span>}
+        </div>
+        {activityCount > 0 && <span style={{ fontSize: 10, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 2 }}>● {activityCount}</span>}
+      </div>
       {p.tags?.length > 0 && (
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
-          {p.tags.slice(0, 3).map(t => <span key={t} style={{ fontSize: 9, background: 'var(--bg2)', color: 'var(--text-muted)', padding: '1px 6px', borderRadius: 99 }}>{t}</span>)}
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
+          {p.tags.slice(0, 3).map(t => <span key={t} style={{ fontSize: 11, background: 'var(--bg-subtle)', color: 'var(--text-secondary)', padding: '1px 6px', borderRadius: 'var(--radius-full)' }}>{t}</span>)}
         </div>
       )}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-        {p.assignee?.full_name
-          ? <span className={`avatar ${avColor(p)}`} title={p.assignee.full_name} style={{ width: 20, height: 20, fontSize: 9 }}>{p.assignee.full_name.slice(0, 2).toUpperCase()}</span>
-          : <span />}
-        {activityCount > 0 && <span style={{ fontSize: 10, color: 'var(--amber-text)', display: 'flex', alignItems: 'center', gap: 2 }}>● {activityCount}</span>}
-      </div>
     </div>
   )
 }

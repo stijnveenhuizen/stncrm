@@ -3,13 +3,14 @@ import * as db from '../../lib/db'
 import { money, fdate, daysN, showToast } from '../Dashboard.jsx'
 import { SOURCES } from '../PipelineView.jsx'
 
-export default function ListTable({ prospects, stages, onOpen, onRefresh }) {
+export default function ListTable({ prospects, stages, onOpen, onRefresh, onCreate }) {
   const [filterStageIds, setFilterStageIds] = useState([])
   const [filterSources, setFilterSources] = useState([])
   const [filterStatus, setFilterStatus] = useState('actief')
   const [sortKey, setSortKey] = useState('created_at')
   const [sortDir, setSortDir] = useState('desc')
   const [selected, setSelected] = useState([])
+  const [tagInput, setTagInput] = useState(null) // null = closed, '' = open empty
 
   const stageById = useMemo(() => Object.fromEntries(stages.map(s => [s.id, s])), [stages])
 
@@ -55,15 +56,14 @@ export default function ListTable({ prospects, stages, onOpen, onRefresh }) {
     catch (e) { showToast('Fout: ' + e.message, 'error') }
   }
   async function bulkAddTag() {
-    const tag = window.prompt('Tag toevoegen:')
-    if (!tag || !tag.trim()) return
+    if (!tagInput || !tagInput.trim()) { setTagInput(null); return }
     try {
       await Promise.all(selected.map(id => {
         const p = prospects.find(x => x.id === id)
-        const tags = Array.from(new Set([...(p?.tags || []), tag.trim()]))
+        const tags = Array.from(new Set([...(p?.tags || []), tagInput.trim()]))
         return db.updateProspect(id, { tags })
       }))
-      setSelected([]); onRefresh()
+      setSelected([]); setTagInput(null); onRefresh()
     } catch (e) { showToast('Fout: ' + e.message, 'error') }
   }
 
@@ -91,20 +91,27 @@ export default function ListTable({ prospects, stages, onOpen, onRefresh }) {
       </div>
 
       {selected.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--accent-soft)', border: '1px solid var(--accent)', borderRadius: 'var(--rsm)', padding: '8px 14px', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)', padding: '8px 14px', marginBottom: 10 }}>
           <span style={{ fontSize: 12, fontWeight: 600 }}>{selected.length} geselecteerd</span>
-          <select onChange={e => bulkAssignStage(e.target.value)} value="" style={{ width: 'auto', fontSize: 12 }}>
+          <select onChange={e => bulkAssignStage(e.target.value)} value="" style={{ width: 'auto', fontSize: 12, height: 28 }}>
             <option value="">Fase wijzigen…</option>
             {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          <button className="btn btn-ghost btn-xs" onClick={bulkAddTag}>+ Tag</button>
-          <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} onClick={bulkDelete}>Verwijderen</button>
+          {tagInput === null ? (
+            <button className="btn btn-ghost btn-xs" onClick={() => setTagInput('')}>+ Tag</button>
+          ) : (
+            <div style={{ display: 'flex', gap: 4 }}>
+              <input autoFocus value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && bulkAddTag()} placeholder="Tagnaam…" style={{ height: 28, width: 120, fontSize: 12 }} />
+              <button className="btn btn-primary btn-xs" onClick={bulkAddTag}>Toevoegen</button>
+            </div>
+          )}
+          <button className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }} onClick={bulkDelete}>Verwijderen</button>
           <button className="btn btn-ghost btn-xs" onClick={() => setSelected([])} style={{ marginLeft: 'auto' }}>Selectie wissen</button>
         </div>
       )}
 
       <div className="sc" style={{ padding: 0 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '28px 1.6fr 1fr 0.8fr 0.7fr 1fr 0.9fr 1fr 90px', padding: '9px 16px', background: 'var(--bg2)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '28px 1.6fr 1fr 0.8fr 0.7fr 1fr 0.9fr 1fr 90px', padding: '8px 12px', background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border-default)', fontSize: 11, fontWeight: 600, color: 'var(--text-muted-tok)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
           <div></div>
           <SortHeader k="naam" label="Prospect" />
           <SortHeader k="fase" label="Fase" />
@@ -115,21 +122,35 @@ export default function ListTable({ prospects, stages, onOpen, onRefresh }) {
           <div>Toegewezen</div>
           <div></div>
         </div>
-        {!filtered.length ? <div className="empty">Geen prospects gevonden</div> : filtered.map(p => {
+        {!filtered.length ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 18, color: 'var(--text-muted-tok)' }}>▲</div>
+            <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>Geen prospects gevonden</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted-tok)', marginBottom: 16 }}>Voeg een prospect toe om je pipeline bij te houden</div>
+            {onCreate && <button className="btn btn-primary btn-sm" onClick={onCreate}>+ Prospect toevoegen</button>}
+          </div>
+        ) : filtered.map(p => {
           const stage = stageById[p.stage_id]
           const overdue = p.expected_close_date && daysN(p.expected_close_date) < 0
+          const prob = p.win_probability ?? stage?.win_probability ?? 0
           return (
-            <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '28px 1.6fr 1fr 0.8fr 0.7fr 1fr 0.9fr 1fr 90px', padding: '11px 16px', borderBottom: '1px solid var(--border)', alignItems: 'center', fontSize: 13, cursor: 'pointer' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-soft)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '28px 1.6fr 1fr 0.8fr 0.7fr 1fr 0.9fr 1fr 90px', padding: '10px 12px', borderBottom: '1px solid var(--border-default)', alignItems: 'center', fontSize: 13, cursor: 'pointer', transition: 'background 80ms ease' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-subtle)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               onClick={() => onOpen(p)}>
               <input type="checkbox" checked={selected.includes(p.id)} onChange={e => { e.stopPropagation(); toggleSelected(p.id) }} onClick={e => e.stopPropagation()} style={{ width: 15, height: 15 }} />
-              <div><div style={{ fontWeight: 500 }}>{p.fname} {p.lname}</div><div style={{ fontSize: 11, color: 'var(--text-faint)' }}>{p.company || ''}</div></div>
-              <div>{stage && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: stage.color + '18', color: stage.color, fontWeight: 600 }}>{stage.name}</span>}</div>
-              <div style={{ fontFamily: 'var(--mono-font)' }}>{p.deal_value ? money(p.deal_value) : '—'}</div>
-              <div style={{ color: 'var(--text-muted)' }}>{p.win_probability ?? stage?.win_probability ?? 0}%</div>
-              <div style={{ color: overdue ? 'var(--red-text)' : 'var(--text-muted)', fontWeight: overdue ? 600 : 400 }}>{p.expected_close_date ? fdate(p.expected_close_date) : '—'}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{p.source || '—'}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{p.assignee?.full_name || '—'}</div>
+              <div><div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{p.fname} {p.lname}</div><div style={{ fontSize: 11, color: 'var(--text-muted-tok)' }}>{p.company || ''}</div></div>
+              <div>{stage && <span className="badge" style={{ background: stage.color + '18', color: stage.color, borderColor: stage.color + '40' }}>{stage.name}</span>}</div>
+              <div style={{ fontFamily: 'var(--mono-font)', color: 'var(--text-primary)' }}>{p.deal_value ? money(p.deal_value) : '—'}</div>
+              <div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginBottom: 3 }}>{prob}%</div>
+                <div style={{ height: 4, background: 'var(--bg-subtle)', borderRadius: 99, width: 40 }}><div style={{ height: '100%', width: prob + '%', background: 'var(--accent)', borderRadius: 99 }}></div></div>
+              </div>
+              <div style={{ color: overdue ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: overdue ? 600 : 400 }}>{p.expected_close_date ? fdate(p.expected_close_date) : '—'}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{p.source || '—'}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {p.assignee?.full_name && <span className="avatar av-g" style={{ width: 18, height: 18, fontSize: 8 }}>{p.assignee.full_name.slice(0, 2).toUpperCase()}</span>}
+                {p.assignee?.full_name || '—'}
+              </div>
               <div></div>
             </div>
           )

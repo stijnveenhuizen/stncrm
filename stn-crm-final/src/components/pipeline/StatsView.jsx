@@ -1,5 +1,8 @@
 import React, { useState, useMemo } from 'react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { money } from '../Dashboard.jsx'
+
+const chartTooltipStyle = { background: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)', fontSize: 12 }
 
 const MONTHS = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
 
@@ -33,11 +36,10 @@ export default function StatsView({ prospects, stages, activities }) {
   // Win/verlies per maand (huidig jaar)
   const yearNow = new Date().getFullYear()
   const monthly = MONTHS.map((m, i) => {
-    const w = prospects.filter(p => p.won_at && new Date(p.won_at).getFullYear() === yearNow && new Date(p.won_at).getMonth() === i).length
-    const l = prospects.filter(p => p.lost_at && new Date(p.lost_at).getFullYear() === yearNow && new Date(p.lost_at).getMonth() === i).length
-    return { m, w, l }
+    const Gewonnen = prospects.filter(p => p.won_at && new Date(p.won_at).getFullYear() === yearNow && new Date(p.won_at).getMonth() === i).length
+    const Verloren = prospects.filter(p => p.lost_at && new Date(p.lost_at).getFullYear() === yearNow && new Date(p.lost_at).getMonth() === i).length
+    return { m, Gewonnen, Verloren }
   })
-  const maxMonthly = Math.max(1, ...monthly.map(x => Math.max(x.w, x.l)))
 
   // Verloren redenen top 5
   const reasonCounts = {}
@@ -45,13 +47,7 @@ export default function StatsView({ prospects, stages, activities }) {
   const topReasons = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]).slice(0, 5)
   const totalReasons = topReasons.reduce((s, [, c]) => s + c, 0)
   const reasonColors = ['#dc2626', '#d97706', '#7c3aed', '#2563eb', '#6b7280']
-  let cum = 0
-  const reasonGradient = topReasons.map(([r, c], i) => {
-    const pct = totalReasons ? (c / totalReasons) * 100 : 0
-    const part = `${reasonColors[i]} ${cum}% ${cum + pct}%`
-    cum += pct
-    return part
-  })
+  const reasonData = topReasons.map(([r, c], i) => ({ name: r, value: c, color: reasonColors[i] }))
 
   // Doorlooptijd per fase (gemiddelde dagen tussen opeenvolgende fase-wisselingen)
   const stageDurations = {}
@@ -112,10 +108,10 @@ export default function StatsView({ prospects, stages, activities }) {
               <div key={f.stage.id} style={{ marginBottom: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
                   <span style={{ fontWeight: 600 }}>{f.stage.name}</span>
-                  <span style={{ color: 'var(--text-faint)' }}>{f.count} deals · {money(f.value)}{i > 0 ? ` · -${dropoff}% t.o.v. vorige fase` : ''}</span>
+                  <span style={{ color: 'var(--text-muted-tok)' }}>{f.count} deals · {money(f.value)}{i > 0 ? ` · -${dropoff}% t.o.v. vorige fase` : ''}</span>
                 </div>
-                <div style={{ height: 20, background: 'var(--bg2)', borderRadius: 6, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: Math.max(4, (f.count / maxCount) * 100) + '%', background: f.stage.color, borderRadius: 6 }}></div>
+                <div style={{ height: 8, background: 'var(--bg-subtle)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: Math.max(4, (f.count / maxCount) * 100) + '%', background: f.stage.color, borderRadius: 'var(--radius-full)' }}></div>
                 </div>
               </div>
             )
@@ -126,31 +122,40 @@ export default function StatsView({ prospects, stages, activities }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16, marginBottom: 16 }}>
         <div className="sc">
           <div className="sc-head"><span className="sc-title">Gewonnen vs. verloren per maand ({yearNow})</span></div>
-          <div className="sc-body">
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 120 }}>
-              {monthly.map(x => (
-                <div key={x.m} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 100 }}>
-                    <div title={`Gewonnen: ${x.w}`} style={{ width: 8, height: Math.max(2, (x.w / maxMonthly) * 100), background: 'var(--green)', borderRadius: 2 }}></div>
-                    <div title={`Verloren: ${x.l}`} style={{ width: 8, height: Math.max(2, (x.l / maxMonthly) * 100), background: 'var(--red)', borderRadius: 2 }}></div>
-                  </div>
-                  <span style={{ fontSize: 9, color: 'var(--text-faint)' }}>{x.m}</span>
-                </div>
-              ))}
-            </div>
+          <div className="sc-body" style={{ height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthly} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid stroke="var(--border-default)" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="m" tick={{ fontSize: 11, fill: 'var(--text-muted-tok)' }} axisLine={{ stroke: 'var(--border-default)' }} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted-tok)' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={chartTooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="Gewonnen" fill="var(--success)" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Verloren" fill="var(--danger)" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
         <div className="sc">
           <div className="sc-head"><span className="sc-title">Verloren redenen</span></div>
           <div className="sc-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            {!topReasons.length ? <div className="empty">Nog geen verloren deals</div> : (
+            {!topReasons.length ? <div className="empty">Nog geen verloren deals geregistreerd</div> : (
               <>
-                <div style={{ width: 110, height: 110, borderRadius: '50%', background: `conic-gradient(${reasonGradient.join(',')})` }}></div>
-                <div style={{ marginTop: 12, width: '100%' }}>
+                <div style={{ width: '100%', height: 140 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={reasonData} dataKey="value" nameKey="name" innerRadius={0} outerRadius={60}>
+                        {reasonData.map((d, i) => <Cell key={i} fill={d.color} stroke="none" />)}
+                      </Pie>
+                      <Tooltip contentStyle={chartTooltipStyle} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ marginTop: 8, width: '100%' }}>
                   {topReasons.map(([r, c], i) => (
                     <div key={r} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, marginBottom: 3 }}>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: reasonColors[i], flexShrink: 0 }}></span>
-                      <span style={{ flex: 1 }}>{r}</span><span style={{ color: 'var(--text-faint)' }}>{c}</span>
+                      <span style={{ flex: 1 }}>{r}</span><span style={{ color: 'var(--text-muted-tok)' }}>{c} ({totalReasons ? Math.round(c / totalReasons * 100) : 0}%)</span>
                     </div>
                   ))}
                 </div>
