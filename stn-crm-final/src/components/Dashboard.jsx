@@ -836,43 +836,76 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
   const pDL = projects.filter(p => p.deadline && p.status !== 'afgerond').map(p => ({ name: p.name, deadline: p.deadline, sub: 'Project', tv: 'project-detail', tid: p.id, color: p.color }))
   const tDL = allTasks.filter(t => !t.done && t.due_date).map(t => ({ name: t.description, deadline: t.due_date, sub: t.project?.name || '', tv: 'project-detail', tid: t.project_id, color: t.project?.color || '#888' }))
   const deadlines = [...pDL, ...tDL].sort((a,b) => a.deadline.localeCompare(b.deadline)).slice(0,6)
-  const revByClient = clients.map(c => ({ name: (c.company || c.fname+' '+c.lname).slice(0,14), v: allInvoices.filter(i => i.client_id===c.id && i.status==='betaald').reduce((s,i) => s+Number(i.amount),0), id: c.id })).filter(x => x.v>0).sort((a,b) => b.v-a.v).slice(0,8)
-  const mx = revByClient.length ? Math.max(...revByClient.map(x => x.v)) : 1
   const activeRec = allRecurring.filter(r => r.status === 'actief')
   const openLeads = pipeline.filter(p => !['klant','afgewezen'].includes(p.stage))
   const expiringHosting = allHosting.filter(h => (h.domain_expires && daysN(h.domain_expires) <= 60) || (h.ssl_expires && daysN(h.ssl_expires) <= 60))
 
-  const now = new Date()
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth()-1, 1)
-  const newClientsThisMonth = clients.filter(c => c.created_at && new Date(c.created_at) >= startOfMonth).length
-  const newProjectsThisMonth = projects.filter(p => p.created_at && new Date(p.created_at) >= startOfMonth).length
-  const paidThisMonth = allInvoices.filter(i => i.status==='betaald' && i.date && new Date(i.date) >= startOfMonth).reduce((s,i)=>s+Number(i.amount),0)
-  const paidLastMonth = allInvoices.filter(i => i.status==='betaald' && i.date && new Date(i.date) >= startOfLastMonth && new Date(i.date) < startOfMonth).reduce((s,i)=>s+Number(i.amount),0)
-  const newRecurringThisMonth = allRecurring.filter(r => r.created_at && new Date(r.created_at) >= startOfMonth && r.status==='actief').length
+  const [period, setPeriod] = useState('all')
+  function periodRange(p) {
+    const now = new Date()
+    if (p === 'month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1)
+      return { start, prevStart: new Date(now.getFullYear(), now.getMonth()-1, 1), prevEnd: start }
+    }
+    if (p === 'quarter') {
+      const q = Math.floor(now.getMonth()/3)
+      const start = new Date(now.getFullYear(), q*3, 1)
+      return { start, prevStart: new Date(now.getFullYear(), q*3-3, 1), prevEnd: start }
+    }
+    if (p === 'year') {
+      const start = new Date(now.getFullYear(), 0, 1)
+      return { start, prevStart: new Date(now.getFullYear()-1, 0, 1), prevEnd: start }
+    }
+    return null
+  }
+  const range = periodRange(period)
+  const trendRange = range || periodRange('month')
+
+  const clientsInPeriod = range ? clients.filter(c => c.created_at && new Date(c.created_at) >= range.start) : clients
+  const clientsPrev = clients.filter(c => c.created_at && new Date(c.created_at) >= trendRange.prevStart && new Date(c.created_at) < trendRange.prevEnd).length
+  const clientsCur = clients.filter(c => c.created_at && new Date(c.created_at) >= trendRange.start).length
+
+  const projectsInPeriod = range ? projects.filter(p => p.created_at && new Date(p.created_at) >= range.start) : projects
+  const projectsPrev = projects.filter(p => p.created_at && new Date(p.created_at) >= trendRange.prevStart && new Date(p.created_at) < trendRange.prevEnd).length
+  const projectsCur = projects.filter(p => p.created_at && new Date(p.created_at) >= trendRange.start).length
+
+  const paidInPeriod = (range ? allInvoices.filter(i => i.status==='betaald' && i.date && new Date(i.date) >= range.start) : allInvoices.filter(i => i.status==='betaald')).reduce((s,i)=>s+Number(i.amount),0)
+  const paidPrev = allInvoices.filter(i => i.status==='betaald' && i.date && new Date(i.date) >= trendRange.prevStart && new Date(i.date) < trendRange.prevEnd).reduce((s,i)=>s+Number(i.amount),0)
+  const paidCur = allInvoices.filter(i => i.status==='betaald' && i.date && new Date(i.date) >= trendRange.start).reduce((s,i)=>s+Number(i.amount),0)
+
+  const newRecurringInPeriod = allRecurring.filter(r => r.created_at && new Date(r.created_at) >= trendRange.start && r.status==='actief').length
+  const revByClient = clients.map(c => ({ name: (c.company || c.fname+' '+c.lname).slice(0,14), v: allInvoices.filter(i => i.client_id===c.id && i.status==='betaald' && (!range || (i.date && new Date(i.date) >= range.start))).reduce((s,i) => s+Number(i.amount),0), id: c.id })).filter(x => x.v>0).sort((a,b) => b.v-a.v).slice(0,8)
+  const mx = revByClient.length ? Math.max(...revByClient.map(x => x.v)) : 1
   const [hoveredBar, setHoveredBar] = useState(null)
 
   return (
     <div>
-      <div className="topbar"><h2>Welkom{myProfile?.full_name ? ', ' + myProfile.full_name.split(' ')[0] : ''}</h2><div className="topbar-right"><ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Klant</button>} /><ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-ghost btn-sm">+ Project</button>} /></div></div>
+      <div className="topbar"><h2>Welkom{myProfile?.full_name ? ', ' + myProfile.full_name.split(' ')[0] : ''}</h2><div className="topbar-right">
+        <select value={period} onChange={e=>setPeriod(e.target.value)} style={{width:'auto'}}>
+          <option value="all">Alle periodes</option>
+          <option value="month">Deze maand</option>
+          <option value="quarter">Dit kwartaal</option>
+          <option value="year">Dit jaar</option>
+        </select>
+        <ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Klant</button>} /><ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-ghost btn-sm">+ Project</button>} /></div></div>
       <div className="content">
         {showOnboarding && <OnboardingChecklist clients={clients} projects={projects} orgMembers={orgMembers} showView={showView} onRefresh={onRefresh} activeOrgId={activeOrgId} onDismiss={dismissOnboarding} />}
         <div className="stats-grid">
           <div className="stat-card">
             <div className="stat-card-icon" style={{background:'var(--accent)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-            <div className="stat-label">Klanten</div><div className="stat-value">{clients.length}<TrendBadge value={newClientsThisMonth} /></div><div className="stat-sub">{clients.filter(c=>c.status==='actief').length} actief</div>
+            <div className="stat-label">{range ? 'Nieuwe klanten' : 'Klanten'}</div><div className="stat-value">{range ? clientsInPeriod.length : clients.length}<TrendBadge value={clientsCur - clientsPrev} /></div><div className="stat-sub">{range ? `${clients.length} totaal · ${clients.filter(c=>c.status==='actief').length} actief` : `${clients.filter(c=>c.status==='actief').length} actief`}</div>
           </div>
           <div className="stat-card">
             <div className="stat-card-icon" style={{background:'var(--accent)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2Z"/></svg></div>
-            <div className="stat-label">Projecten</div><div className="stat-value">{projects.length}<TrendBadge value={newProjectsThisMonth} /></div><div className="stat-sub">{projects.filter(p=>p.status==='actief').length} actief{myRole!=='owner' && ' · allemaal aan jou toegewezen'}</div>
+            <div className="stat-label">{range ? 'Nieuwe projecten' : 'Projecten'}</div><div className="stat-value">{range ? projectsInPeriod.length : projects.length}<TrendBadge value={projectsCur - projectsPrev} /></div><div className="stat-sub">{range ? `${projects.length} totaal · ${projects.filter(p=>p.status==='actief').length} actief` : `${projects.filter(p=>p.status==='actief').length} actief`}{myRole!=='owner' && ' · allemaal aan jou toegewezen'}</div>
           </div>
           <div className="stat-card">
             <div className="stat-card-icon" style={{background:'var(--accent)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-            <div className="stat-label">Omzet betaald</div><div className="stat-value" style={{fontSize:18}}>{money(totalPaid)}<TrendBadge value={paidThisMonth - paidLastMonth} format={v=>money(Math.abs(v))} /></div>{totalOpen>0&&<div className="stat-sub" style={{color:'var(--amber-text)'}}>{money(totalOpen)} nog te ontvangen</div>}
+            <div className="stat-label">{range ? 'Omzet in periode' : 'Omzet betaald'}</div><div className="stat-value" style={{fontSize:18}}>{money(paidInPeriod)}<TrendBadge value={paidCur - paidPrev} format={v=>money(Math.abs(v))} /></div>{totalOpen>0&&<div className="stat-sub" style={{color:'var(--amber-text)'}}>{money(totalOpen)} nog te ontvangen</div>}
           </div>
           <div className="stat-card">
             <div className="stat-card-icon" style={{background:'var(--accent)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div>
-            <div className="stat-label">MRR</div><div className="stat-value" style={{fontSize:18}}>{money(totalMRR)}<TrendBadge value={newRecurringThisMonth} format={v=>v+' nieuw'} /></div><div className="stat-sub">per maand</div>
+            <div className="stat-label">MRR</div><div className="stat-value" style={{fontSize:18}}>{money(totalMRR)}<TrendBadge value={newRecurringInPeriod} format={v=>v+' nieuw'} /></div><div className="stat-sub">per maand · huidig tarief</div>
           </div>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
