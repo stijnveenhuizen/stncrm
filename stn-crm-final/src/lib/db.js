@@ -159,6 +159,75 @@ export async function getMyOrganizations() {
   if (error) throw error
   return data.map(m => ({ ...m.organizations, myRole: m.role }))
 }
+
+// ── Onboarding ───────────────────────────────────────────────────────────────────
+export async function trackOnboardingEvent(workspaceId, step, action) {
+  const userId = (await supabase.auth.getUser()).data.user.id
+  const { error } = await supabase.from('onboarding_events').insert([{ user_id: userId, workspace_id: workspaceId, step, action }])
+  if (error) throw error
+  if (action === 'completed') {
+    await supabase.from('organizations').update({ onboarding_step: step }).eq('id', workspaceId)
+  }
+}
+export async function completeOnboarding(organizationId) {
+  const { error } = await supabase.from('organizations').update({ onboarding_completed: true }).eq('id', organizationId)
+  if (error) throw error
+}
+export async function skipOnboarding(organizationId) {
+  const { error } = await supabase.from('organizations').update({ onboarding_skipped: true }).eq('id', organizationId)
+  if (error) throw error
+}
+export async function restartOnboarding(organizationId) {
+  const { error } = await supabase.from('organizations').update({ onboarding_completed: false, onboarding_skipped: false, onboarding_step: null }).eq('id', organizationId)
+  if (error) throw error
+}
+
+export async function hasDemoData(organizationId) {
+  const { count, error } = await supabase.from('clients').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId).eq('is_demo', true)
+  if (error) throw error
+  return count > 0
+}
+export async function deleteDemoData(organizationId) {
+  const { data: demoClients } = await supabase.from('clients').select('id').eq('organization_id', organizationId).eq('is_demo', true)
+  const clientIds = (demoClients || []).map(c => c.id)
+  const { data: demoProjects } = await supabase.from('projects').select('id').eq('organization_id', organizationId).eq('is_demo', true)
+  const projectIds = (demoProjects || []).map(p => p.id)
+  if (projectIds.length) await supabase.from('tasks').delete().in('project_id', projectIds)
+  if (clientIds.length) {
+    await supabase.from('invoices').delete().in('client_id', clientIds)
+    await supabase.from('hosting').delete().in('client_id', clientIds)
+  }
+  await supabase.from('pipeline').delete().eq('organization_id', organizationId).eq('is_demo', true)
+  if (projectIds.length) await supabase.from('projects').delete().in('id', projectIds)
+  if (clientIds.length) await supabase.from('clients').delete().in('id', clientIds)
+}
+export async function createDemoData(organizationId) {
+  const c1 = await createClient({ organization_id: organizationId, fname: 'Jan', lname: 'de Vries', company: 'Bakkerij De Vries', email: 'jan@bakkerijdevries-demo.nl', status: 'actief', is_demo: true })
+  const c2 = await createClient({ organization_id: organizationId, fname: 'Lisa', lname: 'Smit', company: 'Fitness Studio Smit', email: 'lisa@fitnessstudiosmit-demo.nl', status: 'actief', is_demo: true })
+  const p1 = await createProject({ organization_id: organizationId, client_id: c1.id, name: 'Website Bakkerij De Vries', type: 'WordPress', status: 'actief', color: '#2563eb', is_demo: true })
+  const p2 = await createProject({ organization_id: organizationId, client_id: c2.id, name: 'Website Fitness Studio Smit', type: 'Webflow', status: 'actief', color: '#7c3aed', is_demo: true })
+  await supabase.from('tasks').insert([
+    { project_id: p1.id, description: 'Homepage ontwerp goedkeuren', priority: 'normaal', done: true, created_by: 'staff', is_demo: true },
+    { project_id: p1.id, description: 'Productenpagina inrichten', priority: 'hoog', done: false, created_by: 'staff', is_demo: true },
+    { project_id: p2.id, description: 'Lidmaatschapspagina bouwen', priority: 'normaal', done: false, created_by: 'staff', is_demo: true },
+  ])
+  const todayStr = new Date().toISOString().slice(0, 10)
+  await supabase.from('invoices').insert([
+    { client_id: c1.id, description: 'Aanbetaling website', amount: 500, date: todayStr, status: 'betaald', is_demo: true },
+    { client_id: c2.id, description: 'Eerste factuur project', amount: 750, date: todayStr, due_date: todayStr, status: 'verzonden', is_demo: true },
+  ])
+  const sslSoon = new Date(); sslSoon.setDate(sslSoon.getDate() + 45)
+  await supabase.from('hosting').insert([
+    { client_id: c1.id, site_name: 'Bakkerij De Vries', domain: 'bakkerijdevries-demo.nl', ssl_expires: sslSoon.toISOString().slice(0,10), is_demo: true },
+  ])
+  await supabase.from('pipeline').insert([
+    { organization_id: organizationId, fname: 'Mark', lname: 'Jansen', company: 'Sportschool Jansen', source: 'Website', stage: 'interesse', deal_value: 1200, is_demo: true },
+  ])
+}
+
+export async function adminGetOnboardingStats() {
+  return authedFetch('/api/admin-onboarding-stats')
+}
 export async function getOrgMembers(organizationId) {
   const { data, error } = await supabase
     .from('memberships').select('role, profiles(*)').eq('organization_id', organizationId).order('role', { ascending: true })
