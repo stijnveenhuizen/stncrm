@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import * as db from '../lib/db'
 import ProfileView from './ProfileView.jsx'
 import PipelineView from './PipelineView.jsx'
-import OnboardingWizard, { OnboardingTourOverlay, ONBOARDING_STEPS } from './OnboardingWizard.jsx'
+import OnboardingWizard, { ONBOARDING_STEPS } from './OnboardingWizard.jsx'
 
 export const money = n => '€\u202f' + Number(n).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 export const fdate = d => { if (!d) return '—'; return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) }
@@ -316,19 +317,19 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     if (!showWizard && onboardingStepIndex !== null) setOnboardingStepIndex(null)
   }, [showWizard, activeOrg?.onboarding_step, onboardingStepIndex])
 
-  const demoDataCreatedRef = useRef(false)
-  useEffect(() => {
-    if (showWizard && onboardingStepIndex === 4 && activeOrgId && !demoDataCreatedRef.current) {
-      demoDataCreatedRef.current = true
-      db.trackOnboardingEvent(activeOrgId, 'demo_tour', 'viewed').catch(() => {})
-      db.hasDemoData(activeOrgId).then(has => { if (!has) return db.createDemoData(activeOrgId) }).then(() => loadAll()).catch(() => {})
-    }
-  }, [showWizard, onboardingStepIndex, activeOrgId])
-
-  function exitOnboardingWizard() {
+  const [showWelcomeBanner, setShowWelcomeBanner] = useState(false)
+  function exitOnboardingWizard(reason) {
     setForceOnboarding(false)
     setOnboardingStepIndex(null)
     loadOrganizations(); loadAll(); loadCompanySettings()
+    if (reason === 'completed') {
+      try {
+        if (localStorage.getItem('stn_welcome_banner_shown_' + activeOrgId) !== '1') {
+          setShowWelcomeBanner(true)
+          localStorage.setItem('stn_welcome_banner_shown_' + activeOrgId, '1')
+        }
+      } catch (e) { setShowWelcomeBanner(true) }
+    }
   }
 
   async function restartOnboardingWizard() {
@@ -343,6 +344,8 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   }
 
   function resumeOnboardingWizard() {
+    const idx = activeOrg?.onboarding_step ? Math.min(ONBOARDING_STEPS.indexOf(activeOrg.onboarding_step) + 1, 5) : 0
+    showToast(`Je gaat verder waar je gebleven was — stap ${idx + 1} van 6`)
     setForceOnboarding(true)
   }
 
@@ -354,11 +357,6 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     setBannerDismissed(true)
   }
   const showResumeBanner = !showWizard && myRole === 'owner' && !!activeOrg && !activeOrg.onboarding_completed && !activeOrg.onboarding_skipped && !!activeOrg.onboarding_step && !bannerDismissed
-
-  async function finishTour() {
-    try { await db.trackOnboardingEvent(activeOrgId, 'demo_tour', 'completed') } catch (e) {}
-    setOnboardingStepIndex(5)
-  }
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
@@ -671,7 +669,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   if (loading) return <SkeletonScreen />
 
   const navItem = (key, label, activeWhen) => (
-    <button className={`sidebar2-item${activeWhen?' active':''}`} data-tour={key} onClick={() => { showView(key); setSidebarOpen(false) }}>{label}</button>
+    <button className={`sidebar2-item${activeWhen?' active':''}`} onClick={() => { showView(key); setSidebarOpen(false) }}>{label}</button>
   )
 
   return (
@@ -688,7 +686,6 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
           onExit={exitOnboardingWizard}
         />
       )}
-      {showWizard && onboardingStepIndex === 4 && <OnboardingTourOverlay onFinish={finishTour} />}
       <header className="topbar-dark">
         <button className="hamburger-btn" onClick={() => setSidebarOpen(o => !o)} aria-label="Menu openen">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
@@ -813,16 +810,32 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         </div>
       </nav>
       <div className="main">
+        <AnimatePresence>
+          {showWelcomeBanner && (
+            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.35 }}
+              style={{background:'rgba(61,182,142,0.1)',border:'1px solid var(--accent)',borderRadius:'var(--r)',padding:'14px 18px',margin:'16px 24px 0',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>Welkom, {(profile?.full_name||session.user.email).split(' ')[0]}! Je werkruimte is klaar. Hier zijn je volgende stappen:</div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                  <ClientModal onSave={loadAll} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-xs">+ Nieuwe klant</button>} />
+                  <ProjectModal clients={clients} onSave={loadAll} activeOrgId={activeOrgId} trigger={<button className="btn btn-ghost btn-xs">+ Nieuw project</button>} />
+                  <button className="btn btn-ghost btn-xs" onClick={() => showView('finance')}>Factuur aanmaken</button>
+                </div>
+              </div>
+              <button type="button" onClick={() => setShowWelcomeBanner(false)} aria-label="Banner sluiten" style={{color:'var(--accent-text)',fontSize:16,cursor:'pointer',lineHeight:1,flexShrink:0}}>×</button>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {showResumeBanner && (
           <div style={{background:'var(--amber-soft)',border:'1px solid var(--amber)',borderRadius:'var(--r)',padding:'12px 16px',margin:'16px 24px 0',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
-            <span style={{fontSize:13,color:'var(--amber-text)'}}>Je hebt de onboarding nog niet afgerond — gestopt bij stap {ONBOARDING_STEPS.indexOf(activeOrg.onboarding_step)+2} van 6.</span>
+            <span style={{fontSize:13,color:'var(--amber-text)'}}>Je hebt de setup nog niet afgerond — gestopt bij stap {ONBOARDING_STEPS.indexOf(activeOrg.onboarding_step)+2} van 6.</span>
             <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
               <button className="btn btn-primary btn-xs" onClick={resumeOnboardingWizard}>Verder gaan →</button>
               <button type="button" onClick={dismissOnboardingBanner} aria-label="Banner sluiten" style={{color:'var(--amber-text)',fontSize:15,cursor:'pointer',lineHeight:1}}>×</button>
             </div>
           </div>
         )}
-        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} orgMembers={orgMembers} />}
+        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} orgMembers={orgMembers} companySettings={companySettings} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} currentUserName={profile?.full_name || session.user.email} />}
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
@@ -876,33 +889,43 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   )
 }
 
-function OnboardingChecklist({ clients, projects, orgMembers, showView, onRefresh, activeOrgId, onDismiss }) {
+function OnboardingChecklist({ clients, projects, orgMembers, allInvoices = [], companySettings, showView, onRefresh, activeOrgId, onDismiss }) {
   const steps = [
-    { done: orgMembers.length > 1, label: "Nodig collega's uit", action: <button className="btn btn-ghost btn-xs" onClick={()=>showView('team')}>Naar Team</button> },
-    { done: clients.length > 0, label: 'Voeg je eerste klant toe', action: <ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-ghost btn-xs">Klant toevoegen</button>} /> },
-    { done: projects.length > 0, label: 'Maak je eerste project aan', action: <ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-ghost btn-xs">Project aanmaken</button>} /> },
+    { done: !!companySettings, label: 'Bedrijf ingesteld', action: <button className="btn btn-ghost btn-xs" onClick={()=>showView('company-settings')}>Instellen</button> },
+    { done: clients.some(c=>!c.is_demo), label: 'Eerste klant toegevoegd', action: <ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-ghost btn-xs">Klant toevoegen</button>} /> },
+    { done: projects.some(p=>!p.is_demo), label: 'Eerste project aangemaakt', action: <ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-ghost btn-xs">Project aanmaken</button>} /> },
+    { done: allInvoices.some(i=>!i.is_demo), label: 'Eerste factuur verstuurd', action: <button className="btn btn-ghost btn-xs" onClick={()=>showView('finance')}>Naar Financiën</button> },
+    { done: orgMembers.length > 1, label: "Collega uitgenodigd", action: <button className="btn btn-ghost btn-xs" onClick={()=>showView('team')}>Naar Team</button> },
   ]
+  const doneCount = steps.filter(s=>s.done).length
+  const pct = Math.round(doneCount / steps.length * 100)
   return (
-    <div className="sc" style={{marginBottom:16}}>
+    <motion.div className="sc" style={{marginBottom:16}} initial={{opacity:1}} exit={{opacity:0,scale:0.97}} transition={{duration:0.4}}>
       <div className="sc-head">
         <span className="sc-title">Aan de slag</span>
         <button className="btn btn-ghost btn-xs" onClick={onDismiss}>Sluiten</button>
       </div>
       <div className="sc-body">
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+          <div style={{flex:1,height:6,background:'var(--bg2)',borderRadius:99,overflow:'hidden'}}>
+            <motion.div style={{height:'100%',background:'var(--accent)',borderRadius:99}} initial={{width:0}} animate={{width:pct+'%'}} transition={{duration:0.5,ease:'easeOut'}} />
+          </div>
+          <span style={{fontSize:12,color:'var(--text-muted)',fontWeight:600,flexShrink:0}}>{pct}% voltooid</span>
+        </div>
         {steps.map((s,i) => (
           <div key={i} className="info-row" style={{alignItems:'center'}}>
-            <div style={{width:18,height:18,borderRadius:'50%',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:s.done?'var(--accent)':'var(--bg2)',border:s.done?'none':'1.5px solid var(--border-strong)'}}>
+            <motion.div
+              style={{width:18,height:18,borderRadius:'50%',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:s.done?'var(--accent)':'var(--bg2)',border:s.done?'none':'1.5px solid var(--border-strong)'}}
+              animate={s.done?{scale:[0.5,1.15,1]}:{scale:1}} transition={{duration:0.4,type:'spring'}}
+            >
               {s.done && <span style={{color:'#fff',fontSize:10}}>✓</span>}
-            </div>
+            </motion.div>
             <span className="info-val" style={{textDecoration:s.done?'line-through':'none',color:s.done?'var(--text-faint)':'var(--text)'}}>{s.label}</span>
             {!s.done && s.action}
           </div>
         ))}
-        <div style={{fontSize:11,color:'var(--text-faint)',marginTop:10}}>
-          Tip: zodra je een project hebt, kun je daar vanuit ook je klant uitnodigen voor het klantportaal.
-        </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -917,11 +940,12 @@ function TrendBadge({ value, format }) {
   )
 }
 
-function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, allHosting = [], pipeline = [], totalPaid, totalOpen, totalMRR, showView, onRefresh, myProfile, myRole, activeOrgId, orgMembers = [] }) {
+function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, allHosting = [], pipeline = [], totalPaid, totalOpen, totalMRR, showView, onRefresh, myProfile, myRole, activeOrgId, orgMembers = [], companySettings }) {
   const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
     try { return localStorage.getItem('stn_onboarding_dismissed_' + activeOrgId) === '1' } catch(e) { return false }
   })
-  const showOnboarding = !onboardingDismissed && (clients.length === 0 || projects.length === 0 || orgMembers.length <= 1)
+  const checklistAllDone = !!companySettings && clients.some(c=>!c.is_demo) && projects.some(p=>!p.is_demo) && allInvoices.some(i=>!i.is_demo) && orgMembers.length > 1
+  const showOnboarding = !onboardingDismissed && !checklistAllDone
   function dismissOnboarding() {
     try { localStorage.setItem('stn_onboarding_dismissed_' + activeOrgId, '1') } catch(e) {}
     setOnboardingDismissed(true)
@@ -983,7 +1007,9 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
         </select>
         <ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Klant</button>} /><ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-ghost btn-sm">+ Project</button>} /></div></div>
       <div className="content">
-        {showOnboarding && <OnboardingChecklist clients={clients} projects={projects} orgMembers={orgMembers} showView={showView} onRefresh={onRefresh} activeOrgId={activeOrgId} onDismiss={dismissOnboarding} />}
+        <AnimatePresence>
+          {showOnboarding && <OnboardingChecklist clients={clients} projects={projects} orgMembers={orgMembers} allInvoices={allInvoices} companySettings={companySettings} showView={showView} onRefresh={onRefresh} activeOrgId={activeOrgId} onDismiss={dismissOnboarding} />}
+        </AnimatePresence>
         <div className="stats-grid">
           <div className="stat-card">
             <div className="stat-card-icon" style={{background:'var(--accent)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
@@ -2037,8 +2063,9 @@ function CompanySettingsView({ activeOrgId, orgName, settings, onRefresh, onAddW
     try { await db.deleteProjectTemplate(id); db.getProjectTemplates(activeOrgId).then(setTemplates) }
     catch (e) { showToast('Fout: ' + e.message, 'error') }
   }
+  const [confirmDemoOpen, setConfirmDemoOpen] = useState(false)
   async function removeDemoData() {
-    if (!confirm('Dit verwijdert alle voorbeeldklanten, projecten en facturen die zijn aangemaakt tijdens de rondleiding. Doorgaan?')) return
+    setConfirmDemoOpen(false)
     setRemovingDemo(true)
     try { await db.deleteDemoData(activeOrgId); setHasDemo(false); onRefresh(); showToast('Voorbeelddata verwijderd') }
     catch (e) { showToast('Fout: ' + e.message, 'error') }
@@ -2166,10 +2193,25 @@ function CompanySettingsView({ activeOrgId, orgName, settings, onRefresh, onAddW
             <div className="info-row"><span className="info-label">Status</span><span className="info-val">{hasDemo ? <span className="badge bg-amber">Aanwezig</span> : <span className="badge bg-gray">Geen voorbeelddata</span>}</span></div>
             {hasDemo && <>
               <div style={{fontSize:12,color:'var(--text-faint)',margin:'10px 0'}}>Dit verwijdert alle voorbeeldklanten, projecten en facturen die zijn aangemaakt tijdens de rondleiding.</div>
-              <button className="btn btn-danger btn-sm" onClick={removeDemoData} disabled={removingDemo}>{removingDemo ? 'Verwijderen…' : 'Verwijder alle voorbeelddata'}</button>
+              <button className="btn btn-danger btn-sm" onClick={()=>setConfirmDemoOpen(true)} disabled={removingDemo}>{removingDemo ? 'Verwijderen…' : 'Verwijder voorbeelddata'}</button>
             </>}
           </div>
         </div>
+
+        <AnimatePresence>
+          {confirmDemoOpen && (
+            <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:300,padding:16}} onClick={e=>e.target===e.currentTarget && setConfirmDemoOpen(false)}>
+              <motion.div initial={{scale:0.9,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.9,opacity:0}} transition={{duration:0.2}} className="modal" style={{maxWidth:420}}>
+                <h3>Voorbeelddata verwijderen?</h3>
+                <p style={{fontSize:13,color:'var(--text-muted)',lineHeight:1.6,marginBottom:18}}>Dit verwijdert alle voorbeeldklanten, projecten en facturen die zijn aangemaakt tijdens de rondleiding. Dit kan niet ongedaan worden gemaakt.</p>
+                <div className="modal-actions">
+                  <button className="btn btn-ghost" onClick={()=>setConfirmDemoOpen(false)}>Annuleren</button>
+                  <button className="btn btn-danger" onClick={removeDemoData}>Verwijderen</button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="sc" style={{marginTop:24}}>
           <div className="sc-head"><span className="sc-title">Werkruimtes</span></div>
