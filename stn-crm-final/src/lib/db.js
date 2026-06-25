@@ -700,6 +700,12 @@ export async function deletePipelineStage(id, fallbackStageId) {
 }
 
 // ── Prospect-activiteiten ────────────────────────────────────────────────────────
+export async function getAllProspectActivities(organizationId) {
+  const { data, error } = await supabase
+    .from('prospect_activities').select('*, pipeline!inner(organization_id)').eq('pipeline.organization_id', organizationId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
 export async function getProspectActivities(prospectId) {
   const { data, error } = await supabase.from('prospect_activities').select('*').eq('prospect_id', prospectId).order('created_at', { ascending: false })
   if (error) throw error
