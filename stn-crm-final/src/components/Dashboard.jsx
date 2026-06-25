@@ -1466,6 +1466,26 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
   )
 }
 
+function ProjectThumb({ project: p }) {
+  const [imgError, setImgError] = useState(false)
+  const showScreenshot = !!p.url && !imgError
+  return (
+    <div className="item-card-thumb" style={{ background: showScreenshot ? 'var(--bg-subtle)' : p.color }}>
+      {showScreenshot ? (
+        <img
+          src={`https://s.wordpress.com/mshots/v1/${encodeURIComponent(p.url)}?w=400&h=300`}
+          alt={p.name}
+          onError={() => setImgError(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : (
+        <span style={{ color: '#fff', fontFamily: 'var(--heading-font)', fontWeight: 700, fontSize: 22, opacity: .85 }}>{p.name[0]?.toUpperCase()}</span>
+      )}
+      <span style={{ position: 'absolute', top: 8, right: 8 }}><Badge s={p.status} /></span>
+    </div>
+  )
+}
+
 function ProjectsView({ projects, clients, clientName, allTasks = [], showView, onRefresh, activeOrgId }) {
   const [q, setQ] = useState('')
   const [previewUrl, setPreviewUrl] = useState(null)
@@ -1523,10 +1543,7 @@ function ProjectsView({ projects, clients, clientName, allTasks = [], showView, 
               const pct = progressOf(p)
               return (
                 <div key={p.id} className="item-card" onClick={()=>showView('project-detail',p.id)}>
-                  <div className="item-card-thumb" style={{background:p.color}}>
-                    <span style={{color:'#fff',fontFamily:'var(--heading-font)',fontWeight:700,fontSize:22,opacity:.85}}>{p.name[0]?.toUpperCase()}</span>
-                    <span style={{position:'absolute',top:8,right:8}}><Badge s={p.status} /></span>
-                  </div>
+                  <ProjectThumb project={p} />
                   <div className="item-card-body">
                     <div style={{fontWeight:600,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
                     <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
