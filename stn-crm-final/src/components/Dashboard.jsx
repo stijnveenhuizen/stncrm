@@ -331,6 +331,30 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     loadOrganizations(); loadAll(); loadCompanySettings()
   }
 
+  async function restartOnboardingWizard() {
+    if (!activeOrgId) return
+    try {
+      await db.restartOnboarding(activeOrgId)
+      try { localStorage.removeItem('stn_onboarding_banner_dismissed_' + activeOrgId) } catch (e) {}
+      await loadOrganizations()
+      setOnboardingStepIndex(0)
+      setForceOnboarding(true)
+    } catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+
+  function resumeOnboardingWizard() {
+    setForceOnboarding(true)
+  }
+
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    try { return activeOrgId ? localStorage.getItem('stn_onboarding_banner_dismissed_' + activeOrgId) === '1' : false } catch (e) { return false }
+  })
+  function dismissOnboardingBanner() {
+    try { localStorage.setItem('stn_onboarding_banner_dismissed_' + activeOrgId, '1') } catch (e) {}
+    setBannerDismissed(true)
+  }
+  const showResumeBanner = !showWizard && myRole === 'owner' && !!activeOrg && !activeOrg.onboarding_completed && !activeOrg.onboarding_skipped && !!activeOrg.onboarding_step && !bannerDismissed
+
   async function finishTour() {
     try { await db.trackOnboardingEvent(activeOrgId, 'demo_tour', 'completed') } catch (e) {}
     setOnboardingStepIndex(5)
@@ -789,6 +813,15 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         </div>
       </nav>
       <div className="main">
+        {showResumeBanner && (
+          <div style={{background:'var(--amber-soft)',border:'1px solid var(--amber)',borderRadius:'var(--r)',padding:'12px 16px',margin:'16px 24px 0',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+            <span style={{fontSize:13,color:'var(--amber-text)'}}>Je hebt de onboarding nog niet afgerond — gestopt bij stap {ONBOARDING_STEPS.indexOf(activeOrg.onboarding_step)+2} van 6.</span>
+            <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+              <button className="btn btn-primary btn-xs" onClick={resumeOnboardingWizard}>Verder gaan →</button>
+              <button type="button" onClick={dismissOnboardingBanner} aria-label="Banner sluiten" style={{color:'var(--amber-text)',fontSize:15,cursor:'pointer',lineHeight:1}}>×</button>
+            </div>
+          </div>
+        )}
         {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} orgMembers={orgMembers} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} currentUserName={profile?.full_name || session.user.email} />}
@@ -797,7 +830,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} clients={clients} onRefresh={loadAll} activeOrgId={activeOrgId} companySettings={companySettings} />}
         {view==='hosting' && <HostingView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} />}
-        {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} />}
+        {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} myRole={myRole} onRestartOnboarding={restartOnboardingWizard} />}
         {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} organizationId={activeOrgId} />}
         {view==='team' && myRole === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} myProfile={profile} activeOrgId={activeOrgId} />}
         {view==='company-settings' && myRole === 'owner' && <CompanySettingsView activeOrgId={activeOrgId} orgName={orgName} settings={companySettings} onRefresh={() => { loadCompanySettings(); loadOrganizations() }} onAddWorkspace={() => setShowNewWorkspace(true)} />}

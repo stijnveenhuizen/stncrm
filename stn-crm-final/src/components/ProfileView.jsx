@@ -11,7 +11,7 @@ const ACCENT_COLORS = [
   { name: 'Zwart', value: '#1a1a18' },
 ]
 
-export default function ProfileView({ session, onProfileUpdate }) {
+export default function ProfileView({ session, onProfileUpdate, myRole, onRestartOnboarding }) {
   const [profile, setProfile] = useState(null)
   const [form, setForm] = useState({ full_name: '', theme: 'light', accent_color: '#3db68e' })
   const [saving, setSaving] = useState(false)
@@ -224,6 +224,16 @@ export default function ProfileView({ session, onProfileUpdate }) {
             </div>
           </div>
         </div>
+
+        {myRole === 'owner' && (
+          <div className="sc">
+            <div className="sc-head"><span className="sc-title">Onboarding</span></div>
+            <div className="sc-body">
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>Wil je de introductiewizard nog eens doorlopen?</div>
+              <span onClick={onRestartOnboarding} style={{ fontSize: 13, color: 'var(--accent-text)', fontWeight: 600, cursor: 'pointer' }}>Onboarding opnieuw bekijken</span>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
