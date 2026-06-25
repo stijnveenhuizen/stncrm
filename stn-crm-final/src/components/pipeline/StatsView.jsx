@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { money } from '../Dashboard.jsx'
 
@@ -92,10 +93,17 @@ export default function StatsView({ prospects, stages, activities }) {
       </div>
 
       <div className="stats-grid" style={{ marginBottom: 20 }}>
-        <div className="stat-card"><div className="stat-label">Gewonnen deals</div><div className="stat-value">{won.length}</div></div>
-        <div className="stat-card"><div className="stat-label">Gewonnen omzet</div><div className="stat-value" style={{ fontSize: 18 }}>{money(wonRevenue)}</div></div>
-        <div className="stat-card"><div className="stat-label">Conversieratio</div><div className="stat-value" style={{ color: 'var(--teal-text)' }}>{conversionRatio}%</div></div>
-        <div className="stat-card"><div className="stat-label">Gem. dealgrootte</div><div className="stat-value" style={{ fontSize: 18 }}>{money(avgDealSize)}</div></div>
+        {[
+          ['Gewonnen deals', won.length, undefined],
+          ['Gewonnen omzet', money(wonRevenue), 18],
+          ['Conversieratio', conversionRatio + '%', undefined, 'var(--teal-text)'],
+          ['Gem. dealgrootte', money(avgDealSize), 18],
+        ].map(([label, value, fontSize, color], i) => (
+          <motion.div key={label} className="stat-card" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08, duration: 0.3 }}>
+            <div className="stat-label">{label}</div>
+            <div className="stat-value" style={{ fontSize, color }}>{value}</div>
+          </motion.div>
+        ))}
       </div>
 
       <div className="sc" style={{ marginBottom: 16 }}>
@@ -111,7 +119,8 @@ export default function StatsView({ prospects, stages, activities }) {
                   <span style={{ color: 'var(--text-muted-tok)' }}>{f.count} deals · {money(f.value)}{i > 0 ? ` · -${dropoff}% t.o.v. vorige fase` : ''}</span>
                 </div>
                 <div style={{ height: 8, background: 'var(--bg-subtle)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: Math.max(4, (f.count / maxCount) * 100) + '%', background: f.stage.color, borderRadius: 'var(--radius-full)' }}></div>
+                  <motion.div initial={{ width: 0 }} animate={{ width: Math.max(4, (f.count / maxCount) * 100) + '%' }} transition={{ delay: i * 0.1 + 0.3, duration: 0.6, ease: 'easeOut' }}
+                    style={{ height: '100%', background: f.stage.color, borderRadius: 'var(--radius-full)' }}></motion.div>
                 </div>
               </div>
             )
