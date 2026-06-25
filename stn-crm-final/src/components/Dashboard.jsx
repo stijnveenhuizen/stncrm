@@ -1566,6 +1566,15 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
     await db.deleteProject(project.id); onRefresh(); showView('projects')
   }
 
+  async function saveAsTemplate() {
+    const name = window.prompt('Naam voor deze template:', project.name)
+    if (!name || !name.trim()) return
+    try {
+      await db.createProjectTemplateFromTasks(project.organization_id, name.trim(), tasks.map(t => ({ description: t.description, priority: t.priority })))
+      showToast('Template "' + name.trim() + '" opgeslagen')
+    } catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+
   return (
     <div>
       <div className="topbar">
@@ -1592,7 +1601,7 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
         <div className="detail-grid">
           <div>
             <div className="sc">
-              <div className="sc-head"><span className="sc-title">Taken</span><TaskModal projectId={project.id} onSave={refreshTasks} members={projectMembers} trigger={<button className="btn btn-ghost btn-sm">+ Taak</button>} /></div>
+              <div className="sc-head"><span className="sc-title">Taken</span><div style={{display:'flex',gap:6}}><button className="btn btn-ghost btn-sm" onClick={saveAsTemplate} disabled={!tasks.length}>Opslaan als template</button><TaskModal projectId={project.id} onSave={refreshTasks} members={projectMembers} trigger={<button className="btn btn-ghost btn-sm">+ Taak</button>} /></div></div>
               <div className="sc-body">
                 {!tasks.length ? <div className="empty">Nog geen taken</div> : <>
                   {open.map(t=><TaskItem key={t.id} task={t} onToggle={refreshTasks} onDelete={refreshTasks} authorName={currentUserName} />)}
@@ -1866,6 +1875,13 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
 }
 
 function CompanySettingsView({ activeOrgId, orgName, settings, onRefresh, onAddWorkspace }) {
+  const [templates, setTemplates] = useState([])
+  useEffect(() => { if (activeOrgId) db.getProjectTemplates(activeOrgId).then(setTemplates).catch(()=>{}) }, [activeOrgId])
+  async function removeTemplate(id) {
+    if (!confirm('Template verwijderen?')) return
+    try { await db.deleteProjectTemplate(id); db.getProjectTemplates(activeOrgId).then(setTemplates) }
+    catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
   const [form, setForm] = useState({
     name: orgName || '',
     primary_color: settings?.primary_color || '#3db68e',
@@ -1966,6 +1982,21 @@ function CompanySettingsView({ activeOrgId, orgName, settings, onRefresh, onAddW
         </div>
 
         <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Opslaan…' : 'Instellingen opslaan'}</button>
+
+        <div className="sc" style={{marginTop:24}}>
+          <div className="sc-head"><span className="sc-title">Projecttemplates</span></div>
+          <div className="sc-body">
+            {!templates.length ? <div className="empty">Nog geen templates. Sla taken van een bestaand project op als template via het projectdetailscherm.</div> : templates.map(t => (
+              <div key={t.id} className="info-row" style={{alignItems:'center'}}>
+                <span className="info-val">{t.name}</span>
+                <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                  <span style={{fontSize:11,color:'var(--text-faint)'}}>{t.project_template_tasks?.length||0} taken</span>
+                  <button type="button" className="task-del" onClick={()=>removeTemplate(t.id)} aria-label={`Template "${t.name}" verwijderen`}>×</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
         <div className="sc" style={{marginTop:24}}>
           <div className="sc-head"><span className="sc-title">Werkruimtes</span></div>
@@ -2254,10 +2285,16 @@ function ProjectModal({ project, clients, defaultClientId, onSave, trigger, acti
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [color, setColor] = useState(PROJ_COLORS[0])
+  const [templates, setTemplates] = useState([])
+  const [templateId, setTemplateId] = useState('')
   const init = { name:'', client_id:'', url:'', start_date:'', deadline:'', status:'actief', type:'' }
   const [form, setForm] = useState(init)
   const f = k => e => setForm(p=>({...p,[k]:e.target.value}))
-  function openModal() { setForm(project?{name:project.name||'',client_id:project.client_id||'',url:project.url||'',start_date:project.start_date||'',deadline:project.deadline||'',status:project.status||'actief',type:project.type||''}:{...init,client_id:defaultClientId||''}); setColor(project?.color||PROJ_COLORS[0]); setOpen(true) }
+  function openModal() {
+    setForm(project?{name:project.name||'',client_id:project.client_id||'',url:project.url||'',start_date:project.start_date||'',deadline:project.deadline||'',status:project.status||'actief',type:project.type||''}:{...init,client_id:defaultClientId||''})
+    setColor(project?.color||PROJ_COLORS[0]); setTemplateId(''); setOpen(true)
+    if (!project && activeOrgId) db.getProjectTemplates(activeOrgId).then(setTemplates).catch(()=>{})
+  }
   async function save() {
     if(!form.name.trim()) return showToast('Vul een projectnaam in.','error')
     setSaving(true)
@@ -2272,8 +2309,17 @@ function ProjectModal({ project, clients, defaultClientId, onSave, trigger, acti
         type: form.type || null,
         color
       }
-      if(project) await db.updateProject(project.id, data)
-      else await db.createProject({ ...data, organization_id: activeOrgId })
+      if(project) {
+        await db.updateProject(project.id, data)
+      } else {
+        const newProject = await db.createProject({ ...data, organization_id: activeOrgId })
+        const template = templates.find(t => t.id === templateId)
+        if (template?.project_template_tasks?.length) {
+          for (const t of template.project_template_tasks) {
+            await db.createTask({ project_id: newProject.id, description: t.description, priority: t.priority, done: false, visible_to_client: false, created_by: 'staff' })
+          }
+        }
+      }
       setOpen(false); onSave(); showToast(project ? 'Project bijgewerkt' : 'Project aangemaakt')
     } catch(e) {
       showToast('Fout bij opslaan: ' + e.message, 'error')
@@ -2296,6 +2342,14 @@ function ProjectModal({ project, clients, defaultClientId, onSave, trigger, acti
         </FG>
       </FR>
       <FG label="Kleur"><div className="color-opts">{PROJ_COLORS.map(c=><div key={c} className={`color-opt${color===c?' sel':''}`} style={{background:c}} onClick={()=>setColor(c)} />)}</div></FG>
+      {!project && templates.length > 0 && (
+        <FG label="Starten vanuit template (optioneel)">
+          <select value={templateId} onChange={e=>setTemplateId(e.target.value)}>
+            <option value="">— Geen template —</option>
+            {templates.map(t => <option key={t.id} value={t.id}>{t.name} ({t.project_template_tasks?.length||0} taken)</option>)}
+          </select>
+        </FG>
+      )}
       <ModalActions onCancel={()=>setOpen(false)} onSave={save} saving={saving} />
     </Modal>
   </>

@@ -221,6 +221,28 @@ export async function deleteProject(id) {
   if (error) throw error
 }
 
+// ── Projecttemplates ─────────────────────────────────────────────────────────────
+export async function getProjectTemplates(organizationId) {
+  const { data, error } = await supabase
+    .from('project_templates').select('*, project_template_tasks(*)').eq('organization_id', organizationId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createProjectTemplateFromTasks(organizationId, name, tasks) {
+  const { data: template, error } = await supabase.from('project_templates').insert([{ organization_id: organizationId, name }]).select().single()
+  if (error) throw error
+  if (tasks.length) {
+    const rows = tasks.map((t, i) => ({ template_id: template.id, description: t.description, priority: t.priority || 'normaal', sort_order: i }))
+    const { error: taskErr } = await supabase.from('project_template_tasks').insert(rows)
+    if (taskErr) throw taskErr
+  }
+  return template
+}
+export async function deleteProjectTemplate(id) {
+  const { error } = await supabase.from('project_templates').delete().eq('id', id)
+  if (error) throw error
+}
+
 // ── Tasks ──────────────────────────────────────────────────────────────────────
 export async function getTasks(projectId) {
   const { data, error } = await supabase
