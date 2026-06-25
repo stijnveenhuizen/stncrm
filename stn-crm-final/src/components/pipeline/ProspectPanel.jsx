@@ -10,6 +10,10 @@ const ACTIVITY_ICON = { call: '☎', email: '✉', meeting: '👥', notitie: '�
 export default function ProspectPanel({ prospect, isNew, newStageId, stages, activePipelineId, organizationId, activities, companySettings, onClose, onRefresh, onRequestWonLost, onCreated }) {
   const [tab, setTab] = useState('overzicht')
   const [prefillActivity, setPrefillActivity] = useState(null)
+  const [quotes, setQuotes] = useState([])
+
+  const refreshQuotes = () => { if (prospect) db.getProspectQuotes(prospect.id).then(setQuotes).catch(() => {}) }
+  useEffect(() => { refreshQuotes() }, [prospect?.id])
 
   if (isNew) {
     return (
@@ -22,6 +26,7 @@ export default function ProspectPanel({ prospect, isNew, newStageId, stages, act
 
   if (!prospect) return null
   const stage = stages.find(s => s.id === prospect.stage_id)
+  const hasQuote = quotes.length > 0
 
   return (
     <Panel onClose={onClose}>
@@ -32,10 +37,10 @@ export default function ProspectPanel({ prospect, isNew, newStageId, stages, act
         ))}
       </div>
       <div style={{ padding: 20, overflowY: 'auto', flex: 1 }}>
-        {tab === 'overzicht' && <OverviewTab prospect={prospect} stage={stage} activities={activities} onRefresh={onRefresh} onRequestWonLost={onRequestWonLost} stages={stages} onSwitchTab={setTab} onPrefillActivity={setPrefillActivity} />}
+        {tab === 'overzicht' && <OverviewTab prospect={prospect} stage={stage} activities={activities} hasQuote={hasQuote} onRefresh={onRefresh} onRequestWonLost={onRequestWonLost} stages={stages} onSwitchTab={setTab} onPrefillActivity={setPrefillActivity} />}
         {tab === 'activiteiten' && <ActivitiesTab prospect={prospect} activities={activities} onRefresh={onRefresh} prefill={prefillActivity} onPrefillUsed={() => setPrefillActivity(null)} />}
-        {tab === 'offerte' && <QuoteTab prospect={prospect} organizationId={organizationId} companySettings={companySettings} />}
-        {tab === 'info' && <InfoTab prospect={prospect} stage={stage} onRefresh={onRefresh} />}
+        {tab === 'offerte' && <QuoteTab prospect={prospect} quotes={quotes} onRefresh={refreshQuotes} organizationId={organizationId} companySettings={companySettings} />}
+        {tab === 'info' && <InfoTab prospect={prospect} stage={stage} activities={activities} hasQuote={hasQuote} onRefresh={onRefresh} />}
       </div>
     </Panel>
   )
@@ -126,7 +131,7 @@ function PanelHeader({ prospect, stage, stages, onRefresh, onRequestWonLost, onC
   )
 }
 
-function OverviewTab({ prospect, stage, activities, onRefresh, onRequestWonLost, stages, onSwitchTab, onPrefillActivity }) {
+function OverviewTab({ prospect, stage, activities, hasQuote, onRefresh, onRequestWonLost, stages, onSwitchTab, onPrefillActivity }) {
   const upcoming = activities.filter(a => !a.is_completed && a.scheduled_at).sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at))[0]
   const recent = activities.slice(0, 3)
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -152,7 +157,7 @@ function OverviewTab({ prospect, stage, activities, onRefresh, onRequestWonLost,
   async function generateNextAction() {
     setNextActionLoading(true)
     try {
-      const { result } = await db.callPipelineAI('next_action', { prospect, stage, activities, hasQuote: false, daysInStage: db.daysInStage(prospect) })
+      const { result } = await db.callPipelineAI('next_action', { prospect, stage, activities, hasQuote, daysInStage: db.daysInStage(prospect) })
       setNextAction(result)
     } catch (e) { showToast(e.message, 'error') }
     finally { setNextActionLoading(false) }
@@ -290,11 +295,8 @@ function ActivitiesTab({ prospect, activities, onRefresh, prefill, onPrefillUsed
   )
 }
 
-function QuoteTab({ prospect, organizationId, companySettings }) {
-  const [quotes, setQuotes] = useState([])
+function QuoteTab({ prospect, quotes, onRefresh: refresh, organizationId, companySettings }) {
   const [creating, setCreating] = useState(false)
-  useEffect(() => { db.getProspectQuotes(prospect.id).then(setQuotes).catch(() => {}) }, [prospect.id])
-  const refresh = () => db.getProspectQuotes(prospect.id).then(setQuotes)
 
   return (
     <div>
@@ -388,7 +390,7 @@ function QuoteForm({ prospect, organizationId, onCancel, onSaved }) {
   )
 }
 
-function InfoTab({ prospect, stage, onRefresh }) {
+function InfoTab({ prospect, stage, activities = [], hasQuote, onRefresh }) {
   const [form, setForm] = useState({
     fname: prospect.fname || '', lname: prospect.lname || '', email: prospect.email || '', phone: prospect.phone || '',
     company: prospect.company || '', website: prospect.website || '', source: prospect.source || '', website_type: prospect.website_type || '',
@@ -404,7 +406,7 @@ function InfoTab({ prospect, stage, onRefresh }) {
   async function getAiWinProbability() {
     setAiLoading(true)
     try {
-      const res = await db.callPipelineAI('win_probability', { prospect, stage, activities: [], hasQuote: false, daysInStage: db.daysInStage(prospect) })
+      const res = await db.callPipelineAI('win_probability', { prospect, stage, activities, hasQuote, daysInStage: db.daysInStage(prospect) })
       if (res.percentage != null) {
         setForm(p => ({ ...p, win_probability: res.percentage }))
         setAiResult(res)
