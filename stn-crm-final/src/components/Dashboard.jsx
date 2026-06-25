@@ -656,10 +656,14 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   if (!myOrganizations.length) return (
     <ToastProvider>
       <style>{CSS}</style>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:14}}>
-        <div style={{fontSize:15,fontWeight:600}}>Je hebt nog geen bedrijf</div>
-        <div style={{fontSize:13,color:'var(--text-muted)'}}>Maak een bedrijf aan om klanten en projecten te beheren.</div>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowNewWorkspace(true)}>+ Bedrijf aanmaken</button>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'#F8F9FA',flexDirection:'column',gap:16,padding:16}}>
+        <motion.div initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{duration:0.3}}
+          style={{background:'var(--surface)',borderRadius:16,padding:'36px',maxWidth:380,width:'100%',textAlign:'center',boxShadow:'0 8px 32px rgba(20,20,30,.08)'}}>
+          <div style={{width:52,height:52,borderRadius:14,background:'var(--accent)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 18px',fontSize:22,fontFamily:'var(--heading-font)',fontWeight:700}}>S</div>
+          <div style={{fontSize:'1.3rem',fontWeight:700,fontFamily:'var(--heading-font)',marginBottom:8}}>Je hebt nog geen werkruimte</div>
+          <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:20}}>Maak een werkruimte aan om te beginnen — daarna helpen we je in 5 minuten op weg.</div>
+          <button className="btn btn-primary" style={{width:'100%',padding:'12px'}} onClick={() => setShowNewWorkspace(true)}>+ Werkruimte aanmaken</button>
+        </motion.div>
         <button className="btn btn-ghost btn-xs" onClick={logout}>Uitloggen</button>
         <NewWorkspaceModal open={showNewWorkspace} onClose={() => setShowNewWorkspace(false)} onCreated={orgId => { loadOrganizations(); switchOrg(orgId) }} />
       </div>
