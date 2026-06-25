@@ -47,18 +47,19 @@ const CSS = `
   .cp-logo h1{font-size:14px;font-weight:700;letter-spacing:-.02em;font-family:var(--heading-font)}
   .cp-logo span:last-child{font-size:10px;color:var(--text-faint)}
   .cp-topbar-right{display:flex;align-items:center;gap:12px}
-  .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--rsm);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;border:1px solid transparent;line-height:1;white-space:nowrap}
-  .btn-ghost{background:none;border-color:var(--border-strong);color:var(--text-muted)}.btn-ghost:hover{background:var(--accent-soft);color:var(--accent-text);border-color:var(--accent)}
-  .btn-sm{padding:5px 11px;font-size:12px}.btn-xs{padding:3px 8px;font-size:11px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border-radius:var(--radius-md);font-size:13px;font-weight:500;cursor:pointer;transition:all 120ms ease;border:1px solid transparent;line-height:1;white-space:nowrap}
+  .btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent-hover)}
+  .btn-ghost{background:var(--bg-base);border-color:var(--border-default);color:var(--text-primary)}.btn-ghost:hover{background:var(--bg-subtle)}
+  .btn-sm{height:24px;padding:0 10px;font-size:12px}.btn-xs{height:22px;padding:0 8px;font-size:11px}
   .content{padding:26px;max-width:760px;margin:0 auto}
   .sc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);margin-bottom:16px;overflow:hidden;box-shadow:var(--shadow)}
   .sc-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
   .sc-title{font-size:13px;font-weight:600;font-family:var(--heading-font);display:flex;align-items:center;gap:8px}
   .sc-body{padding:16px 18px}
-  .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:500;line-height:1.5}
-  .bg-green{background:var(--green-soft);color:var(--green-text)}.bg-amber{background:var(--amber-soft);color:var(--amber-text)}
-  .bg-red{background:var(--red-soft);color:var(--red-text)}.bg-blue{background:var(--blue-soft);color:var(--blue-text)}
-  .bg-gray{background:var(--bg2);color:var(--text-muted)}
+  .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:var(--radius-full);font-size:11px;font-weight:500;line-height:1.6;border:1px solid transparent}
+  .bg-green{background:var(--green-soft);color:var(--green-text);border-color:#BBF7D0}.bg-amber{background:var(--amber-soft);color:var(--amber-text);border-color:#FDE68A}
+  .bg-red{background:var(--red-soft);color:var(--red-text);border-color:#FECACA}.bg-blue{background:var(--blue-soft);color:var(--blue-text);border-color:#BFDBFE}
+  .bg-gray{background:var(--bg2);color:var(--text-muted);border-color:var(--border-default)}
   .task-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
   .task-item:last-child{border-bottom:none}
   .task-check{width:18px;height:18px;border:1.5px solid var(--border-strong);border-radius:5px;flex-shrink:0;margin-top:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
@@ -72,11 +73,12 @@ const CSS = `
   .total-bar{background:var(--bg2);border-top:1px solid var(--border);padding:11px 18px;display:flex;justify-content:space-between;font-size:13px}
   .total-bar strong{font-family:var(--mono-font)}
   .empty{text-align:center;padding:32px 16px;color:var(--text-faint);font-size:13px}
-  .tabs{display:flex;gap:2px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--rsm);padding:3px;width:fit-content}
-  .tab{padding:5px 13px;border-radius:5px;font-size:12px;font-weight:500;color:var(--text-muted);cursor:pointer;border:none;background:none;transition:all .1s}
-  .tab.active{background:var(--surface);color:var(--text);box-shadow:var(--shadow);font-weight:600}
-  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:300;padding:16px}
-  .modal{background:var(--surface);border-radius:var(--r);padding:28px;max-width:440px;width:100%;box-shadow:var(--shadow-md)}
+  .tabs{display:flex;gap:0;border-bottom:1px solid var(--border-default)}
+  .tab{padding:8px 14px;margin-bottom:-1px;font-size:13px;font-weight:500;color:var(--text-muted-tok);cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;transition:all 120ms ease}
+  .tab:hover{color:var(--text-secondary);background:var(--bg-subtle)}
+  .tab.active{color:var(--text-primary);border-bottom-color:var(--accent);font-weight:500;background:none}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:300;padding:16px}
+  .modal{background:var(--bg-base);border-radius:var(--radius-xl);padding:24px;max-width:440px;width:100%;box-shadow:var(--shadow-xl);border:1px solid var(--border-default)}
   .modal h2{font-size:17px;margin-bottom:10px;font-family:var(--heading-font)}
   .modal p{font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:10px}
   .task-group-label{font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;padding:10px 0 4px}

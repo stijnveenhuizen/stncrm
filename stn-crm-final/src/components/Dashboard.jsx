@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
 import * as db from '../lib/db'
 import ProfileView from './ProfileView.jsx'
@@ -459,12 +460,12 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     .btn-sm{height:24px;padding:0 10px;font-size:12px}.btn-xs{height:22px;padding:0 8px;font-size:11px}
     .content{padding:26px}
     .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
-    .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;transition:background .2s,border .2s;box-shadow:var(--shadow)}
-    .stat-card:hover{border-color:var(--accent);box-shadow:0 0 0 3px rgba(61,182,142,0.08)}
-    .stat-card-icon{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;margin-bottom:10px}
-    .stat-label{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
-    .stat-value{font-size:22px;font-weight:700;letter-spacing:-.03em;font-family:var(--heading-font)}
-    .stat-sub{font-size:11px;color:var(--text-faint);margin-top:3px}
+    .stat-card{background:var(--bg-base);border:1px solid var(--border-default);border-radius:var(--radius-lg);padding:20px 24px;transition:border-color .15s;box-shadow:none}
+    .stat-card:hover{border-color:var(--border-strong)}
+    .stat-card-icon{width:30px;height:30px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;color:#fff;margin-bottom:10px}
+    .stat-label{font-size:11px;font-weight:600;color:var(--text-muted-tok);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+    .stat-value{font-size:24px;font-weight:700;letter-spacing:0;font-family:var(--heading-font);color:var(--text-primary)}
+    .stat-sub{font-size:12px;color:var(--text-secondary);margin-top:2px}
     .sc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);margin-bottom:16px;overflow:hidden;box-shadow:var(--shadow);transition:background .2s,border .2s}
     .sc-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
     .sc-title{font-size:13px;font-weight:600;font-family:var(--heading-font);display:flex;align-items:center;gap:8px}
@@ -533,11 +534,6 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     .dl-item{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
     .dl-item:last-child{border-bottom:none}
     .dl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-    .chart-wrap{display:flex;align-items:flex-end;gap:5px;height:80px;padding-top:8px}
-    .chart-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
-    .chart-bar{background:var(--accent);border-radius:4px 4px 0 0;width:100%;min-height:2px;opacity:.8;transition:opacity .15s}
-    .chart-col:hover .chart-bar{opacity:1}
-    .chart-lbl{font-size:10px;color:var(--text-faint);text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .theme-toggle{width:36px;height:20px;border-radius:99px;background:var(--border-strong);border:none;cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
     .theme-toggle.dark{background:var(--accent)}
     .theme-toggle-knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
@@ -622,7 +618,6 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
       .info-label{width:70px;font-size:12px}
       .avatar{width:28px;height:28px;font-size:10px}
       .badge{padding:2px 7px;font-size:10px}
-      .chart-wrap{height:60px}
       .dl-item{padding:6px 0;font-size:12px}
       .bc{font-size:12px}
       .search-wrap input{width:100%;font-size:16px}
@@ -1005,8 +1000,6 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
 
   const newRecurringInPeriod = allRecurring.filter(r => r.created_at && new Date(r.created_at) >= trendRange.start && r.status==='actief').length
   const revByClient = clients.map(c => ({ name: (c.company || c.fname+' '+c.lname).slice(0,14), v: allInvoices.filter(i => i.client_id===c.id && i.status==='betaald' && (!range || (i.date && new Date(i.date) >= range.start))).reduce((s,i) => s+Number(i.amount),0), id: c.id })).filter(x => x.v>0).sort((a,b) => b.v-a.v).slice(0,8)
-  const mx = revByClient.length ? Math.max(...revByClient.map(x => x.v)) : 1
-  const [hoveredBar, setHoveredBar] = useState(null)
 
   return (
     <div>
@@ -1138,27 +1131,19 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
           <div className="sc">
             <div className="sc-head"><span className="sc-title">Omzet per klant (betaald)</span></div>
             <div className="sc-body">
-              {!revByClient.length ? <div className="empty">Nog geen betaalde facturen</div> : <>
-                <div style={{display:'flex',gap:8}}>
-                  <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',height:80,paddingTop:8,fontSize:10,color:'var(--text-faint)',textAlign:'right',flexShrink:0}}>
-                    <span>{money(mx)}</span>
-                    <span>{money(mx/2)}</span>
-                    <span>€0</span>
-                  </div>
-                  <div className="chart-wrap" style={{flex:1,position:'relative'}}>
-                    {revByClient.map((x,i)=>(
-                      <div key={x.id} className="chart-col" onClick={()=>showView('client-detail',x.id)} onMouseEnter={()=>setHoveredBar(i)} onMouseLeave={()=>setHoveredBar(null)} style={{position:'relative'}}>
-                        {hoveredBar===i && <div style={{position:'absolute',bottom:'100%',left:'50%',transform:'translateX(-50%)',marginBottom:6,background:'var(--text)',color:'var(--surface)',fontSize:11,fontWeight:600,padding:'4px 8px',borderRadius:6,whiteSpace:'nowrap',zIndex:10}}>{x.name}: {money(x.v)}</div>}
-                        <div className="chart-bar" style={{height:Math.max(3,Math.round(x.v/mx*72))+'px'}}></div>
-                        <div className="chart-lbl">{x.name}</div>
-                      </div>
-                    ))}
-                  </div>
+              {!revByClient.length ? <div className="empty">Nog geen betaalde facturen</div> : (
+                <div style={{height:140}}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={revByClient} margin={{top:4,right:4,left:-20,bottom:0}}>
+                      <CartesianGrid stroke="var(--border-default)" strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="name" tick={{fontSize:11,fill:'var(--text-muted-tok)'}} axisLine={{stroke:'var(--border-default)'}} tickLine={false} />
+                      <YAxis tick={{fontSize:11,fill:'var(--text-muted-tok)'}} axisLine={false} tickLine={false} tickFormatter={v=>money(v)} width={70} />
+                      <Tooltip formatter={v=>money(v)} contentStyle={{background:'var(--bg-base)',border:'1px solid var(--border-default)',borderRadius:'var(--radius-md)',boxShadow:'var(--shadow-md)',fontSize:12}} />
+                      <Bar dataKey="v" name="Betaalde omzet" fill="var(--accent)" radius={[4,4,0,0]} cursor="pointer" onClick={x=>showView('client-detail',x.id)} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,fontSize:11,color:'var(--text-muted)'}}>
-                  <span style={{width:9,height:9,borderRadius:2,background:'var(--accent)',display:'inline-block'}}></span> Betaalde omzet per klant
-                </div>
-              </>}
+              )}
             </div>
           </div>
           <div className="sc">
