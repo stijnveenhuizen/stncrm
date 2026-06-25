@@ -730,9 +730,9 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
       <div className="main">
         {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} orgMembers={orgMembers} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
-        {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
+        {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} currentUserName={profile?.full_name || session.user.email} />}
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
-        {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} currentUserId={session.user.id} />}
+        {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} currentUserId={session.user.id} currentUserName={profile?.full_name || session.user.email} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} clients={clients} onRefresh={loadAll} />}
         {view==='hosting' && <HostingView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} />}
@@ -1151,7 +1151,7 @@ function ClientsView({ clients, projects, allTasks, allInvoices = [], showView, 
   )
 }
 
-function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeetings = [], showView, onRefresh, activeOrgId }) {
+function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeetings = [], showView, onRefresh, activeOrgId, currentUserName }) {
   const [activeTab, setActiveTab] = useState('projects')
   const [invoices, setInvoices] = useState([])
   const [recurring, setRecurring] = useState([])
@@ -1230,7 +1230,7 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
                         <span style={{cursor:'pointer'}} onClick={()=>showView('project-detail',p.id)}>{p.name}</span>
                         <span style={{color:'var(--text-faint)',fontWeight:400}}>{ptasks.filter(t=>!t.done).length} open</span>
                       </div>
-                      {ptasks.map(t => <TaskItem key={t.id} task={t} onToggle={onRefresh} onDelete={onRefresh} />)}
+                      {ptasks.map(t => <TaskItem key={t.id} task={t} onToggle={onRefresh} onDelete={onRefresh} authorName={currentUserName} />)}
                     </div>
                   })}
                 </div>
@@ -1469,7 +1469,7 @@ function ProjectsView({ projects, clients, clientName, allTasks = [], showView, 
   )
 }
 
-function ProjectDetailView({ project, clients, clientName, showView, onRefresh, orgMembers = [], myRole, currentUserId }) {
+function ProjectDetailView({ project, clients, clientName, showView, onRefresh, orgMembers = [], myRole, currentUserId, currentUserName }) {
   const [tasks, setTasks] = useState([])
   const [showPreview, setShowPreview] = useState(true)
   const [projectMembers, setProjectMembers] = useState([])
@@ -1595,9 +1595,9 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
               <div className="sc-head"><span className="sc-title">Taken</span><TaskModal projectId={project.id} onSave={refreshTasks} members={projectMembers} trigger={<button className="btn btn-ghost btn-sm">+ Taak</button>} /></div>
               <div className="sc-body">
                 {!tasks.length ? <div className="empty">Nog geen taken</div> : <>
-                  {open.map(t=><TaskItem key={t.id} task={t} onToggle={refreshTasks} onDelete={refreshTasks} />)}
+                  {open.map(t=><TaskItem key={t.id} task={t} onToggle={refreshTasks} onDelete={refreshTasks} authorName={currentUserName} />)}
                   {done.length>0&&<div style={{padding:'10px 0 4px',fontSize:11,fontWeight:600,color:'var(--text-faint)',textTransform:'uppercase',letterSpacing:'.05em'}}>Afgerond ({done.length})</div>}
-                  {done.map(t=><TaskItem key={t.id} task={t} onToggle={refreshTasks} onDelete={refreshTasks} />)}
+                  {done.map(t=><TaskItem key={t.id} task={t} onToggle={refreshTasks} onDelete={refreshTasks} authorName={currentUserName} />)}
                 </>}
               </div>
               <QuickTaskAdd projectId={project.id} onAdd={refreshTasks} />
@@ -2053,8 +2053,46 @@ function TeamView({ members, onRefresh, myProfile, activeOrgId }) {
   )
 }
 
-function TaskItem({ task, onToggle, onDelete }) {
+export function TaskComments({ taskId, authorName = 'Teamlid', authorType = 'staff' }) {
+  const [comments, setComments] = useState([])
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const refresh = () => db.getTaskComments(taskId).then(setComments)
+  useEffect(() => { if (open) refresh() }, [open, taskId])
+  async function add() {
+    if (!text.trim()) return
+    try {
+      await db.createTaskComment({ task_id: taskId, author_name: authorName, author_type: authorType, content: text.trim() })
+      setText(''); refresh()
+    } catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+  return (
+    <div style={{marginTop:4}}>
+      <button type="button" className="btn btn-ghost btn-xs" onClick={() => setOpen(o => !o)} style={{fontSize:11}}>
+        {open ? '▲' : '▼'} Reacties{comments.length > 0 ? ` (${comments.length})` : ''}
+      </button>
+      {open && (
+        <div style={{marginTop:6,background:'var(--bg2)',borderRadius:'var(--rsm)',padding:'8px 10px'}}>
+          {!comments.length && <div style={{fontSize:11,color:'var(--text-faint)'}}>Nog geen reacties</div>}
+          {comments.map(c => (
+            <div key={c.id} style={{padding:'5px 0',borderBottom:'1px solid var(--border)'}}>
+              <div style={{fontSize:12}}>{c.content}</div>
+              <div style={{fontSize:10,color:'var(--text-faint)',marginTop:2}}>{c.author_name}{c.author_type==='client'?' (klant)':''} · {fdate(c.created_at?.slice(0,10))}</div>
+            </div>
+          ))}
+          <div style={{display:'flex',gap:6,marginTop:8}}>
+            <input value={text} onChange={e => setText(e.target.value)} placeholder="Reactie toevoegen…" style={{flex:1,fontSize:12,padding:'5px 8px'}} onKeyDown={e => e.key==='Enter' && add()} />
+            <button className="btn btn-primary btn-xs" onClick={add}>Plaats</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TaskItem({ task, onToggle, onDelete, authorName }) {
   async function toggle() { await db.updateTask(task.id, { done: !task.done }); onToggle() }
+  async function toggleInProgress() { await db.updateTask(task.id, { in_progress: !task.in_progress }); onToggle() }
   async function del() { await db.deleteTask(task.id); onDelete() }
   return (
     <div className="task-item">
@@ -2071,9 +2109,11 @@ function TaskItem({ task, onToggle, onDelete }) {
         <div style={{fontSize:13,textDecoration:task.done?'line-through':'none',color:task.done?'var(--text-faint)':'var(--text)'}}>{task.description}</div>
         <div className="task-meta">
           {task.due_date&&<span>{fdate(task.due_date)}</span>}
+          {!task.done&&<button type="button" onClick={toggleInProgress} className={`badge ${task.in_progress?'bg-blue':'bg-gray'}`} style={{fontSize:10,cursor:'pointer',border:'none'}}>{task.in_progress?'In behandeling':'Markeer als in behandeling'}</button>}
           {task.visible_to_client&&<span style={{display:'inline-flex',alignItems:'center',gap:3,color:'var(--accent-text)'}}><EyeIcon size={11} /> Klant</span>}
           {task.created_by==='client'&&<span className="badge bg-blue" style={{fontSize:10}}>Via klant</span>}
         </div>
+        <TaskComments taskId={task.id} authorName={authorName} authorType="staff" />
       </div>
       <button type="button" className="task-del" onClick={del} aria-label={`Taak "${task.description}" verwijderen`}>×</button>
     </div>

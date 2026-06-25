@@ -76,7 +76,7 @@ export async function getProjectClientAccess(projectId) {
 // ── Project-documenten ───────────────────────────────────────────────────────────
 export async function getProjectDocuments(projectId) {
   const { data, error } = await supabase
-    .from('project_documents').select('*').eq('project_id', projectId).order('created_at', { ascending: false })
+    .from('project_documents').select('*, profiles(full_name), clients!project_documents_uploaded_by_client_id_fkey(fname, lname)').eq('project_id', projectId).order('created_at', { ascending: false })
   if (error) throw error
   return data
 }
@@ -87,6 +87,16 @@ export async function uploadProjectDocument(projectId, file, visibleToClient) {
   if (upErr) throw upErr
   const { data, error } = await supabase.from('project_documents').insert([{
     project_id: projectId, uploaded_by: userId, file_name: file.name, storage_path: path, file_size: file.size, visible_to_client: !!visibleToClient
+  }]).select().single()
+  if (error) throw error
+  return data
+}
+export async function uploadProjectDocumentAsClient(projectId, file, clientId) {
+  const path = `${projectId}/${crypto.randomUUID()}-${file.name}`
+  const { error: upErr } = await supabase.storage.from('project-docs').upload(path, file)
+  if (upErr) throw upErr
+  const { data, error } = await supabase.from('project_documents').insert([{
+    project_id: projectId, uploaded_by_client_id: clientId, file_name: file.name, storage_path: path, file_size: file.size, visible_to_client: true
   }]).select().single()
   if (error) throw error
   return data
@@ -231,6 +241,16 @@ export async function createTask(task) {
 }
 export async function updateTask(id, updates) {
   const { data, error } = await supabase.from('tasks').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function getTaskComments(taskId) {
+  const { data, error } = await supabase.from('task_comments').select('*').eq('task_id', taskId).order('created_at', { ascending: true })
+  if (error) throw error
+  return data
+}
+export async function createTaskComment(comment) {
+  const { data, error } = await supabase.from('task_comments').insert([comment]).select().single()
   if (error) throw error
   return data
 }

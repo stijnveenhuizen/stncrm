@@ -1,7 +1,42 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import * as db from '../lib/db'
-import { fdate, Badge, MeetingTypeIcon, buildMeetingCalendarUrl, ToastProvider, showToast } from './Dashboard.jsx'
+import { fdate, money, today, Badge, MeetingTypeIcon, buildMeetingCalendarUrl, ToastProvider, showToast, TaskComments } from './Dashboard.jsx'
+
+const ALLOWED_DOC_TYPES = ['application/pdf','image/png','image/jpeg','image/svg+xml','application/zip','application/x-zip-compressed','application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+const MAX_DOC_SIZE = 20 * 1024 * 1024
+
+function downloadInvoicePdf(invoice, client, companySettings) {
+  const w = window.open('', '_blank')
+  if (!w) return
+  w.document.write(`
+    <html><head><title>Factuur ${invoice.invoice_number || ''}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:40px;color:#13121c}
+      h1{font-size:20px;margin-bottom:4px}
+      .muted{color:#5d5b72;font-size:13px}
+      table{width:100%;margin-top:30px;border-collapse:collapse}
+      td{padding:8px 0;border-bottom:1px solid #e4e3f0;font-size:14px}
+      .right{text-align:right}
+      .total{font-weight:700;font-size:16px}
+    </style></head><body>
+    <h1>Factuur ${invoice.invoice_number || ''}</h1>
+    <div class="muted">${client.fname} ${client.lname}${client.company ? ' · ' + client.company : ''}</div>
+    <table>
+      <tr><td>Omschrijving</td><td class="right">${invoice.description || ''}</td></tr>
+      <tr><td>Datum</td><td class="right">${invoice.date || ''}</td></tr>
+      <tr><td>Vervaldatum</td><td class="right">${invoice.due_date || ''}</td></tr>
+      <tr><td>Status</td><td class="right">${invoice.status}</td></tr>
+      <tr><td class="total">Bedrag</td><td class="right total">${money(invoice.amount)}</td></tr>
+    </table>
+    ${companySettings?.vat_number ? `<div class="muted" style="margin-top:30px">BTW: ${companySettings.vat_number}${companySettings.coc_number ? ' · KVK: ' + companySettings.coc_number : ''}</div>` : ''}
+    ${companySettings?.invoice_address ? `<div class="muted">${companySettings.invoice_address.replace(/\n/g,'<br>')}</div>` : ''}
+    </body></html>
+  `)
+  w.document.close()
+  w.focus()
+  w.print()
+}
 
 const CSS = `
   .cp{min-height:100vh;background:var(--bg)}
@@ -40,6 +75,11 @@ const CSS = `
   .tabs{display:flex;gap:2px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--rsm);padding:3px;width:fit-content}
   .tab{padding:5px 13px;border-radius:5px;font-size:12px;font-weight:500;color:var(--text-muted);cursor:pointer;border:none;background:none;transition:all .1s}
   .tab.active{background:var(--surface);color:var(--text);box-shadow:var(--shadow);font-weight:600}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:300;padding:16px}
+  .modal{background:var(--surface);border-radius:var(--r);padding:28px;max-width:440px;width:100%;box-shadow:var(--shadow-md)}
+  .modal h2{font-size:17px;margin-bottom:10px;font-family:var(--heading-font)}
+  .modal p{font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:10px}
+  .task-group-label{font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;padding:10px 0 4px}
 
   @media(max-width:600px){
     .cp-topbar{padding:0 14px;height:52px}
@@ -52,12 +92,17 @@ const CSS = `
 export default function ClientPortal({ session, client }) {
   const [projects, setProjects] = useState([])
   const [activeProjectId, setActiveProjectId] = useState(null)
+  const [section, setSection] = useState('overzicht')
   const [tasks, setTasks] = useState([])
+  const [invoices, setInvoices] = useState([])
   const [notes, setNotes] = useState([])
   const [meetings, setMeetings] = useState([])
   const [docs, setDocs] = useState([])
+  const [companySettings, setCompanySettings] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [newTask, setNewTask] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [showWelcome, setShowWelcome] = useState(false)
+  const fileRef = useRef()
 
   const loadProjects = useCallback(async () => {
     const p = await db.getProjects()
@@ -71,14 +116,35 @@ export default function ClientPortal({ session, client }) {
   useEffect(() => {
     db.getNotes(client.id).then(setNotes)
     db.getMeetings(client.id).then(setMeetings)
+    db.getInvoices(client.id).then(setInvoices).catch(() => {})
+    if (client.organization_id) db.getCompanySettings(client.organization_id).then(setCompanySettings).catch(() => {})
+    try {
+      if (!localStorage.getItem('stn_portal_welcome_seen_' + client.id)) setShowWelcome(true)
+    } catch (e) {}
   }, [client.id])
+
+  function dismissWelcome() {
+    try { localStorage.setItem('stn_portal_welcome_seen_' + client.id, '1') } catch (e) {}
+    setShowWelcome(false)
+  }
 
   const refreshTasks = useCallback(() => {
     if (activeProjectId) db.getTasks(activeProjectId).then(setTasks)
   }, [activeProjectId])
   const refreshDocs = useCallback(() => {
-    if (activeProjectId) db.getProjectDocuments(activeProjectId).then(docs => setDocs(docs.filter(d => d.visible_to_client)))
+    if (activeProjectId) db.getProjectDocuments(activeProjectId).then(setDocs)
   }, [activeProjectId])
+
+  async function handleClientUpload(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    if (!ALLOWED_DOC_TYPES.includes(file.type)) { showToast('Bestandstype niet ondersteund (PDF, PNG, JPG, SVG, ZIP, DOCX).', 'error'); e.target.value=''; return }
+    if (file.size > MAX_DOC_SIZE) { showToast('Bestand mag max 20MB zijn.', 'error'); e.target.value=''; return }
+    setUploading(true)
+    try { await db.uploadProjectDocumentAsClient(activeProjectId, file, client.id); refreshDocs(); showToast('Bestand geüpload') }
+    catch (e) { showToast('Fout bij uploaden: ' + e.message, 'error') }
+    finally { setUploading(false); e.target.value = '' }
+  }
 
   useEffect(() => { refreshTasks(); refreshDocs() }, [refreshTasks, refreshDocs])
 
@@ -87,36 +153,37 @@ export default function ClientPortal({ session, client }) {
     catch (e) { showToast('Fout: ' + e.message, 'error') }
   }
 
-  async function toggleTask(t) {
-    await db.updateTask(t.id, { done: !t.done })
-    refreshTasks()
-  }
-
-  async function addTask() {
-    if (!newTask.trim() || !activeProjectId) return
-    await db.createTask({ project_id: activeProjectId, description: newTask.trim(), priority: 'normaal', done: false, visible_to_client: true, created_by: 'client' })
-    setNewTask('')
-    refreshTasks()
-    showToast('Taak toegevoegd')
-  }
-
   async function logout() { await supabase.auth.signOut() }
 
   if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--text-muted)',fontSize:13}}>Laden…</div>
 
   const activeProject = projects.find(p => p.id === activeProjectId)
-  const open = tasks.filter(t => !t.done)
+  const open = tasks.filter(t => !t.done && !t.in_progress)
+  const inProgress = tasks.filter(t => !t.done && t.in_progress)
   const done = tasks.filter(t => t.done)
   const pct = tasks.length ? Math.round(done.length / tasks.length * 100) : 0
+  const visibleDocs = docs.filter(d => d.visible_to_client)
 
   return (
     <ToastProvider>
     <div className="cp">
       <style>{CSS}</style>
+      {showWelcome && (
+        <div className="modal-bg">
+          <div className="modal">
+            <h2>Welkom in je klantportaal</h2>
+            <p>Hier volg je de voortgang van je project(en): je ziet de status van taken, kunt documenten uitwisselen met je webdesigner, en je facturen inzien.</p>
+            <p>Heb je een vraag over een taak? Klik op een taak en plaats een reactie. Wil je iets nieuws laten bouwen of aanpassen? Neem contact op met je webdesigner — nieuwe taken aanmaken kan niet vanuit het portaal.</p>
+            <button className="btn btn-primary btn-sm" onClick={dismissWelcome}>Begrepen, aan de slag</button>
+          </div>
+        </div>
+      )}
       <div className="cp-topbar">
         <div className="cp-logo">
-          <div className="cp-logo-icon"><span>S</span></div>
-          <div><h1>STN CRM</h1><span>Klantportaal</span></div>
+          {companySettings?.logo_url
+            ? <img src={companySettings.logo_url} alt="" style={{height:28,maxWidth:120,objectFit:'contain'}} />
+            : <div className="cp-logo-icon"><span>S</span></div>}
+          <div><h1>{companySettings?.logo_url ? '' : 'STN CRM'}</h1><span>Klantportaal</span></div>
         </div>
         <div className="cp-topbar-right">
           <span style={{fontSize:13,color:'var(--text-muted)'}}>{client.fname} {client.lname}</span>
@@ -135,7 +202,13 @@ export default function ClientPortal({ session, client }) {
               </div>
             )}
 
-            {activeProject && <>
+            <div className="tabs" style={{marginBottom:16}}>
+              {[['overzicht','Mijn project'],['taken','Taken'],['facturen','Facturen'],['bestanden','Bestanden']].map(([s,label]) => (
+                <button key={s} className={`tab${section===s?' active':''}`} onClick={()=>setSection(s)}>{label}</button>
+              ))}
+            </div>
+
+            {activeProject && section==='overzicht' && (
               <div className="sc">
                 <div className="sc-head">
                   <span className="sc-title"><span style={{width:10,height:10,borderRadius:'50%',background:activeProject.color,display:'inline-block'}}></span> {activeProject.name}</span>
@@ -150,81 +223,111 @@ export default function ClientPortal({ session, client }) {
                   {activeProject.url && <div style={{fontSize:12,marginTop:6}}><a href={activeProject.url} target="_blank" rel="noreferrer" style={{color:'var(--blue-text)'}}>{activeProject.url} ↗</a></div>}
                 </div>
               </div>
+            )}
 
+            {activeProject && section==='taken' && (
               <div className="sc">
                 <div className="sc-head"><span className="sc-title">Taken</span></div>
                 <div className="sc-body">
                   {!tasks.length ? <div className="empty">Nog geen taken</div> : <>
-                    {open.map(t => (
-                      <div key={t.id} className="task-item">
-                        <button type="button" className="task-check" onClick={()=>toggleTask(t)} role="checkbox" aria-checked="false" aria-label={`"${t.description}" markeren als afgerond`}></button>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:13}}>{t.description}</div>
-                          <div className="task-meta">
-                            {t.due_date && <span>{fdate(t.due_date)}</span>}
-                            {t.created_by==='client' && <span className="badge bg-blue" style={{fontSize:10}}>Door jou</span>}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {done.length > 0 && <div style={{padding:'10px 0 4px',fontSize:11,fontWeight:600,color:'var(--text-faint)',textTransform:'uppercase',letterSpacing:'.05em'}}>Afgerond ({done.length})</div>}
-                    {done.map(t => (
-                      <div key={t.id} className="task-item">
-                        <button type="button" className="task-check done" onClick={()=>toggleTask(t)} role="checkbox" aria-checked="true" aria-label={`"${t.description}" markeren als niet afgerond`}><span style={{color:'#fff',fontSize:10}}>✓</span></button>
-                        <div style={{flex:1}}><div style={{fontSize:13,textDecoration:'line-through',color:'var(--text-faint)'}}>{t.description}</div></div>
-                      </div>
-                    ))}
+                    {open.length > 0 && <div className="task-group-label">Open ({open.length})</div>}
+                    {open.map(t => <PortalTaskRow key={t.id} task={t} client={client} />)}
+                    {inProgress.length > 0 && <div className="task-group-label">In behandeling ({inProgress.length})</div>}
+                    {inProgress.map(t => <PortalTaskRow key={t.id} task={t} client={client} />)}
+                    {done.length > 0 && <div className="task-group-label">Afgerond ({done.length})</div>}
+                    {done.map(t => <PortalTaskRow key={t.id} task={t} client={client} done />)}
                   </>}
                 </div>
-                <div className="quick-add">
-                  <input type="text" value={newTask} onChange={e=>setNewTask(e.target.value)} placeholder="Taak voor je webdesigner…" onKeyDown={e=>e.key==='Enter'&&addTask()} />
-                  <button className="btn btn-ghost btn-sm" onClick={addTask}>Voeg toe</button>
-                </div>
               </div>
+            )}
 
+            {activeProject && section==='facturen' && (
               <div className="sc">
-                <div className="sc-head"><span className="sc-title">Docs</span></div>
+                <div className="sc-head"><span className="sc-title">Facturen</span></div>
                 <div className="sc-body">
-                  {!docs.length ? <div className="empty">Nog geen documenten gedeeld</div> : docs.map(d => (
-                    <div key={d.id} className="dl-item" style={{cursor:'pointer'}} onClick={()=>openDoc(d)}>
-                      <span style={{color:'var(--blue-text)'}}>{d.file_name}</span>
+                  {!invoices.length ? <div className="empty">Nog geen facturen</div> : invoices.map(i => (
+                    <div key={i.id} className="dl-item" style={{alignItems:'center'}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:500}}>{i.invoice_number ? i.invoice_number+' · ' : ''}{i.description}</div>
+                        <div style={{fontSize:11,color:'var(--text-faint)'}}>{fdate(i.date)}{i.due_date ? ' · vervalt ' + fdate(i.due_date) : ''}</div>
+                      </div>
+                      <span style={{fontFamily:'var(--mono-font)',fontSize:13,marginRight:8}}>{money(i.amount)}</span>
+                      <Badge s={i.status} />
+                      <button className="btn btn-ghost btn-xs" style={{marginLeft:8}} onClick={()=>downloadInvoicePdf(i, client, companySettings)}>↓ PDF</button>
                     </div>
                   ))}
                 </div>
               </div>
-            </>}
+            )}
+
+            {activeProject && section==='bestanden' && (
+              <div className="sc">
+                <div className="sc-head">
+                  <span className="sc-title">Bestanden</span>
+                  <button className="btn btn-ghost btn-sm" onClick={()=>fileRef.current.click()} disabled={uploading}>{uploading?'Uploaden…':'+ Bestand'}</button>
+                  <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.svg,.zip,.docx" style={{display:'none'}} onChange={handleClientUpload} />
+                </div>
+                <div className="sc-body">
+                  {!visibleDocs.length ? <div className="empty">Nog geen documenten gedeeld</div> : visibleDocs.map(d => (
+                    <div key={d.id} className="dl-item" style={{cursor:'pointer'}} onClick={()=>openDoc(d)}>
+                      <span style={{color:'var(--blue-text)',flex:1}}>{d.file_name}</span>
+                      <span style={{fontSize:11,color:'var(--text-faint)'}}>{d.clients ? `${d.clients.fname} ${d.clients.lname}` : (d.profiles?.full_name || 'Teamlid')} · {fdate(d.created_at?.slice(0,10))}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{padding:'0 18px 14px',fontSize:11,color:'var(--text-faint)'}}>Toegestaan: PDF, PNG, JPG, SVG, ZIP, DOCX — max 20MB.</div>
+              </div>
+            )}
           </>
         )}
 
-        <div className="sc">
-          <div className="sc-head"><span className="sc-title">Notities</span></div>
-          <div className="sc-body">
-            {!notes.length ? <div className="empty">Geen notities</div> : notes.map(n => (
-              <div key={n.id} style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
-                <div style={{fontSize:13,lineHeight:1.6}}>{n.content.split('\n').map((l,i)=><span key={i}>{l}<br/></span>)}</div>
-                <div style={{fontSize:11,color:'var(--text-faint)',marginTop:5}}>{fdate(n.created_at?.slice(0,10))}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="sc">
-          <div className="sc-head"><span className="sc-title">Meetings</span></div>
-          <div className="sc-body">
-            {!meetings.length ? <div className="empty">Geen meetings</div> : meetings.map(m => (
-              <div key={m.id} className="dl-item">
-                <MeetingTypeIcon type={m.type} />
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:500}}>{m.title}</div>
-                  <div style={{fontSize:11,color:'var(--text-faint)'}}>{fdate(m.meeting_date)}{m.meeting_time ? ' · ' + m.meeting_time.slice(0,5) : ''}</div>
+        {section==='overzicht' && <>
+          <div className="sc">
+            <div className="sc-head"><span className="sc-title">Notities</span></div>
+            <div className="sc-body">
+              {!notes.length ? <div className="empty">Geen notities</div> : notes.map(n => (
+                <div key={n.id} style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+                  <div style={{fontSize:13,lineHeight:1.6}}>{n.content.split('\n').map((l,i)=><span key={i}>{l}<br/></span>)}</div>
+                  <div style={{fontSize:11,color:'var(--text-faint)',marginTop:5}}>{fdate(n.created_at?.slice(0,10))}</div>
                 </div>
-                {m.status==='gepland' && <a href={buildMeetingCalendarUrl(m, client)} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>Inplannen</a>}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+
+          <div className="sc">
+            <div className="sc-head"><span className="sc-title">Meetings</span></div>
+            <div className="sc-body">
+              {!meetings.length ? <div className="empty">Geen meetings</div> : meetings.map(m => (
+                <div key={m.id} className="dl-item">
+                  <MeetingTypeIcon type={m.type} />
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:500}}>{m.title}</div>
+                    <div style={{fontSize:11,color:'var(--text-faint)'}}>{fdate(m.meeting_date)}{m.meeting_time ? ' · ' + m.meeting_time.slice(0,5) : ''}</div>
+                  </div>
+                  {m.status==='gepland' && <a href={buildMeetingCalendarUrl(m, client)} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>Inplannen</a>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>}
       </div>
     </div>
     </ToastProvider>
+  )
+}
+
+function PortalTaskRow({ task, client, done }) {
+  return (
+    <div className="task-item">
+      <div className={`task-check${done?' done':''}`} aria-hidden="true">{done && <span style={{color:'#fff',fontSize:10}}>✓</span>}</div>
+      <div style={{flex:1}}>
+        <div style={{fontSize:13,textDecoration:done?'line-through':'none',color:done?'var(--text-faint)':'var(--text)'}}>{task.description}</div>
+        <div className="task-meta">
+          {task.due_date && <span>{fdate(task.due_date)}</span>}
+          {task.created_by==='client' && <span className="badge bg-blue" style={{fontSize:10}}>Door jou</span>}
+        </div>
+        <TaskComments taskId={task.id} authorName={`${client.fname} ${client.lname}`} authorType="client" />
+      </div>
+    </div>
   )
 }
