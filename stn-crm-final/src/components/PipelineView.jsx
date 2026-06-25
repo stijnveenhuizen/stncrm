@@ -98,24 +98,24 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
         .kanban-empty:hover{border-color:var(--accent);color:var(--accent)}
       `}</style>
       <div className="topbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="topbar-left">
           <h2>Pipeline</h2>
           {pipelines.length > 0 && (
-            <select value={activePipelineId || ''} onChange={e => setActivePipelineId(e.target.value)} style={{ width: 'auto', fontSize: 13 }}>
+            <select value={activePipelineId || ''} onChange={e => setActivePipelineId(e.target.value)}>
               {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
           <button className="btn btn-ghost btn-sm" onClick={() => setNewPipelineOpen(true)}>+ Nieuwe pipeline</button>
-        </div>
-        <div className="topbar-right">
-          {snoozedCount > 0 && (
-            <button className={`btn btn-sm ${showSnoozed ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setShowSnoozed(s => !s)}>🌙 {snoozedCount} gesnoozed</button>
-          )}
           <div className="tabs">
             {[['kanban', 'Kanban'], ['lijst', 'Lijst'], ['forecast', 'Forecast'], ['statistieken', 'Statistieken']].map(([v, label]) => (
               <button key={v} className={`tab${view === v ? ' active' : ''}`} onClick={() => setView(v)}>{label}</button>
             ))}
           </div>
+        </div>
+        <div className="topbar-right">
+          {snoozedCount > 0 && (
+            <button className={`btn btn-sm ${showSnoozed ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setShowSnoozed(s => !s)}>🌙 {snoozedCount} gesnoozed</button>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={() => setSettingsOpen(true)} title="Pipeline instellingen" aria-label="Pipeline instellingen">⚙</button>
         </div>
       </div>

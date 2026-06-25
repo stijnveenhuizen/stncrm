@@ -44,9 +44,10 @@ export default function MonitorTab({ allHosting, onRefresh, activeOrgId }) {
     setCheckingSite(site.id)
     try {
       await db.triggerUptimeCheck(site.id)
-      await db.triggerPagespeedCheck(site.id)
+      const speedResult = await db.triggerPagespeedCheck(site.id)
       refresh()
-      showToast(`${site.site_name} gecheckt`)
+      if (speedResult?.warning) showToast(speedResult.warning, 'error')
+      else showToast(`${site.site_name} gecheckt`)
     } catch (e) { showToast('Fout: ' + e.message, 'error') }
     finally { setCheckingSite(null) }
   }

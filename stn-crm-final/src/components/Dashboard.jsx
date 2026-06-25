@@ -466,7 +466,10 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:22px 28px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;transition:background .2s,border .2s}
     .topbar h2{font-size:26px;font-weight:800;letter-spacing:-.02em;font-family:var(--heading-font)}
     .topbar p.page-sub{font-size:13px;color:var(--text-muted);margin-top:6px}
+    .topbar-left{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+    .topbar-left .tabs{margin-top:2px}
     .topbar-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+    .topbar-right select,.topbar-left select{height:24px;padding:0 10px;font-size:12px;width:auto}
     .page-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--surface)}
     .page-toolbar .grow{flex:1}
     .view-toggle{display:flex;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden;flex-shrink:0}
@@ -1909,7 +1912,7 @@ function TasksView({ allTasks, showView }) {
   const PRIO_COLOR = { hoog:'var(--red)', normaal:'var(--blue)', laag:'var(--text-faint)' }
   return (
     <div>
-      <div className="topbar"><h2>Alle taken</h2><div className="topbar-right"><div className="tabs"><button className={`tab${filter==='open'?' active':''}`} onClick={()=>setFilter('open')}>Open</button><button className={`tab${filter==='done'?' active':''}`} onClick={()=>setFilter('done')}>Afgerond</button><button className={`tab${filter==='all'?' active':''}`} onClick={()=>setFilter('all')}>Alles</button></div></div></div>
+      <div className="topbar"><div className="topbar-left"><h2>Alle taken</h2><div className="tabs"><button className={`tab${filter==='open'?' active':''}`} onClick={()=>setFilter('open')}>Open</button><button className={`tab${filter==='done'?' active':''}`} onClick={()=>setFilter('done')}>Afgerond</button><button className={`tab${filter==='all'?' active':''}`} onClick={()=>setFilter('all')}>Alles</button></div></div></div>
       <div className="page-toolbar">
         <select value={priorityFilter} onChange={e=>setPriorityFilter(e.target.value)} style={{width:'auto'}}>
           <option value="all">Alle prioriteiten</option>
@@ -2029,7 +2032,14 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
   return (
     <div>
       <div className="topbar">
-        <h2>Financiën</h2>
+        <div className="topbar-left">
+          <h2>Financiën</h2>
+          <div className="tabs">
+            {[['facturen', 'Facturen'], ['onderhoud', 'Onderhoud']].map(([t, label]) => (
+              <button key={t} className={`tab${financeTab === t ? ' active' : ''}`} onClick={() => setFinanceTab(t)}>{label}</button>
+            ))}
+          </div>
+        </div>
         <div className="topbar-right">
           {financeTab === 'facturen' && <>
             <select value={period} onChange={e=>setPeriod(e.target.value)} style={{width:'auto'}}>
@@ -2042,11 +2052,6 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
             <QuoteModal clients={clients} onSave={refreshQuotes} trigger={<button className="btn btn-ghost btn-sm">+ Offerte</button>} />
             <InvoiceModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Factuur</button>} />
           </>}
-          <div className="tabs">
-            {[['facturen', 'Facturen'], ['onderhoud', 'Onderhoud']].map(([t, label]) => (
-              <button key={t} className={`tab${financeTab === t ? ' active' : ''}`} onClick={() => setFinanceTab(t)}>{label}</button>
-            ))}
-          </div>
         </div>
       </div>
       {financeTab === 'onderhoud' && <MaintenanceTab activeOrgId={activeOrgId} clients={clients} allHosting={allHosting} companySettings={companySettings} />}
@@ -2795,7 +2800,14 @@ function WebsitesView({ allHosting, clients, showView, onRefresh, activeOrgId })
   return (
     <div>
       <div className="topbar">
-        <h2>Websites</h2>
+        <div className="topbar-left">
+          <h2>Websites</h2>
+          <div className="tabs">
+            {[['sites', 'Sites'], ['monitor', 'Monitor'], ['licenties', 'Licenties']].map(([t, label]) => (
+              <button key={t} className={`tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>{label}</button>
+            ))}
+          </div>
+        </div>
         <div className="topbar-right">
           {tab === 'sites' && (
             <>
@@ -2803,11 +2815,6 @@ function WebsitesView({ allHosting, clients, showView, onRefresh, activeOrgId })
               <HostingModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Site toevoegen</button>} />
             </>
           )}
-          <div className="tabs">
-            {[['sites', 'Sites'], ['monitor', 'Monitor'], ['licenties', 'Licenties']].map(([t, label]) => (
-              <button key={t} className={`tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>{label}</button>
-            ))}
-          </div>
         </div>
       </div>
       {tab === 'sites' && <SitesTab allHosting={allHosting} clients={clients} showView={showView} onRefresh={onRefresh} q={q} />}
