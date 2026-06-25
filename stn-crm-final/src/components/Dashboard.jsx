@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import * as db from '../lib/db'
 import ProfileView from './ProfileView.jsx'
 import PipelineView from './PipelineView.jsx'
+import OnboardingWizard, { OnboardingTourOverlay, ONBOARDING_STEPS } from './OnboardingWizard.jsx'
 
 export const money = n => '€\u202f' + Number(n).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 export const fdate = d => { if (!d) return '—'; return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) }
@@ -178,6 +179,8 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   const [showNewWorkspace, setShowNewWorkspace] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [companySettings, setCompanySettings] = useState(null)
+  const [onboardingStepIndex, setOnboardingStepIndex] = useState(null)
+  const [forceOnboarding, setForceOnboarding] = useState(false)
   const [readNotifKeys, setReadNotifKeys] = useState([])
   const [notifMenuOpen, setNotifMenuOpen] = useState(false)
   const [cmdKOpen, setCmdKOpen] = useState(false)
@@ -299,6 +302,39 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
 
   const orgName = myOrganizations.find(o => o.id === activeOrgId)?.name || ''
   const myRole = myOrganizations.find(o => o.id === activeOrgId)?.myRole
+  const activeOrg = myOrganizations.find(o => o.id === activeOrgId)
+
+  const needsOnboarding = myRole === 'owner' && !!activeOrg && !activeOrg.onboarding_completed && !activeOrg.onboarding_skipped && !activeOrg.onboarding_step
+  const showWizard = forceOnboarding || needsOnboarding
+
+  useEffect(() => {
+    if (showWizard && onboardingStepIndex === null) {
+      const lastDone = activeOrg?.onboarding_step
+      const idx = lastDone ? Math.min(ONBOARDING_STEPS.indexOf(lastDone) + 1, 5) : 0
+      setOnboardingStepIndex(idx >= 0 ? idx : 0)
+    }
+    if (!showWizard && onboardingStepIndex !== null) setOnboardingStepIndex(null)
+  }, [showWizard, activeOrg?.onboarding_step, onboardingStepIndex])
+
+  const demoDataCreatedRef = useRef(false)
+  useEffect(() => {
+    if (showWizard && onboardingStepIndex === 4 && activeOrgId && !demoDataCreatedRef.current) {
+      demoDataCreatedRef.current = true
+      db.trackOnboardingEvent(activeOrgId, 'demo_tour', 'viewed').catch(() => {})
+      db.hasDemoData(activeOrgId).then(has => { if (!has) return db.createDemoData(activeOrgId) }).then(() => loadAll()).catch(() => {})
+    }
+  }, [showWizard, onboardingStepIndex, activeOrgId])
+
+  function exitOnboardingWizard() {
+    setForceOnboarding(false)
+    setOnboardingStepIndex(null)
+    loadOrganizations(); loadAll(); loadCompanySettings()
+  }
+
+  async function finishTour() {
+    try { await db.trackOnboardingEvent(activeOrgId, 'demo_tour', 'completed') } catch (e) {}
+    setOnboardingStepIndex(5)
+  }
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
@@ -611,13 +647,24 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   if (loading) return <SkeletonScreen />
 
   const navItem = (key, label, activeWhen) => (
-    <button className={`sidebar2-item${activeWhen?' active':''}`} onClick={() => { showView(key); setSidebarOpen(false) }}>{label}</button>
+    <button className={`sidebar2-item${activeWhen?' active':''}`} data-tour={key} onClick={() => { showView(key); setSidebarOpen(false) }}>{label}</button>
   )
 
   return (
     <ToastProvider>
     <div className="app">
       <style>{CSS}</style>
+      {showWizard && onboardingStepIndex !== null && (
+        <OnboardingWizard
+          stepIndex={onboardingStepIndex}
+          organizationId={activeOrgId}
+          orgName={orgName}
+          profile={profile}
+          onStepIndexChange={setOnboardingStepIndex}
+          onExit={exitOnboardingWizard}
+        />
+      )}
+      {showWizard && onboardingStepIndex === 4 && <OnboardingTourOverlay onFinish={finishTour} />}
       <header className="topbar-dark">
         <button className="hamburger-btn" onClick={() => setSidebarOpen(o => !o)} aria-label="Menu openen">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
