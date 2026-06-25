@@ -614,32 +614,32 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
           <div className="topbar-dark-logo-icon"><span>S</span></div>
           <b>STN CRM</b>
         </div>
-        <div className="org-switcher" onClick={() => { setOrgMenuOpen(o => !o); setProfileMenuOpen(false) }} onMouseLeave={() => setOrgMenuOpen(false)}>
-          <span className="org-switcher-name">{orgName || 'Bedrijf'}</span>
-          <span className="chev"><ChevronIcon/></span>
-          {orgMenuOpen && (
-            <div className="org-menu">
-              <div style={{fontSize:10,fontWeight:600,color:'var(--text-faint)',textTransform:'uppercase',letterSpacing:'.06em',padding:'6px 10px 4px'}}>Bedrijven</div>
-              {myOrganizations.filter(o => isPlatformAdmin || (o.name && o.name.trim())).map(o => (
-                <div key={o.id} className="menu-item" style={{justifyContent:'space-between'}} onClick={() => switchOrg(o.id)}>
-                  <span>{o.name}</span>
-                  {o.id === activeOrgId && <span style={{color:'var(--accent-text)'}}>✓</span>}
-                </div>
-              ))}
-              <div className="menu-item" onClick={() => { setOrgMenuOpen(false); setShowNewWorkspace(true) }}>+ Nieuw bedrijf</div>
-              <div className="menu-sep"></div>
-              <div className="menu-item" onClick={() => { showView('overview'); setOrgMenuOpen(false) }}>Bedrijfsoverzicht</div>
-              {myRole === 'owner' && <div className="menu-item" onClick={() => { showView('company-settings'); setOrgMenuOpen(false) }}>Bedrijfsinstellingen</div>}
-              {clients.filter(c => isPlatformAdmin || (c.fname && c.fname.trim() && c.lname && c.lname.trim())).length > 0 && <div className="menu-sep"></div>}
-              {clients.filter(c => isPlatformAdmin || (c.fname && c.fname.trim() && c.lname && c.lname.trim())).map(c => (
-                <div key={c.id} className="menu-item" onClick={() => { showView('client-detail', c.id); setOrgMenuOpen(false) }}>
-                  <span className={`avatar ${avC(c.id)}`} style={{width:22,height:22,fontSize:9,flexShrink:0}}>{ini(c)}</span>
-                  {c.fname} {c.lname}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {myOrganizations.length > 1 ? (
+          <div className="org-switcher" onClick={() => { setOrgMenuOpen(o => !o); setProfileMenuOpen(false) }} onMouseLeave={() => setOrgMenuOpen(false)}>
+            <span className="org-switcher-name">{orgName || 'Bedrijf'}</span>
+            <span className="chev"><ChevronIcon/></span>
+            {orgMenuOpen && (
+              <div className="org-menu">
+                <div style={{fontSize:10,fontWeight:600,color:'var(--text-faint)',textTransform:'uppercase',letterSpacing:'.06em',padding:'6px 10px 4px'}}>Bedrijven</div>
+                {myOrganizations.filter(o => isPlatformAdmin || (o.name && o.name.trim())).map(o => (
+                  <div key={o.id} className="menu-item" style={{justifyContent:'space-between'}} onClick={() => switchOrg(o.id)}>
+                    <span>{o.name}</span>
+                    {o.id === activeOrgId && <span style={{color:'var(--accent-text)'}}>✓</span>}
+                  </div>
+                ))}
+                <div className="menu-sep"></div>
+                {clients.filter(c => isPlatformAdmin || (c.fname && c.fname.trim() && c.lname && c.lname.trim())).map(c => (
+                  <div key={c.id} className="menu-item" onClick={() => { showView('client-detail', c.id); setOrgMenuOpen(false) }}>
+                    <span className={`avatar ${avC(c.id)}`} style={{width:22,height:22,fontSize:9,flexShrink:0}}>{ini(c)}</span>
+                    {c.fname} {c.lname}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="org-switcher-name" style={{padding:'6px 10px',color:'rgba(255,255,255,.85)',fontSize:13,fontWeight:500}}>{orgName || 'Bedrijf'}</div>
+        )}
         <div className="topbar-dark-right" onMouseLeave={() => setProfileMenuOpen(false)}>
           <div className="profile-trigger" onMouseLeave={() => setNotifMenuOpen(false)}>
             <button className="topbar-dark-icon" aria-label="Meldingen" title="Meldingen" style={{position:'relative'}} onClick={() => { setNotifMenuOpen(o => !o); setOrgMenuOpen(false); setProfileMenuOpen(false) }}>
@@ -703,7 +703,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
 
       <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)}></div>
       <nav className={`sidebar2${sidebarOpen ? ' open' : ''}`}>
-        <div className="sidebar2-org">
+        <div className="sidebar2-org" style={myRole==='owner' ? {cursor:'pointer'} : {}} onClick={() => myRole==='owner' && showView('company-settings')} title={myRole==='owner' ? 'Bedrijfsinstellingen' : undefined}>
           {companySettings?.logo_url
             ? <img src={companySettings.logo_url} alt={orgName} style={{maxHeight:28,maxWidth:'100%',objectFit:'contain',marginBottom:4}} />
             : <h2>{orgName || 'Bedrijf'}</h2>
@@ -739,7 +739,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} />}
         {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} organizationId={activeOrgId} />}
         {view==='team' && myRole === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} myProfile={profile} activeOrgId={activeOrgId} />}
-        {view==='company-settings' && myRole === 'owner' && <CompanySettingsView activeOrgId={activeOrgId} orgName={orgName} settings={companySettings} onRefresh={() => { loadCompanySettings(); loadOrganizations() }} />}
+        {view==='company-settings' && myRole === 'owner' && <CompanySettingsView activeOrgId={activeOrgId} orgName={orgName} settings={companySettings} onRefresh={() => { loadCompanySettings(); loadOrganizations() }} onAddWorkspace={() => setShowNewWorkspace(true)} />}
       </div>
       <NewWorkspaceModal
         open={showNewWorkspace}
@@ -1865,7 +1865,7 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
   )
 }
 
-function CompanySettingsView({ activeOrgId, orgName, settings, onRefresh }) {
+function CompanySettingsView({ activeOrgId, orgName, settings, onRefresh, onAddWorkspace }) {
   const [form, setForm] = useState({
     name: orgName || '',
     primary_color: settings?.primary_color || '#3db68e',
@@ -1966,6 +1966,14 @@ function CompanySettingsView({ activeOrgId, orgName, settings, onRefresh }) {
         </div>
 
         <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Opslaan…' : 'Instellingen opslaan'}</button>
+
+        <div className="sc" style={{marginTop:24}}>
+          <div className="sc-head"><span className="sc-title">Werkruimtes</span></div>
+          <div className="sc-body">
+            <div style={{fontSize:12,color:'var(--text-faint)',marginBottom:10}}>De meeste accounts hebben precies één werkruimte. Heb je een tweede bedrijf dat je apart wilt beheren?</div>
+            <button className="btn btn-ghost btn-sm" onClick={onAddWorkspace}>+ Extra werkruimte toevoegen</button>
+          </div>
+        </div>
       </div>
     </div>
   )
