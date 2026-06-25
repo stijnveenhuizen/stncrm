@@ -537,6 +537,122 @@ export async function deleteHosting(id) {
   if (error) throw error
 }
 
+// ── Website Monitor ──────────────────────────────────────────────────────────────
+export async function getLatestChecks(organizationId) {
+  const { data, error } = await supabase
+    .from('website_checks').select('*, hosting!inner(id, site_name, domain, client_id, clients!inner(organization_id))')
+    .eq('hosting.clients.organization_id', organizationId).order('checked_at', { ascending: false })
+  if (error) throw error
+  // Eén meest recente check per site.
+  const bySite = {}
+  for (const c of data) { if (!bySite[c.site_id]) bySite[c.site_id] = c }
+  return bySite
+}
+export async function getWebsiteChecks(siteId, limitN = 60) {
+  const { data, error } = await supabase.from('website_checks').select('*').eq('site_id', siteId).order('checked_at', { ascending: false }).limit(limitN)
+  if (error) throw error
+  return data
+}
+export async function getWebsitePlugins(siteId) {
+  const { data, error } = await supabase.from('website_plugins').select('*').eq('site_id', siteId).order('name', { ascending: true })
+  if (error) throw error
+  return data
+}
+export async function triggerUptimeCheck(siteId) {
+  return authedFetch('/api/monitor/uptime', { method: 'POST', body: JSON.stringify({ siteId }) })
+}
+export async function triggerPagespeedCheck(siteId) {
+  return authedFetch('/api/monitor/pagespeed', { method: 'POST', body: JSON.stringify({ siteId }) })
+}
+export async function checkAllSites(organizationId) {
+  return authedFetch('/api/monitor/run-checks', { method: 'POST', body: JSON.stringify({ organizationId }) })
+}
+
+// ── Onderhoudscontracten ─────────────────────────────────────────────────────────
+export async function getMaintenanceContracts(organizationId) {
+  const { data, error } = await supabase
+    .from('maintenance_contracts').select('*, clients(fname, lname, company), hosting(site_name, domain)')
+    .eq('workspace_id', organizationId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createMaintenanceContract(contract) {
+  const { data, error } = await supabase.from('maintenance_contracts').insert([contract]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateMaintenanceContract(id, updates) {
+  const { data, error } = await supabase.from('maintenance_contracts').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteMaintenanceContract(id) {
+  const { error } = await supabase.from('maintenance_contracts').delete().eq('id', id)
+  if (error) throw error
+}
+export async function getMaintenanceLogs(contractId) {
+  const { data, error } = await supabase.from('maintenance_logs').select('*').eq('contract_id', contractId).order('date', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createMaintenanceLog(log) {
+  const userId = (await supabase.auth.getUser()).data.user?.id
+  const { data, error } = await supabase.from('maintenance_logs').insert([{ logged_by: userId, ...log }]).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteMaintenanceLog(id) {
+  const { error } = await supabase.from('maintenance_logs').delete().eq('id', id)
+  if (error) throw error
+}
+export async function getClientMaintenanceLogs(clientId) {
+  const { data, error } = await supabase
+    .from('maintenance_logs').select('*, maintenance_contracts!inner(client_id)').eq('maintenance_contracts.client_id', clientId)
+    .eq('visible_to_client', true).order('date', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function getMaintenanceReports(contractId) {
+  const { data, error } = await supabase.from('maintenance_reports').select('*').eq('contract_id', contractId).order('period_year', { ascending: false }).order('period_month', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function generateMaintenanceReport(contractId, periodMonth, periodYear) {
+  return authedFetch('/api/maintenance/generate-report', { method: 'POST', body: JSON.stringify({ contractId, periodMonth, periodYear }) })
+}
+
+// ── Licentie tracker ─────────────────────────────────────────────────────────────
+export async function getLicenses(organizationId) {
+  const { data, error } = await supabase
+    .from('licenses').select('*, clients(fname, lname, company), hosting(site_name, domain)')
+    .eq('workspace_id', organizationId).order('renewal_date', { ascending: true, nullsFirst: false })
+  if (error) throw error
+  return data
+}
+export async function createLicense(license) {
+  const { license_key, ...rest } = license
+  const { data, error } = await supabase.from('licenses').insert([{ ...rest, license_key_plain: license_key || null }]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateLicense(id, updates) {
+  const { license_key, ...rest } = updates
+  const payload = { ...rest }
+  if (license_key !== undefined) payload.license_key_plain = license_key || null
+  const { data, error } = await supabase.from('licenses').update(payload).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteLicense(id) {
+  const { error } = await supabase.from('licenses').delete().eq('id', id)
+  if (error) throw error
+}
+export async function getDecryptedLicenseKey(id) {
+  const { data, error } = await supabase.rpc('get_decrypted_license_key', { p_license_id: id })
+  if (error) throw error
+  return data
+}
+
 // ── Profiles ───────────────────────────────────────────────────────────────────
 export async function getProfile(userId) {
   const { data, error } = await supabase
