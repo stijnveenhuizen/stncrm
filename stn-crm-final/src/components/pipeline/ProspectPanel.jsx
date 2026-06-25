@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import * as db from '../../lib/db'
 import { money, fdate, today, showToast, downloadQuotePdf } from '../Dashboard.jsx'
 import { SOURCES, LOST_REASONS } from '../PipelineView.jsx'
+import DuplicateProspectModal from './DuplicateProspectModal.jsx'
 
 const ACTIVITY_ICON = { call: '☎', email: '✉', meeting: '👥', notitie: '📝', taak: '✓', fase_wisseling: '→', herinnering: '⏰', automatisering: '⚙' }
 
 export default function ProspectPanel({ prospect, isNew, newStageId, stages, activePipelineId, organizationId, activities, companySettings, onClose, onRefresh, onRequestWonLost, onCreated }) {
   const [tab, setTab] = useState('overzicht')
+  const [prefillActivity, setPrefillActivity] = useState(null)
 
   if (isNew) {
     return (
@@ -30,8 +32,8 @@ export default function ProspectPanel({ prospect, isNew, newStageId, stages, act
         ))}
       </div>
       <div style={{ padding: 20, overflowY: 'auto', flex: 1 }}>
-        {tab === 'overzicht' && <OverviewTab prospect={prospect} stage={stage} activities={activities} onRefresh={onRefresh} onRequestWonLost={onRequestWonLost} stages={stages} onSwitchTab={setTab} />}
-        {tab === 'activiteiten' && <ActivitiesTab prospect={prospect} activities={activities} onRefresh={onRefresh} />}
+        {tab === 'overzicht' && <OverviewTab prospect={prospect} stage={stage} activities={activities} onRefresh={onRefresh} onRequestWonLost={onRequestWonLost} stages={stages} onSwitchTab={setTab} onPrefillActivity={setPrefillActivity} />}
+        {tab === 'activiteiten' && <ActivitiesTab prospect={prospect} activities={activities} onRefresh={onRefresh} prefill={prefillActivity} onPrefillUsed={() => setPrefillActivity(null)} />}
         {tab === 'offerte' && <QuoteTab prospect={prospect} organizationId={organizationId} companySettings={companySettings} />}
         {tab === 'info' && <InfoTab prospect={prospect} stage={stage} onRefresh={onRefresh} />}
       </div>
@@ -42,12 +44,23 @@ export default function ProspectPanel({ prospect, isNew, newStageId, stages, act
 function Panel({ children, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 400, display: 'flex', justifyContent: 'flex-end' }}>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.35)' }} onClick={onClose} />
-      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ duration: 0.3, ease: 'easeInOut' }}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(2px)' }} onClick={onClose} />
+      <motion.div initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 30 }}
         style={{ position: 'relative', width: 600, maxWidth: '100vw', height: '100%', background: 'var(--surface)', boxShadow: '-8px 0 30px rgba(0,0,0,.15)', display: 'flex', flexDirection: 'column' }}>
         {children}
       </motion.div>
     </div>
+  )
+}
+
+function ThinkingDots() {
+  return (
+    <span style={{ display: 'inline-flex', gap: 3 }}>
+      {[0, 1, 2].map(i => (
+        <motion.span key={i} animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
+          style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
+      ))}
+    </span>
   )
 }
 
@@ -65,6 +78,7 @@ function EditableText({ value, onSave, placeholder, style }) {
 }
 
 function PanelHeader({ prospect, stage, stages, onRefresh, onRequestWonLost, onClose }) {
+  const [duplicateOpen, setDuplicateOpen] = useState(false)
   async function save(field, val) {
     try { await db.updateProspect(prospect.id, { [field]: val }); onRefresh() } catch (e) { showToast('Fout: ' + e.message, 'error') }
   }
@@ -80,13 +94,19 @@ function PanelHeader({ prospect, stage, stages, onRefresh, onRequestWonLost, onC
             style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--heading-font)', display: 'block' }} />
           <EditableText value={prospect.company} placeholder="Bedrijfsnaam toevoegen" onSave={v => save('company', v)} style={{ fontSize: 13, color: 'var(--text-muted)', display: 'block', marginTop: 2 }} />
         </div>
-        <button onClick={onClose} aria-label="Sluiten" style={{ fontSize: 20, color: 'var(--text-faint)', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>×</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          <button className="btn btn-ghost btn-xs" onClick={() => setDuplicateOpen(true)}>⎘ Dupliceer</button>
+          <button onClick={onClose} aria-label="Sluiten" style={{ fontSize: 20, color: 'var(--text-faint)', cursor: 'pointer', lineHeight: 1, flexShrink: 0, padding: '0 4px' }}>×</button>
+        </div>
       </div>
       <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 4, overflowX: 'auto', paddingBottom: 6 }}>
         {stages.map(s => (
           <button key={s.id} onClick={() => changeStage(s)}
-            style={{ fontSize: 11, whiteSpace: 'nowrap', padding: '5px 10px', borderRadius: 99, border: 'none', cursor: 'pointer', fontWeight: s.id === prospect.stage_id ? 700 : 500,
-              background: s.id === prospect.stage_id ? s.color : 'var(--bg2)', color: s.id === prospect.stage_id ? '#fff' : 'var(--text-muted)' }}>
+            style={{ fontSize: 11, whiteSpace: 'nowrap', padding: '5px 10px', borderRadius: 99, border: 'none', cursor: 'pointer', fontWeight: s.id === prospect.stage_id ? 700 : 500, position: 'relative',
+              color: s.id === prospect.stage_id ? '#fff' : 'var(--text-muted)' }}>
+            {s.id === prospect.stage_id && <motion.span layoutId="active-stage-indicator" transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+              style={{ position: 'absolute', inset: 0, borderRadius: 99, background: s.color, zIndex: -1 }} />}
+            {s.id !== prospect.stage_id && <span style={{ position: 'absolute', inset: 0, borderRadius: 99, background: 'var(--bg2)', zIndex: -1 }} />}
             {s.name}
           </button>
         ))}
@@ -96,21 +116,82 @@ function PanelHeader({ prospect, stage, stages, onRefresh, onRequestWonLost, onC
           onSave={v => save('deal_value', parseFloat(v.replace(/[^\d.,]/g, '').replace(',', '.')) || null)}
           style={{ fontSize: 16, fontWeight: 600, color: 'var(--accent-text)', fontFamily: 'var(--mono-font)' }} />
       </div>
+      <AnimatePresence>
+        {duplicateOpen && (
+          <DuplicateProspectModal prospect={prospect} stages={stages} onClose={() => setDuplicateOpen(false)}
+            onDone={async () => { setDuplicateOpen(false); await onRefresh(); showToast('Prospect gedupliceerd') }} />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
 
-function OverviewTab({ prospect, stage, activities, onRefresh, onRequestWonLost, stages, onSwitchTab }) {
+function OverviewTab({ prospect, stage, activities, onRefresh, onRequestWonLost, stages, onSwitchTab, onPrefillActivity }) {
   const upcoming = activities.filter(a => !a.is_completed && a.scheduled_at).sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at))[0]
   const recent = activities.slice(0, 3)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [nextAction, setNextAction] = useState('')
+  const [nextActionLoading, setNextActionLoading] = useState(false)
+
   async function completeActivity(a) {
     try { await db.updateProspectActivity(a.id, { is_completed: true, completed_at: new Date().toISOString() }); onRefresh() } catch (e) { showToast('Fout: ' + e.message, 'error') }
   }
   const wonStage = stages.find(s => s.is_won)
   const lostStage = stages.find(s => s.is_lost)
+
+  async function generateSummary() {
+    setSummaryLoading(true)
+    try {
+      const { result } = await db.callPipelineAI('summary', { prospect, stage, activities, daysInStage: db.daysInStage(prospect) })
+      await db.updateProspect(prospect.id, { ai_summary: result })
+      onRefresh()
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setSummaryLoading(false) }
+  }
+
+  async function generateNextAction() {
+    setNextActionLoading(true)
+    try {
+      const { result } = await db.callPipelineAI('next_action', { prospect, stage, activities, hasQuote: false, daysInStage: db.daysInStage(prospect) })
+      setNextAction(result)
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setNextActionLoading(false) }
+  }
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 18 }}>
       <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase' }}>✨ AI samenvatting</span>
+          <button className="btn btn-ghost btn-xs" onClick={generateSummary} disabled={summaryLoading}>{prospect.ai_summary ? 'Vernieuwen' : 'Genereren'}</button>
+        </div>
+        {summaryLoading ? (
+          <div style={{ background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)', padding: 12, fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            Analyseren… <ThinkingDots />
+          </div>
+        ) : prospect.ai_summary ? (
+          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+            style={{ background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)', padding: 12, fontSize: 13, fontStyle: 'italic', marginBottom: 16 }}>
+            {prospect.ai_summary}
+          </motion.div>
+        ) : <div style={{ fontSize: 12, color: 'var(--text-muted-tok)', marginBottom: 16 }}>Nog geen samenvatting gegenereerd.</div>}
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--success)', textTransform: 'uppercase' }}>💡 Aanbevolen actie</span>
+          <button className="btn btn-ghost btn-xs" onClick={generateNextAction} disabled={nextActionLoading}>{nextAction ? 'Vernieuwen' : 'Genereren'}</button>
+        </div>
+        {nextActionLoading ? (
+          <div style={{ background: 'var(--success-subtle)', border: '1px solid #BBF7D0', borderRadius: 'var(--radius-md)', padding: 12, fontSize: 13, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, repeat: Infinity }}>Aan het nadenken…</motion.span>
+          </div>
+        ) : nextAction ? (
+          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+            style={{ background: 'var(--success-subtle)', border: '1px solid #BBF7D0', borderRadius: 'var(--radius-md)', padding: 12, fontSize: 13, marginBottom: 16 }}>
+            <div style={{ marginBottom: 8 }}>{nextAction}</div>
+            <button className="btn btn-ghost btn-xs" onClick={() => { onPrefillActivity(nextAction); onSwitchTab('activiteiten') }}>Plan deze actie</button>
+          </motion.div>
+        ) : <div style={{ fontSize: 12, color: 'var(--text-muted-tok)', marginBottom: 16 }}>Nog geen aanbeveling gegenereerd.</div>}
+
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 8 }}>Volgende actie</div>
         {upcoming ? (
           <div className="sc" style={{ marginBottom: 16 }}>
@@ -153,13 +234,17 @@ function OverviewTab({ prospect, stage, activities, onRefresh, onRequestWonLost,
   )
 }
 
-function ActivitiesTab({ prospect, activities, onRefresh }) {
-  const [open, setOpen] = useState(false)
-  const [type, setType] = useState('call')
-  const [title, setTitle] = useState('')
+function ActivitiesTab({ prospect, activities, onRefresh, prefill, onPrefillUsed }) {
+  const [open, setOpen] = useState(!!prefill)
+  const [type, setType] = useState('notitie')
+  const [title, setTitle] = useState(prefill || '')
   const [description, setDescription] = useState('')
   const [scheduledAt, setScheduledAt] = useState('')
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (prefill) { setOpen(true); setTitle(prefill); setType('notitie'); onPrefillUsed() }
+  }, [prefill])
 
   async function save() {
     if (!title.trim()) return showToast('Vul een titel in.', 'error')
@@ -303,7 +388,7 @@ function QuoteForm({ prospect, organizationId, onCancel, onSaved }) {
   )
 }
 
-function InfoTab({ prospect, onRefresh }) {
+function InfoTab({ prospect, stage, onRefresh }) {
   const [form, setForm] = useState({
     fname: prospect.fname || '', lname: prospect.lname || '', email: prospect.email || '', phone: prospect.phone || '',
     company: prospect.company || '', website: prospect.website || '', source: prospect.source || '', website_type: prospect.website_type || '',
@@ -312,7 +397,24 @@ function InfoTab({ prospect, onRefresh }) {
   })
   const [tagInput, setTagInput] = useState('')
   const [saving, setSaving] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiResult, setAiResult] = useState(null)
   const f = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
+
+  async function getAiWinProbability() {
+    setAiLoading(true)
+    try {
+      const res = await db.callPipelineAI('win_probability', { prospect, stage, activities: [], hasQuote: false, daysInStage: db.daysInStage(prospect) })
+      if (res.percentage != null) {
+        setForm(p => ({ ...p, win_probability: res.percentage }))
+        setAiResult(res)
+        showToast(`✨ AI heeft de win-kans bijgewerkt naar ${res.percentage}%`)
+      } else {
+        showToast('AI gaf geen geldig percentage terug.', 'error')
+      }
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setAiLoading(false) }
+  }
 
   async function save() {
     setSaving(true)
@@ -353,7 +455,18 @@ function InfoTab({ prospect, onRefresh }) {
       </div>
       <div className="form-row">
         <div className="form-group"><label>Prioriteit</label><select value={form.priority} onChange={f('priority')}><option value="laag">Laag</option><option value="normaal">Midden</option><option value="hoog">Hoog</option></select></div>
-        <div className="form-group"><label>Win-kans % (override)</label><input type="number" min="0" max="100" value={form.win_probability} onChange={f('win_probability')} /></div>
+        <div className="form-group">
+          <label>Win-kans % (override)</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input type="number" min="0" max="100" value={form.win_probability} onChange={f('win_probability')} />
+            <button type="button" className="btn btn-ghost btn-sm" onClick={getAiWinProbability} disabled={aiLoading} title="AI inschatting" style={{ flexShrink: 0 }}>{aiLoading ? <ThinkingDots /> : '✨'}</button>
+          </div>
+          {aiResult?.uitleg && (
+            <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="badge" style={{ background: 'var(--purple-soft)', color: 'var(--purple-text)', marginTop: 6, display: 'block', whiteSpace: 'normal', padding: '6px 10px' }}>
+              AI inschatting: {aiResult.percentage}% — {aiResult.uitleg}
+            </motion.div>
+          )}
+        </div>
       </div>
       <div className="form-group"><label>Verwachte sluitdatum</label><input type="date" value={form.expected_close_date} onChange={f('expected_close_date')} /></div>
       {prospect.lost_at && <div className="form-group"><label>Verloren reden</label><input value={form.lost_reason} onChange={f('lost_reason')} list="lost-reasons" /><datalist id="lost-reasons">{LOST_REASONS.map(r => <option key={r} value={r} />)}</datalist></div>}

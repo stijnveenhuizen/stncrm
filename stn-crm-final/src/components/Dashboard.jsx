@@ -291,6 +291,13 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         items.push({ key: `doc-${d.id}`, text: `${d.clients?.fname||'Klant'} ${d.clients?.lname||''} uploadde "${d.file_name}" bij ${d.projects?.name||'een project'}`, severity: 'amber', date: d.created_at, view: 'project-detail', viewId: d.project_id })
       }
     })
+    pipeline.forEach(p => {
+      const stage = p.pipeline_stages
+      if (db.rotLevel(p, stage) === 'heavy') {
+        const days = db.daysInStage(p)
+        items.push({ key: `rot-${p.id}`, text: `${p.fname} ${p.lname} heeft al ${days} dagen geen activiteit bij ${stage?.name||'een fase'}`, severity: 'red', date: p.last_activity_at, view: 'pipeline' })
+      }
+    })
     return items.sort((a,b) => (a.date||'').localeCompare(b.date||''))
   })()
   const unreadNotifications = notifications.filter(n => !readNotifKeys.includes(n.key))

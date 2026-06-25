@@ -1,7 +1,17 @@
 import React, { useState, useMemo } from 'react'
+import { AnimatePresence } from 'framer-motion'
 import * as db from '../../lib/db'
 import { money, fdate, daysN, showToast } from '../Dashboard.jsx'
-import { SOURCES } from '../PipelineView.jsx'
+import { SOURCES, SnoozeDropdown } from '../PipelineView.jsx'
+import DuplicateProspectModal from './DuplicateProspectModal.jsx'
+
+function ActivityCell({ prospect: p, stage }) {
+  const rot = db.rotLevel(p, stage)
+  const days = db.daysInStage(p)
+  const color = rot === 'heavy' ? 'var(--danger)' : rot === 'light' ? 'var(--warning)' : 'var(--success)'
+  const label = days === 0 ? 'Vandaag' : days === 1 ? 'Gisteren' : `${days} dagen geleden`
+  return <span style={{ fontSize: 12, color, fontWeight: rot !== 'none' ? 600 : 400 }}>{label}</span>
+}
 
 export default function ListTable({ prospects, stages, onOpen, onRefresh, onCreate }) {
   const [filterStageIds, setFilterStageIds] = useState([])
@@ -11,6 +21,8 @@ export default function ListTable({ prospects, stages, onOpen, onRefresh, onCrea
   const [sortDir, setSortDir] = useState('desc')
   const [selected, setSelected] = useState([])
   const [tagInput, setTagInput] = useState(null) // null = closed, '' = open empty
+  const [snoozeOpenId, setSnoozeOpenId] = useState(null)
+  const [duplicateProspect, setDuplicateProspect] = useState(null)
 
   const stageById = useMemo(() => Object.fromEntries(stages.map(s => [s.id, s])), [stages])
 
@@ -111,7 +123,7 @@ export default function ListTable({ prospects, stages, onOpen, onRefresh, onCrea
       )}
 
       <div className="sc" style={{ padding: 0 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '28px 1.6fr 1fr 0.8fr 0.7fr 1fr 0.9fr 1fr 90px', padding: '8px 12px', background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border-default)', fontSize: 11, fontWeight: 600, color: 'var(--text-muted-tok)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '28px 1.4fr 0.9fr 0.7fr 0.6fr 0.9fr 0.8fr 0.9fr 1fr 80px', padding: '8px 12px', background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border-default)', fontSize: 11, fontWeight: 600, color: 'var(--text-muted-tok)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
           <div></div>
           <SortHeader k="naam" label="Prospect" />
           <SortHeader k="fase" label="Fase" />
@@ -120,7 +132,8 @@ export default function ListTable({ prospects, stages, onOpen, onRefresh, onCrea
           <SortHeader k="expected_close_date" label="Sluiting" />
           <div>Bron</div>
           <div>Toegewezen</div>
-          <div></div>
+          <div>Activiteit</div>
+          <div>Acties</div>
         </div>
         {!filtered.length ? (
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
@@ -134,11 +147,11 @@ export default function ListTable({ prospects, stages, onOpen, onRefresh, onCrea
           const overdue = p.expected_close_date && daysN(p.expected_close_date) < 0
           const prob = p.win_probability ?? stage?.win_probability ?? 0
           return (
-            <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '28px 1.6fr 1fr 0.8fr 0.7fr 1fr 0.9fr 1fr 90px', padding: '10px 12px', borderBottom: '1px solid var(--border-default)', alignItems: 'center', fontSize: 13, cursor: 'pointer', transition: 'background 80ms ease' }}
+            <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '28px 1.4fr 0.9fr 0.7fr 0.6fr 0.9fr 0.8fr 0.9fr 1fr 80px', padding: '10px 12px', borderBottom: '1px solid var(--border-default)', alignItems: 'center', fontSize: 13, cursor: 'pointer', transition: 'background 80ms ease', opacity: p.snoozed_until ? 0.6 : 1 }}
               onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-subtle)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               onClick={() => onOpen(p)}>
               <input type="checkbox" checked={selected.includes(p.id)} onChange={e => { e.stopPropagation(); toggleSelected(p.id) }} onClick={e => e.stopPropagation()} style={{ width: 15, height: 15 }} />
-              <div><div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{p.fname} {p.lname}</div><div style={{ fontSize: 11, color: 'var(--text-muted-tok)' }}>{p.company || ''}</div></div>
+              <div><div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{p.fname} {p.lname}{p.snoozed_until ? ' 🌙' : ''}</div><div style={{ fontSize: 11, color: 'var(--text-muted-tok)' }}>{p.company || ''}</div></div>
               <div>{stage && <span className="badge" style={{ background: stage.color + '18', color: stage.color, borderColor: stage.color + '40' }}>{stage.name}</span>}</div>
               <div style={{ fontFamily: 'var(--mono-font)', color: 'var(--text-primary)' }}>{p.deal_value ? money(p.deal_value) : '—'}</div>
               <div>
@@ -151,11 +164,24 @@ export default function ListTable({ prospects, stages, onOpen, onRefresh, onCrea
                 {p.assignee?.full_name && <span className="avatar av-g" style={{ width: 18, height: 18, fontSize: 8 }}>{p.assignee.full_name.slice(0, 2).toUpperCase()}</span>}
                 {p.assignee?.full_name || '—'}
               </div>
-              <div></div>
+              <div><ActivityCell prospect={p} stage={stage} /></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }} onClick={e => e.stopPropagation()}>
+                <span onClick={() => setSnoozeOpenId(o => o === p.id ? null : p.id)} style={{ cursor: 'pointer', fontSize: 13 }} title="Snooze">🌙</span>
+                <span onClick={() => setDuplicateProspect(p)} style={{ cursor: 'pointer', fontSize: 13 }} title="Dupliceer">⎘</span>
+                <AnimatePresence>
+                  {snoozeOpenId === p.id && <SnoozeDropdown prospect={p} onClose={() => setSnoozeOpenId(null)} onRefresh={onRefresh} />}
+                </AnimatePresence>
+              </div>
             </div>
           )
         })}
       </div>
+      <AnimatePresence>
+        {duplicateProspect && (
+          <DuplicateProspectModal prospect={duplicateProspect} stages={stages} onClose={() => setDuplicateProspect(null)}
+            onDone={async newProspect => { setDuplicateProspect(null); await onRefresh(); onOpen(newProspect) }} />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

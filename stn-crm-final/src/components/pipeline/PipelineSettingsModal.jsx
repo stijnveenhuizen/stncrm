@@ -100,6 +100,7 @@ function SortableStageRow({ stage, onUpdate, onDelete }) {
       <input type="color" value={stage.color} onChange={e => onUpdate(stage.id, { color: e.target.value })} style={{ width: 30, height: 28, padding: 2, flexShrink: 0 }} />
       <input value={stage.name} onChange={e => onUpdate(stage.id, { name: e.target.value })} style={{ flex: 1, fontSize: 13 }} />
       <input type="number" min="0" max="100" value={stage.win_probability} onChange={e => onUpdate(stage.id, { win_probability: parseInt(e.target.value) || 0 })} style={{ width: 56, fontSize: 12 }} title="Win-kans %" />
+      <input type="number" min="0" value={stage.rot_days ?? ''} onChange={e => onUpdate(stage.id, { rot_days: e.target.value === '' ? null : parseInt(e.target.value) || 0 })} style={{ width: 56, fontSize: 12 }} title="Rot na X dagen" placeholder="7" />
       <label style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 3, textTransform: 'none', flexShrink: 0 }}><input type="checkbox" checked={!!stage.is_won} onChange={e => onUpdate(stage.id, { is_won: e.target.checked, is_lost: e.target.checked ? false : stage.is_lost })} /> Gewonnen</label>
       <label style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 3, textTransform: 'none', flexShrink: 0 }}><input type="checkbox" checked={!!stage.is_lost} onChange={e => onUpdate(stage.id, { is_lost: e.target.checked, is_won: e.target.checked ? false : stage.is_won })} /> Verloren</label>
       <button className="task-del" onClick={() => onDelete(stage)} aria-label="Fase verwijderen">×</button>
