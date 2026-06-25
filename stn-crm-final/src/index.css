@@ -1,63 +1,116 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 :root {
-  --bg:#f6f6fb;--bg2:#edecf6;--surface:#ffffff;--surface2:#f9f9fd;
-  --border:#e4e3f0;--border-strong:#cdccdf;
-  --text:#13121c;--text-muted:#5d5b72;--text-faint:#716f87;
-  --accent:#3db68e;--accent-hover:#2fa07c;--accent-soft:#e8f8f2;--accent-text:#1a7a5e;
-  --heading-font:'Plus Jakarta Sans',sans-serif;
-  --body-font:'Inter',sans-serif;
+  /* ── Nieuwe design tokens (Linear/Vercel-stijl) ──────────────────────────── */
+  --bg-app:#FAFAFA;--bg-base:#FFFFFF;--bg-subtle:#F4F4F5;--bg-muted:#E4E4E7;
+  --border-default:#E4E4E7;--border-strong:#D1D1D6;
+  --text-primary:#09090B;--text-secondary:#52525B;--text-muted-tok:#A1A1AA;--text-inverted:#FFFFFF;
+
+  /* Accentkleur: bewust het bestaande merkgroen, niet de generieke teal uit het briefdocument */
+  --accent:#3db68e;--accent-hover:#2fa07c;--accent-subtle:#e8f8f2;--accent-border:#a7e8d3;
+
+  --success:#16A34A;--success-subtle:#F0FDF4;
+  --warning:#D97706;--warning-subtle:#FFFBEB;
+  --danger:#DC2626;--danger-subtle:#FEF2F2;
+  --info:#2563EB;--info-subtle:#EFF6FF;
+
+  --priority-high:#DC2626;--priority-medium:#D97706;--priority-low:#A1A1AA;
+
+  --text-xs:11px;--text-sm:13px;--text-base:14px;--text-md:16px;--text-lg:20px;--text-xl:24px;--text-2xl:30px;
+  --weight-normal:400;--weight-medium:500;--weight-semibold:600;--weight-bold:700;
+
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;--space-10:40px;--space-12:48px;--space-16:64px;
+
+  --radius-sm:4px;--radius-md:6px;--radius-lg:8px;--radius-xl:12px;--radius-full:9999px;
+
+  --shadow-sm:0 1px 2px 0 rgba(0,0,0,0.05);
+  --shadow-md:0 4px 6px -1px rgba(0,0,0,0.07),0 2px 4px -1px rgba(0,0,0,0.04);
+  --shadow-lg:0 10px 15px -3px rgba(0,0,0,0.08),0 4px 6px -2px rgba(0,0,0,0.04);
+  --shadow-xl:0 20px 25px -5px rgba(0,0,0,0.08),0 10px 10px -5px rgba(0,0,0,0.03);
+
+  --heading-font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --body-font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   --mono-font:'JetBrains Mono','ui-monospace','SFMono-Regular',monospace;
-  --blue:#2563eb;--blue-soft:#eff6ff;--blue-text:#1d4ed8;
-  --green:#3db68e;--green-soft:#e8f8f2;--green-text:#1a7a5e;
-  --amber:#d97706;--amber-soft:#fffbeb;--amber-text:#b45309;
-  --red:#dc2626;--red-soft:#fef2f2;--red-text:#b91c1c;
+
+  /* ── Aliassen: bestaande variabelen elders in de app wijzen nu naar de
+     nieuwe tokens, zodat het hele bestaande component-oppervlak automatisch
+     meegaat met de redesign zonder duizenden losse var(--oud) call-sites
+     stuk voor stuk te moeten vervangen. ────────────────────────────────── */
+  --bg:var(--bg-app);--bg2:var(--bg-subtle);--surface:var(--bg-base);--surface2:var(--bg-subtle);
+  --border:var(--border-default);
+  --text:var(--text-primary);--text-muted:var(--text-secondary);--text-faint:var(--text-muted-tok);
+  --accent-soft:var(--accent-subtle);--accent-text:#1a7a5e;
+  --r:var(--radius-xl);--rsm:var(--radius-md);
+  --shadow:var(--shadow-sm);--shadow-md:var(--shadow-md);
+
+  --blue:var(--info);--blue-soft:var(--info-subtle);--blue-text:var(--info);
+  --green:var(--success);--green-soft:var(--success-subtle);--green-text:var(--success);
+  --amber:var(--warning);--amber-soft:var(--warning-subtle);--amber-text:var(--warning);
+  --red:var(--danger);--red-soft:var(--danger-subtle);--red-text:var(--danger);
   --purple:#9333ea;--purple-soft:#f5f3ff;--purple-text:#7e22ce;
   --teal:#0d9488;--teal-soft:#f0fdfa;--teal-text:#0f766e;
-  --r:12px;--rsm:7px;
-  --shadow:0 1px 3px rgba(31,21,89,0.06),0 1px 2px rgba(31,21,89,0.04);
-  --shadow-md:0 4px 20px rgba(31,21,89,0.10);
 }
 
 [data-theme="dark"] {
-  --bg:#131217;--bg2:#1b1a22;--surface:#1f1e27;--surface2:#272631;
-  --border:#312f3c;--border-strong:#403e4d;
-  --text:#f1f0f7;--text-muted:#928fa3;--text-faint:#94919f;
-  --accent:#3db68e;--accent-hover:#4dcf9f;--accent-soft:#0d2e22;--accent-text:#3db68e;
-  --blue:#3b82f6;--blue-soft:#1e3a5f26;--blue-text:#93c5fd;
-  --green:#3db68e;--green-soft:#0d2e22;--green-text:#3db68e;
-  --amber:#f59e0b;--amber-soft:#2d1f0033;--amber-text:#fbbf24;
-  --red:#ef4444;--red-soft:#2d0a0a33;--red-text:#fca5a5;
+  --bg-app:#131217;--bg-base:#1f1e27;--bg-subtle:#1b1a22;--bg-muted:#312f3c;
+  --border-default:#312f3c;--border-strong:#403e4d;
+  --text-primary:#f1f0f7;--text-secondary:#928fa3;--text-muted-tok:#94919f;--text-inverted:#0b0b0d;
+
+  --accent:#3db68e;--accent-hover:#4dcf9f;--accent-subtle:#0d2e22;--accent-border:#1c4538;
+
+  --success:#3db68e;--success-subtle:#0d2e22;
+  --warning:#f59e0b;--warning-subtle:#2d1f0033;
+  --danger:#ef4444;--danger-subtle:#2d0a0a33;
+  --info:#3b82f6;--info-subtle:#1e3a5f26;
+
+  --priority-high:#fca5a5;--priority-medium:#fbbf24;--priority-low:#94919f;
+
+  --bg:var(--bg-app);--bg2:var(--bg-subtle);--surface:var(--bg-base);--surface2:var(--bg-subtle);
+  --border:var(--border-default);
+  --text:var(--text-primary);--text-muted:var(--text-secondary);--text-faint:var(--text-muted-tok);
+  --accent-soft:var(--accent-subtle);--accent-text:#3db68e;
+
+  --blue:var(--info);--blue-soft:var(--info-subtle);--blue-text:#93c5fd;
+  --green:var(--success);--green-soft:var(--success-subtle);--green-text:#3db68e;
+  --amber:var(--warning);--amber-soft:var(--warning-subtle);--amber-text:#fbbf24;
+  --red:var(--danger);--red-soft:var(--danger-subtle);--red-text:#fca5a5;
   --purple:#c084fc;--purple-soft:#2a1f4533;--purple-text:#d8b4fe;
   --teal:#2dd4bf;--teal-soft:#0a202033;--teal-text:#2dd4bf;
+
   --shadow:0 1px 3px rgba(0,0,0,0.3);
   --shadow-md:0 4px 16px rgba(0,0,0,0.4);
+  --shadow-lg:0 10px 20px rgba(0,0,0,0.45);
+  --shadow-xl:0 20px 30px rgba(0,0,0,0.5);
 }
 
 body {
   font-family: var(--body-font);
-  background: var(--bg);
-  color: var(--text);
+  background: var(--bg-app);
+  color: var(--text-primary);
   font-size: 14px;
   line-height: 1.6;
   min-height: 100vh;
 }
 
 h1,h2,h3,h4,h5 { font-family: var(--heading-font); }
-button { font-family: var(--body-font); cursor: pointer; border: none; background: none; font-size: 14px; user-select: none; -webkit-touch-callout: none; }
+button { font-family: var(--body-font); cursor: pointer; border: none; background: none; font-size: 13px; font-weight: 500; user-select: none; -webkit-touch-callout: none; transition: all 120ms ease; }
+button:active { transform: scale(0.98); }
 input,textarea,select {
-  font-family: var(--body-font); font-size: 14px;
-  border: 1px solid var(--border-strong); border-radius: var(--rsm);
-  padding: 8px 12px; background: var(--surface); color: var(--text);
+  font-family: var(--body-font); font-size: 13px;
+  height: 32px;
+  border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  padding: 0 10px; background: var(--bg-base); color: var(--text-primary);
   width: 100%; outline: none; transition: border-color .15s, box-shadow .15s, background .2s;
 }
+textarea { height: auto; padding: 8px 10px; }
+input::placeholder,textarea::placeholder { color: var(--text-muted-tok); }
 input:focus,textarea:focus,select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(61,182,142,0.15);
+  box-shadow: 0 0 0 3px rgba(61,182,142,0.12);
 }
-label { font-size: 11px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .05em; }
+label { font-size: 12px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 4px; text-transform: none; letter-spacing: 0; }
 textarea { resize: vertical; min-height: 80px; }
 a { color: inherit; text-decoration: none; }
 
@@ -75,12 +128,13 @@ a { color: inherit; text-decoration: none; }
 
   input, textarea, select {
     font-size: 16px;
+    height: auto;
     padding: 10px 12px;
     border-radius: 6px;
   }
 
   label {
-    font-size: 10px;
+    font-size: 11px;
     margin-bottom: 4px;
   }
 }
@@ -96,7 +150,7 @@ a { color: inherit; text-decoration: none; }
   }
 
   label {
-    font-size: 10px;
+    font-size: 11px;
   }
 }
 
