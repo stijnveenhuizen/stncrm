@@ -113,3 +113,4 @@ module.exports = async (req, res) => {
     res.status(e.status || 500).json({ error: e.message })
   }
 }
+
