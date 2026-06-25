@@ -91,6 +91,12 @@ export async function uploadProjectDocument(projectId, file, visibleToClient) {
   if (error) throw error
   return data
 }
+export async function getAllProjectDocuments(organizationId) {
+  const { data, error } = await supabase
+    .from('project_documents').select('*, projects!inner(id, name, organization_id), clients!project_documents_uploaded_by_client_id_fkey(fname, lname)').eq('projects.organization_id', organizationId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
 export async function uploadProjectDocumentAsClient(projectId, file, clientId) {
   const path = `${projectId}/${crypto.randomUUID()}-${file.name}`
   const { error: upErr } = await supabase.storage.from('project-docs').upload(path, file)

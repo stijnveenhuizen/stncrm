@@ -170,6 +170,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   const [allHosting, setAllHosting] = useState([])
   const [allMeetings, setAllMeetings] = useState([])
   const [pipeline, setPipeline] = useState([])
+  const [allDocs, setAllDocs] = useState([])
   const [orgMembers, setOrgMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [orgMenuOpen, setOrgMenuOpen] = useState(false)
@@ -208,11 +209,12 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   const loadAll = useCallback(async () => {
     if (!activeOrgId) return
     try {
-      const [c, p, i, r, t, h, m, pl] = await Promise.all([
+      const [c, p, i, r, t, h, m, pl, d] = await Promise.all([
         db.getClients(activeOrgId), db.getProjects(activeOrgId), db.getAllInvoices(activeOrgId), db.getAllRecurring(activeOrgId),
-        db.getAllTasks(activeOrgId), db.getAllHosting(activeOrgId), db.getAllMeetings(activeOrgId), db.getPipeline(activeOrgId)
+        db.getAllTasks(activeOrgId), db.getAllHosting(activeOrgId), db.getAllMeetings(activeOrgId), db.getPipeline(activeOrgId),
+        db.getAllProjectDocuments(activeOrgId)
       ])
-      setClients(c); setProjects(p); setAllInvoices(i); setAllRecurring(r); setAllHosting(h); setAllMeetings(m); setPipeline(pl)
+      setClients(c); setProjects(p); setAllInvoices(i); setAllRecurring(r); setAllHosting(h); setAllMeetings(m); setPipeline(pl); setAllDocs(d)
       setAllTasks(t.map(task => ({ ...task, project: task.projects })))
     } catch(e) { console.error(e) }
     setLoading(false)
@@ -275,6 +277,11 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         items.push({ key: `task-${t.id}`, text: `Taak "${t.description}" is over de deadline`, severity: 'red', date: t.due_date, view: 'tasks' })
       }
     })
+    allDocs.forEach(d => {
+      if (d.uploaded_by_client_id && d.created_at && daysN(d.created_at) >= -7) {
+        items.push({ key: `doc-${d.id}`, text: `${d.clients?.fname||'Klant'} ${d.clients?.lname||''} uploadde "${d.file_name}" bij ${d.projects?.name||'een project'}`, severity: 'amber', date: d.created_at, view: 'project-detail', viewId: d.project_id })
+      }
+    })
     return items.sort((a,b) => (a.date||'').localeCompare(b.date||''))
   })()
   const unreadNotifications = notifications.filter(n => !readNotifKeys.includes(n.key))
@@ -283,6 +290,11 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     if (readNotifKeys.includes(key)) return
     setReadNotifKeys(k => [...k, key])
     try { await db.markNotificationRead(key) } catch(e) {}
+  }
+  async function markAllNotifRead() {
+    const keys = unreadNotifications.map(n => n.key)
+    setReadNotifKeys(k => [...k, ...keys])
+    try { await Promise.all(keys.map(k => db.markNotificationRead(k))) } catch(e) {}
   }
 
   const orgName = myOrganizations.find(o => o.id === activeOrgId)?.name || ''
@@ -650,7 +662,9 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
               <div className="profile-menu" style={{width:320,right:0}}>
                 <div style={{padding:'8px 10px',marginBottom:4,borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                   <span style={{fontSize:13,fontWeight:600}}>Meldingen</span>
-                  {unreadNotifications.length > 0 && <span style={{fontSize:11,color:'var(--text-faint)'}}>{unreadNotifications.length} ongelezen</span>}
+                  {unreadNotifications.length > 0
+                    ? <button type="button" className="btn btn-ghost btn-xs" onClick={markAllNotifRead}>Alles gelezen</button>
+                    : <span style={{fontSize:11,color:'var(--text-faint)'}}>Alles gelezen</span>}
                 </div>
                 {!notifications.length ? (
                   <div style={{padding:'16px 10px',fontSize:12,color:'var(--text-faint)',textAlign:'center'}}>Geen meldingen</div>
@@ -658,7 +672,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
                   const isRead = readNotifKeys.includes(n.key)
                   return (
                     <div key={n.key} className="menu-item" style={{alignItems:'flex-start',gap:8,opacity:isRead?0.55:1}}
-                      onClick={() => { markNotifRead(n.key); showView(n.view); setNotifMenuOpen(false) }}
+                      onClick={() => { markNotifRead(n.key); showView(n.view, n.viewId); setNotifMenuOpen(false) }}
                     >
                       <span style={{width:7,height:7,borderRadius:'50%',marginTop:5,flexShrink:0,background:n.severity==='red'?'var(--red)':'var(--amber)'}}></span>
                       <span style={{fontSize:12,lineHeight:1.4}}>{n.text}</span>
