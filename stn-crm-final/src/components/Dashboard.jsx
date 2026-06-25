@@ -732,7 +732,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
-        {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} />}
+        {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} currentUserId={session.user.id} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} clients={clients} onRefresh={loadAll} />}
         {view==='hosting' && <HostingView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} />}
@@ -1469,12 +1469,16 @@ function ProjectsView({ projects, clients, clientName, allTasks = [], showView, 
   )
 }
 
-function ProjectDetailView({ project, clients, clientName, showView, onRefresh, orgMembers = [], myRole }) {
+function ProjectDetailView({ project, clients, clientName, showView, onRefresh, orgMembers = [], myRole, currentUserId }) {
   const [tasks, setTasks] = useState([])
   const [showPreview, setShowPreview] = useState(true)
   const [projectMembers, setProjectMembers] = useState([])
   const [clientAccess, setClientAccess] = useState([])
   const [docs, setDocs] = useState([])
+  const [timeEntries, setTimeEntries] = useState([])
+  const [timerRunning, setTimerRunning] = useState(false)
+  const [timerStart, setTimerStart] = useState(null)
+  const [timerNow, setTimerNow] = useState(Date.now())
   const [inviting, setInviting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef()
@@ -1489,7 +1493,28 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
   const refreshTeam = () => db.getProjectMembers(project.id).then(setProjectMembers)
   const refreshAccess = () => db.getProjectClientAccess(project.id).then(setClientAccess)
   const refreshDocs = () => db.getProjectDocuments(project.id).then(setDocs)
-  useEffect(() => { refreshTeam(); refreshAccess(); refreshDocs() }, [project.id])
+  const refreshTime = () => db.getTimeEntries(project.id).then(setTimeEntries)
+  useEffect(() => { refreshTeam(); refreshAccess(); refreshDocs(); refreshTime() }, [project.id])
+
+  useEffect(() => {
+    if (!timerRunning) return
+    const iv = setInterval(() => setTimerNow(Date.now()), 1000)
+    return () => clearInterval(iv)
+  }, [timerRunning])
+
+  function startTimer() { setTimerStart(Date.now()); setTimerNow(Date.now()); setTimerRunning(true) }
+  async function stopTimer() {
+    const minutes = Math.max(1, Math.round((Date.now() - timerStart) / 60000))
+    setTimerRunning(false)
+    try { await db.createTimeEntry({ project_id: project.id, minutes, date: today(), description: 'Timer' }); refreshTime() }
+    catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+  async function deleteTimeEntry(id) {
+    try { await db.deleteTimeEntry(id); refreshTime() }
+    catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+  const totalMinutes = timeEntries.reduce((s,e) => s + e.minutes, 0)
+  const fmtHM = m => `${Math.floor(m/60)}u ${m%60}m`
 
   async function toggleMember(userId, isMember) {
     try {
@@ -1599,6 +1624,30 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
                 ))}
               </div>
             </div>
+            <div className="sc">
+              <div className="sc-head">
+                <span className="sc-title">Tijd</span>
+                {!timerRunning
+                  ? <button className="btn btn-ghost btn-sm" onClick={startTimer}>▶ Start timer</button>
+                  : <button className="btn btn-primary btn-sm" onClick={stopTimer}>■ Stop ({Math.floor((timerNow-timerStart)/60000)}m)</button>}
+              </div>
+              <div className="sc-body">
+                <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:10}}>Totaal: <strong style={{color:'var(--text)'}}>{fmtHM(totalMinutes)}</strong></div>
+                {!timeEntries.length ? <div className="empty">Nog geen uren geregistreerd</div> : timeEntries.map(e => (
+                  <div key={e.id} className="info-row" style={{alignItems:'center'}}>
+                    <div style={{flex:1}}>
+                      <span className="info-val">{e.description || 'Tijd geregistreerd'}</span>
+                      <div style={{fontSize:11,color:'var(--text-faint)'}}>{fdate(e.date)} · {e.profiles?.full_name || ''}</div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                      <span style={{fontFamily:'var(--mono-font)',fontSize:13}}>{fmtHM(e.minutes)}</span>
+                      {e.user_id === currentUserId && <button type="button" className="task-del" onClick={()=>deleteTimeEntry(e.id)} aria-label="Tijd verwijderen">×</button>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <QuickTimeAdd projectId={project.id} onAdd={refreshTime} />
+            </div>
           </div>
           <div>
             <div className="sc">
@@ -1620,6 +1669,7 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
                 <div className="info-row"><span className="info-label">Open</span><span className="info-val">{open.length}</span></div>
                 <div className="info-row"><span className="info-label">Afgerond</span><span className="info-val">{done.length}</span></div>
                 <div className="info-row"><span className="info-label">Voortgang</span><span className="info-val"><div style={{display:'flex',alignItems:'center',gap:8}}><div style={{flex:1,height:5,background:'var(--border)',borderRadius:99}}><div style={{height:'100%',width:pct+'%',background:project.color,borderRadius:99}}></div></div><span style={{fontSize:12,color:'var(--text-muted)'}}>{pct}%</span></div></span></div>
+                <div className="info-row"><span className="info-label">Tijd besteed</span><span className="info-val">{fmtHM(totalMinutes)}</span></div>
               </div>
             </div>
             <div className="sc">
@@ -2018,6 +2068,26 @@ function TaskItem({ task, onToggle, onDelete }) {
         </div>
       </div>
       <button type="button" className="task-del" onClick={del} aria-label={`Taak "${task.description}" verwijderen`}>×</button>
+    </div>
+  )
+}
+
+function QuickTimeAdd({ projectId, onAdd }) {
+  const [desc, setDesc] = useState('')
+  const [hours, setHours] = useState('')
+  const [date, setDate] = useState(today())
+  async function add() {
+    const h = parseFloat(hours)
+    if (!h || h <= 0) return
+    await db.createTimeEntry({ project_id: projectId, minutes: Math.round(h * 60), date, description: desc.trim() || null })
+    setDesc(''); setHours(''); onAdd()
+  }
+  return (
+    <div className="quick-add">
+      <input type="text" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Omschrijving (optioneel)…" onKeyDown={e=>e.key==='Enter'&&add()} />
+      <input type="number" min="0.25" step="0.25" value={hours} onChange={e=>setHours(e.target.value)} placeholder="Uren" style={{width:80}} />
+      <input type="date" value={date} onChange={e=>setDate(e.target.value)} />
+      <button className="btn btn-ghost btn-sm" onClick={add}>Voeg toe</button>
     </div>
   )
 }

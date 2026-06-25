@@ -556,3 +556,21 @@ export async function markNotificationRead(key) {
   const { error } = await supabase.from('notification_reads').upsert([{ user_id: userId, notification_key: key }], { onConflict: 'user_id,notification_key', ignoreDuplicates: true })
   if (error) throw error
 }
+
+// ── Tijdregistratie ─────────────────────────────────────────────────────────────
+export async function getTimeEntries(projectId) {
+  const { data, error } = await supabase
+    .from('time_entries').select('*, profiles(full_name)').eq('project_id', projectId).order('date', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createTimeEntry(entry) {
+  const userId = (await supabase.auth.getUser()).data.user.id
+  const { data, error } = await supabase.from('time_entries').insert([{ ...entry, user_id: userId }]).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteTimeEntry(id) {
+  const { error } = await supabase.from('time_entries').delete().eq('id', id)
+  if (error) throw error
+}
