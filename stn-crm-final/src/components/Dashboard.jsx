@@ -1995,11 +1995,21 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
 
 function CompanySettingsView({ activeOrgId, orgName, settings, onRefresh, onAddWorkspace }) {
   const [templates, setTemplates] = useState([])
+  const [hasDemo, setHasDemo] = useState(false)
+  const [removingDemo, setRemovingDemo] = useState(false)
   useEffect(() => { if (activeOrgId) db.getProjectTemplates(activeOrgId).then(setTemplates).catch(()=>{}) }, [activeOrgId])
+  useEffect(() => { if (activeOrgId) db.hasDemoData(activeOrgId).then(setHasDemo).catch(()=>{}) }, [activeOrgId])
   async function removeTemplate(id) {
     if (!confirm('Template verwijderen?')) return
     try { await db.deleteProjectTemplate(id); db.getProjectTemplates(activeOrgId).then(setTemplates) }
     catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+  async function removeDemoData() {
+    if (!confirm('Dit verwijdert alle voorbeeldklanten, projecten en facturen die zijn aangemaakt tijdens de rondleiding. Doorgaan?')) return
+    setRemovingDemo(true)
+    try { await db.deleteDemoData(activeOrgId); setHasDemo(false); onRefresh(); showToast('Voorbeelddata verwijderd') }
+    catch (e) { showToast('Fout: ' + e.message, 'error') }
+    finally { setRemovingDemo(false) }
   }
   const [form, setForm] = useState({
     name: orgName || '',
@@ -2114,6 +2124,17 @@ function CompanySettingsView({ activeOrgId, orgName, settings, onRefresh, onAddW
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        <div className="sc" style={{marginTop:24}}>
+          <div className="sc-head"><span className="sc-title">Voorbeelddata</span></div>
+          <div className="sc-body">
+            <div className="info-row"><span className="info-label">Status</span><span className="info-val">{hasDemo ? <span className="badge bg-amber">Aanwezig</span> : <span className="badge bg-gray">Geen voorbeelddata</span>}</span></div>
+            {hasDemo && <>
+              <div style={{fontSize:12,color:'var(--text-faint)',margin:'10px 0'}}>Dit verwijdert alle voorbeeldklanten, projecten en facturen die zijn aangemaakt tijdens de rondleiding.</div>
+              <button className="btn btn-danger btn-sm" onClick={removeDemoData} disabled={removingDemo}>{removingDemo ? 'Verwijderen…' : 'Verwijder alle voorbeelddata'}</button>
+            </>}
           </div>
         </div>
 
