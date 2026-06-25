@@ -24,4 +24,18 @@ async function requireAdmin(req) {
   return { service, adminUser: data.user }
 }
 
-module.exports = { getServiceClient, requireAdmin }
+// Verifieert alleen dat de aanroeper een geldige, ingelogde gebruiker is —
+// voor endpoints die niet platform-admin-only zijn (bijv. de AI-route, die elke
+// ingelogde staff/teamlid mag gebruiken op zijn eigen werkruimte-data).
+async function requireUser(req) {
+  const auth = req.headers.authorization || ''
+  const token = auth.replace(/^Bearer\s+/i, '')
+  if (!token) { const e = new Error('Geen sessie meegegeven.'); e.status = 401; throw e }
+
+  const service = getServiceClient()
+  const { data, error } = await service.auth.getUser(token)
+  if (error || !data.user) { const e = new Error('Ongeldige sessie.'); e.status = 401; throw e }
+  return { service, user: data.user }
+}
+
+module.exports = { getServiceClient, requireAdmin, requireUser }

@@ -793,6 +793,71 @@ export async function moveProspectToStage(prospect, newStage, extra = {}) {
   return updated
 }
 
+// ── Deal rotting ─────────────────────────────────────────────────────────────────
+export function daysInStage(prospect) {
+  const ref = prospect.last_activity_at || prospect.created_at
+  if (!ref) return 0
+  return Math.floor((Date.now() - new Date(ref).getTime()) / 86400000)
+}
+export function rotLevel(prospect, stage) {
+  if (!stage || stage.is_won || stage.is_lost || !stage.rot_days) return 'none'
+  const days = daysInStage(prospect)
+  if (days >= stage.rot_days * 2) return 'heavy'
+  if (days >= stage.rot_days) return 'light'
+  return 'none'
+}
+
+// ── Snooze ───────────────────────────────────────────────────────────────────────
+export async function snoozeProspect(id, snoozedUntil, reason) {
+  return updateProspect(id, { snoozed_until: snoozedUntil, snooze_reason: reason || null })
+}
+export async function unsnoozeProspect(id) {
+  return updateProspect(id, { snoozed_until: null, snooze_reason: null })
+}
+// Geeft de ids terug van prospects die net zijn 'wakker gemaakt' (snoozed_until lag in het verleden).
+export async function wakeUpDueProspects(organizationId) {
+  const nowIso = new Date().toISOString()
+  const { data: due, error } = await supabase
+    .from('pipeline').select('id, fname, lname').eq('organization_id', organizationId).not('snoozed_until', 'is', null).lt('snoozed_until', nowIso)
+  if (error || !due?.length) return []
+  await supabase.from('pipeline').update({ snoozed_until: null, snooze_reason: null }).in('id', due.map(p => p.id))
+  return due
+}
+
+// ── Prospect dupliceren ──────────────────────────────────────────────────────────
+export async function duplicateProspect(prospect, options) {
+  const { name, stageId, includeBase = true, includeValue = true, includeActivities = false, includeTags = false } = options
+  const [fname, ...rest] = name.trim().split(' ')
+  const payload = {
+    organization_id: prospect.organization_id, pipeline_id: prospect.pipeline_id, stage_id: stageId,
+    fname, lname: rest.join(' ') || '—',
+  }
+  if (includeBase) {
+    payload.company = prospect.company; payload.email = prospect.email; payload.phone = prospect.phone; payload.source = prospect.source
+    payload.website = prospect.website; payload.website_type = prospect.website_type
+  }
+  if (includeValue) {
+    payload.deal_value = prospect.deal_value; payload.win_probability = prospect.win_probability
+  }
+  if (includeTags) payload.tags = prospect.tags || []
+  const copy = await createProspect(payload)
+  if (includeActivities) {
+    const activities = await getProspectActivities(prospect.id)
+    if (activities.length) {
+      await supabase.from('prospect_activities').insert(activities.map(a => ({
+        prospect_id: copy.id, type: a.type, title: a.title, description: a.description,
+        scheduled_at: a.scheduled_at, completed_at: a.completed_at, is_completed: a.is_completed,
+      })))
+    }
+  }
+  return copy
+}
+
+// ── AI-assistent (Gemini, via server-side route) ────────────────────────────────
+export async function callPipelineAI(type, payload) {
+  return authedFetch('/api/ai/pipeline', { method: 'POST', body: JSON.stringify({ type, ...payload }) })
+}
+
 // ── Offertes gekoppeld aan een prospect (verkoopfase, nog geen klant) ──────────
 export async function getProspectQuotes(prospectId) {
   const { data, error } = await supabase.from('quotes').select('*').eq('prospect_id', prospectId).order('created_at', { ascending: false })
