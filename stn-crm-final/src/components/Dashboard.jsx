@@ -6,6 +6,9 @@ import * as db from '../lib/db'
 import ProfileView from './ProfileView.jsx'
 import PipelineView from './PipelineView.jsx'
 import OnboardingWizard, { ONBOARDING_STEPS } from './OnboardingWizard.jsx'
+import MonitorTab from './websites/MonitorTab.jsx'
+import LicensesTab from './websites/LicensesTab.jsx'
+import MaintenanceTab from './finance/MaintenanceTab.jsx'
 
 export const money = n => '€\u202f' + Number(n).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 export const fdate = d => { if (!d) return '—'; return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) }
@@ -178,6 +181,8 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   const [allMeetings, setAllMeetings] = useState([])
   const [pipeline, setPipeline] = useState([])
   const [allDocs, setAllDocs] = useState([])
+  const [latestChecks, setLatestChecks] = useState({})
+  const [allLicenses, setAllLicenses] = useState([])
   const [orgMembers, setOrgMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [orgMenuOpen, setOrgMenuOpen] = useState(false)
@@ -218,13 +223,14 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   const loadAll = useCallback(async () => {
     if (!activeOrgId) return
     try {
-      const [c, p, i, r, t, h, m, pl, d] = await Promise.all([
+      const [c, p, i, r, t, h, m, pl, d, checks, lic] = await Promise.all([
         db.getClients(activeOrgId), db.getProjects(activeOrgId), db.getAllInvoices(activeOrgId), db.getAllRecurring(activeOrgId),
         db.getAllTasks(activeOrgId), db.getAllHosting(activeOrgId), db.getAllMeetings(activeOrgId), db.getPipeline(activeOrgId),
-        db.getAllProjectDocuments(activeOrgId)
+        db.getAllProjectDocuments(activeOrgId), db.getLatestChecksWithPrevious(activeOrgId).catch(() => ({})), db.getLicenses(activeOrgId).catch(() => [])
       ])
       setClients(c); setProjects(p); setAllInvoices(i); setAllRecurring(r); setAllHosting(h); setAllMeetings(m); setPipeline(pl); setAllDocs(d)
       setAllTasks(t.map(task => ({ ...task, project: task.projects })))
+      setLatestChecks(checks); setAllLicenses(lic)
     } catch(e) { console.error(e) }
     setLoading(false)
   }, [activeOrgId])
@@ -297,6 +303,27 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         const days = db.daysInStage(p)
         items.push({ key: `rot-${p.id}`, text: `${p.fname} ${p.lname} heeft al ${days} dagen geen activiteit bij ${stage?.name||'een fase'}`, severity: 'red', date: p.last_activity_at, view: 'pipeline' })
       }
+    })
+    allHosting.forEach(h => {
+      const entry = latestChecks[h.id]
+      if (!entry) return
+      const c = entry.latest
+      if (c.is_online === false) {
+        items.push({ key: `offline-${h.id}`, text: `${h.site_name || h.domain} is offline`, severity: 'red', date: c.checked_at, view: 'hosting' })
+      }
+      if (c.ssl_expires_at) {
+        const sd = daysN(c.ssl_expires_at)
+        if (sd <= 30) items.push({ key: `monitor-ssl-${h.id}`, text: `SSL-certificaat van ${h.site_name || h.domain} ${sd<0?'is verlopen':sd===0?'verloopt vandaag':`verloopt over ${sd}d`}`, severity: sd<14?'red':'amber', date: c.checked_at, view: 'hosting' })
+      }
+      if (entry.previous && c.pagespeed_mobile != null && entry.previous.pagespeed_mobile != null) {
+        const drop = entry.previous.pagespeed_mobile - c.pagespeed_mobile
+        if (drop > 20) items.push({ key: `speed-${h.id}-${c.checked_at}`, text: `PageSpeed (mobile) van ${h.site_name || h.domain} daalde met ${drop} punten`, severity: 'amber', date: c.checked_at, view: 'hosting' })
+      }
+    })
+    allLicenses.forEach(l => {
+      if (!l.renewal_date) return
+      const dd = daysN(l.renewal_date)
+      if (dd <= 30) items.push({ key: `license-${l.id}`, text: `Licentie "${l.name}" ${dd<0?'is verlopen':dd===0?'verloopt vandaag':`verloopt over ${dd}d`}`, severity: dd<14?'red':'amber', date: l.renewal_date, view: 'hosting' })
     })
     return items.sort((a,b) => (a.date||'').localeCompare(b.date||''))
   })()
@@ -816,7 +843,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
           <div className="sidebar2-section-label">Beheer</div>
           {navItem('pipeline', 'Pipeline', view==='pipeline')}
           {navItem('finance', 'Financiën', view==='finance')}
-          {navItem('hosting', 'Hosting', view==='hosting')}
+          {navItem('hosting', 'Websites', view==='hosting')}
         </div>
         <div className="sidebar2-section">
           {myRole === 'owner' && navItem('team', 'Team', view==='team')}
@@ -855,8 +882,8 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} currentUserId={session.user.id} currentUserName={profile?.full_name || session.user.email} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
-        {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} clients={clients} onRefresh={loadAll} activeOrgId={activeOrgId} companySettings={companySettings} />}
-        {view==='hosting' && <HostingView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} />}
+        {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} clients={clients} onRefresh={loadAll} activeOrgId={activeOrgId} companySettings={companySettings} allHosting={allHosting} />}
+        {view==='hosting' && <WebsitesView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} myRole={myRole} onRestartOnboarding={restartOnboardingWizard} />}
         {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} organizationId={activeOrgId} />}
         {view==='team' && myRole === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} myProfile={profile} activeOrgId={activeOrgId} />}
@@ -1955,7 +1982,9 @@ export function downloadQuotePdf(quote, client, companySettings) {
   w.print()
 }
 
-function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR, clients, onRefresh, activeOrgId, companySettings }) {
+function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR, clients, onRefresh, activeOrgId, companySettings, allHosting = [] }) {
+  const [financeTab, setFinanceTab] = useState(() => { try { return localStorage.getItem('stn_finance_tab') || 'facturen' } catch (e) { return 'facturen' } })
+  useEffect(() => { try { localStorage.setItem('stn_finance_tab', financeTab) } catch (e) {} }, [financeTab])
   const [period, setPeriod] = useState('all')
   const [quotes, setQuotes] = useState([])
   useEffect(() => { if (activeOrgId) db.getAllQuotes(activeOrgId).then(setQuotes).catch(()=>{}) }, [activeOrgId])
@@ -2002,17 +2031,26 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
       <div className="topbar">
         <h2>Financiën</h2>
         <div className="topbar-right">
-          <select value={period} onChange={e=>setPeriod(e.target.value)} style={{width:'auto'}}>
-            <option value="all">Alle periodes</option>
-            <option value="month">Deze maand</option>
-            <option value="quarter">Dit kwartaal</option>
-            <option value="year">Dit jaar</option>
-          </select>
-          <button className="btn btn-ghost btn-sm" onClick={exportCsv}>↓ Exporteer CSV</button>
-          <QuoteModal clients={clients} onSave={refreshQuotes} trigger={<button className="btn btn-ghost btn-sm">+ Offerte</button>} />
-          <InvoiceModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Factuur</button>} />
+          {financeTab === 'facturen' && <>
+            <select value={period} onChange={e=>setPeriod(e.target.value)} style={{width:'auto'}}>
+              <option value="all">Alle periodes</option>
+              <option value="month">Deze maand</option>
+              <option value="quarter">Dit kwartaal</option>
+              <option value="year">Dit jaar</option>
+            </select>
+            <button className="btn btn-ghost btn-sm" onClick={exportCsv}>↓ Exporteer CSV</button>
+            <QuoteModal clients={clients} onSave={refreshQuotes} trigger={<button className="btn btn-ghost btn-sm">+ Offerte</button>} />
+            <InvoiceModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Factuur</button>} />
+          </>}
+          <div className="tabs">
+            {[['facturen', 'Facturen'], ['onderhoud', 'Onderhoud']].map(([t, label]) => (
+              <button key={t} className={`tab${financeTab === t ? ' active' : ''}`} onClick={() => setFinanceTab(t)}>{label}</button>
+            ))}
+          </div>
         </div>
       </div>
+      {financeTab === 'onderhoud' && <MaintenanceTab activeOrgId={activeOrgId} clients={clients} allHosting={allHosting} companySettings={companySettings} />}
+      {financeTab === 'facturen' && (
       <div className="content">
         <div className="stats-grid">
           <div className="stat-card"><div className="stat-label">Totaal betaald</div><div className="stat-value" style={{fontSize:18}}>{money(totalPaid)}</div></div>
@@ -2069,6 +2107,7 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
           </div>
         </div>
       </div>
+      )}
     </div>
   )
 }
@@ -2748,10 +2787,37 @@ function NoteModal({ clientId, onSave, trigger }) {
 }
 
 // ── Hosting View ───────────────────────────────────────────────────────────────
-function HostingView({ allHosting, clients, showView, onRefresh }) {
+function WebsitesView({ allHosting, clients, showView, onRefresh, activeOrgId }) {
+  const [tab, setTab] = useState(() => { try { return localStorage.getItem('stn_websites_tab') || 'sites' } catch (e) { return 'sites' } })
   const [q, setQ] = useState('')
-  const today_str = today()
+  useEffect(() => { try { localStorage.setItem('stn_websites_tab', tab) } catch (e) {} }, [tab])
 
+  return (
+    <div>
+      <div className="topbar">
+        <h2>Websites</h2>
+        <div className="topbar-right">
+          {tab === 'sites' && (
+            <>
+              <div className="search-wrap"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div>
+              <HostingModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Site toevoegen</button>} />
+            </>
+          )}
+          <div className="tabs">
+            {[['sites', 'Sites'], ['monitor', 'Monitor'], ['licenties', 'Licenties']].map(([t, label]) => (
+              <button key={t} className={`tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>{label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+      {tab === 'sites' && <SitesTab allHosting={allHosting} clients={clients} showView={showView} onRefresh={onRefresh} q={q} />}
+      {tab === 'monitor' && <MonitorTab allHosting={allHosting} onRefresh={onRefresh} activeOrgId={activeOrgId} />}
+      {tab === 'licenties' && <LicensesTab clients={clients} allHosting={allHosting} activeOrgId={activeOrgId} />}
+    </div>
+  )
+}
+
+function SitesTab({ allHosting, clients, showView, onRefresh, q }) {
   const filtered = allHosting.filter(h => {
     if (!q) return true
     const cn = h.clients ? h.clients.fname + ' ' + h.clients.lname + ' ' + (h.clients.company||'') : ''
@@ -2780,13 +2846,6 @@ function HostingView({ allHosting, clients, showView, onRefresh }) {
 
   return (
     <div>
-      <div className="topbar">
-        <h2>Hosting & domeinen</h2>
-        <div className="topbar-right">
-          <div className="search-wrap"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoeken…" /></div>
-          <HostingModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Site toevoegen</button>} />
-        </div>
-      </div>
       <div className="content">
 
         {(expiringSoon.length > 0 || sslWarn.length > 0) && (

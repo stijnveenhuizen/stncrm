@@ -100,6 +100,7 @@ export default function ClientPortal({ session, client }) {
   const [quotes, setQuotes] = useState([])
   const [notes, setNotes] = useState([])
   const [meetings, setMeetings] = useState([])
+  const [maintenanceLogs, setMaintenanceLogs] = useState([])
   const [docs, setDocs] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -119,6 +120,7 @@ export default function ClientPortal({ session, client }) {
   useEffect(() => {
     db.getNotes(client.id).then(setNotes)
     db.getMeetings(client.id).then(setMeetings)
+    db.getClientMaintenanceLogs(client.id).then(setMaintenanceLogs).catch(() => {})
     db.getInvoices(client.id).then(setInvoices).catch(() => {})
     db.getQuotes(client.id).then(setQuotes).catch(() => {})
     if (client.organization_id) db.getCompanySettings(client.organization_id).then(setCompanySettings).catch(() => {})
@@ -327,6 +329,21 @@ export default function ClientPortal({ session, client }) {
               ))}
             </div>
           </div>
+
+          {!!maintenanceLogs.length && (
+            <div className="sc">
+              <div className="sc-head"><span className="sc-title">Onderhoud aan je website</span></div>
+              <div className="sc-body">
+                {maintenanceLogs.map(l => (
+                  <div key={l.id} style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+                    <div style={{fontSize:13,fontWeight:500}}>{l.title}</div>
+                    {l.description && <div style={{fontSize:12,color:'var(--text-secondary)',marginTop:2}}>{l.description}</div>}
+                    <div style={{fontSize:11,color:'var(--text-faint)',marginTop:5}}>{fdate(l.date)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="sc">
             <div className="sc-head"><span className="sc-title">Meetings</span></div>

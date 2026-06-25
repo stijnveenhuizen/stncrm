@@ -32,7 +32,8 @@ create table if not exists website_plugins (
   version text,
   is_active boolean not null default true,
   has_update boolean not null default false,
-  last_checked_at timestamptz default now()
+  last_checked_at timestamptz default now(),
+  unique(site_id, name)
 );
 alter table website_plugins enable row level security;
 
@@ -113,6 +114,23 @@ create policy "client reads own visible logs" on maintenance_logs for select
 drop policy if exists "org member manages reports" on maintenance_reports;
 create policy "org member manages reports" on maintenance_reports for all
   using (exists (select 1 from maintenance_contracts mc where mc.id = maintenance_reports.contract_id and is_member_of(mc.workspace_id)));
+
+-- Privé-bucket voor de gegenereerde PDF's: pdf_url bevat het storage-pad, niet een
+-- publieke URL — de app vraagt er bij het downloaden zelf een kortstondige
+-- signed URL voor op (zelfde aanpak als project-docs).
+insert into storage.buckets (id, name, public)
+values ('maintenance-reports', 'maintenance-reports', false)
+on conflict (id) do nothing;
+
+drop policy if exists "org member access maintenance report files" on storage.objects;
+create policy "org member access maintenance report files" on storage.objects for all
+  using (
+    bucket_id = 'maintenance-reports'
+    and exists (
+      select 1 from maintenance_contracts mc
+      where mc.id::text = (storage.foldername(name))[1] and is_member_of(mc.workspace_id)
+    )
+  );
 
 -- ── Module 3: Licentie tracker ───────────────────────────────────────────────────
 create extension if not exists pgcrypto;

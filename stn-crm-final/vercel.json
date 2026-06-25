@@ -1,3 +1,7 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "functions": {
+    "api/monitor/run-checks.js": { "maxDuration": 60 }
+  },
+  "crons": [{ "path": "/api/monitor/run-checks", "schedule": "0 6 * * *" }]
 }

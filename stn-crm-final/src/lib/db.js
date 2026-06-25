@@ -548,6 +548,18 @@ export async function getLatestChecks(organizationId) {
   for (const c of data) { if (!bySite[c.site_id]) bySite[c.site_id] = c }
   return bySite
 }
+export async function getLatestChecksWithPrevious(organizationId) {
+  const { data, error } = await supabase
+    .from('website_checks').select('*, hosting!inner(id, site_name, domain, client_id, clients!inner(organization_id))')
+    .eq('hosting.clients.organization_id', organizationId).order('checked_at', { ascending: false })
+  if (error) throw error
+  const bySite = {}
+  for (const c of data) {
+    if (!bySite[c.site_id]) bySite[c.site_id] = { latest: c, previous: null }
+    else if (!bySite[c.site_id].previous) bySite[c.site_id].previous = c
+  }
+  return bySite
+}
 export async function getWebsiteChecks(siteId, limitN = 60) {
   const { data, error } = await supabase.from('website_checks').select('*').eq('site_id', siteId).order('checked_at', { ascending: false }).limit(limitN)
   if (error) throw error
@@ -619,6 +631,11 @@ export async function getMaintenanceReports(contractId) {
 }
 export async function generateMaintenanceReport(contractId, periodMonth, periodYear) {
   return authedFetch('/api/maintenance/generate-report', { method: 'POST', body: JSON.stringify({ contractId, periodMonth, periodYear }) })
+}
+export async function getMaintenanceReportUrl(storagePath) {
+  const { data, error } = await supabase.storage.from('maintenance-reports').createSignedUrl(storagePath, 60)
+  if (error) throw error
+  return data.signedUrl
 }
 
 // ── Licentie tracker ─────────────────────────────────────────────────────────────
