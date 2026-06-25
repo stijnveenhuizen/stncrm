@@ -160,11 +160,22 @@ function SiteDetailPanel({ site, onClose }) {
   const [tab, setTab] = useState('overzicht')
   const [history, setHistory] = useState([])
   const [plugins, setPlugins] = useState([])
+  const [advice, setAdvice] = useState(site.ai_advice || '')
+  const [adviceLoading, setAdviceLoading] = useState(false)
 
   useEffect(() => {
     db.getWebsiteChecks(site.id, 30).then(setHistory).catch(() => {})
     db.getWebsitePlugins(site.id).then(setPlugins).catch(() => {})
   }, [site.id])
+
+  async function generateAdvice() {
+    setAdviceLoading(true)
+    try {
+      const { result } = await db.getWebsiteAiAdvice(site.id)
+      setAdvice(result)
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setAdviceLoading(false) }
+  }
 
   const chartData = useMemo(() => [...history].reverse().map(h => ({
     date: fdate(h.checked_at?.slice(0, 10)), uptime: h.is_online ? 100 : 0, mobile: h.pagespeed_mobile, desktop: h.pagespeed_desktop,
@@ -196,6 +207,21 @@ function SiteDetailPanel({ site, onClose }) {
         <div style={{ padding: 20, overflowY: 'auto', flex: 1 }}>
           {tab === 'overzicht' && (
             <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase' }}>✨ AI-prestatieadvies</span>
+                <button className="btn btn-ghost btn-xs" onClick={generateAdvice} disabled={adviceLoading}>{advice ? 'Vernieuwen' : 'Genereren'}</button>
+              </div>
+              {adviceLoading ? (
+                <div style={{ background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)', padding: 12, fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+                  Analyseren…
+                </div>
+              ) : advice ? (
+                <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+                  style={{ background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)', padding: 12, fontSize: 13, marginBottom: 20, whiteSpace: 'pre-line' }}>
+                  {advice}
+                </motion.div>
+              ) : <div style={{ fontSize: 12, color: 'var(--text-muted-tok)', marginBottom: 20 }}>Nog geen AI-advies gegenereerd. Zorg dat er eerst een PageSpeed-check is uitgevoerd.</div>}
+
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted-tok)', textTransform: 'uppercase', marginBottom: 8 }}>Uptime (laatste 30 checks)</div>
               <div style={{ height: 140, marginBottom: 24 }}>
                 <ResponsiveContainer width="100%" height="100%">

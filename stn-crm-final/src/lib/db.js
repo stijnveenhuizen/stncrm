@@ -990,6 +990,9 @@ export async function duplicateProspect(prospect, options) {
 export async function callPipelineAI(type, payload) {
   return authedFetch('/api/ai/pipeline', { method: 'POST', body: JSON.stringify({ type, ...payload }) })
 }
+export async function getWebsiteAiAdvice(siteId) {
+  return authedFetch('/api/ai/website', { method: 'POST', body: JSON.stringify({ siteId }) })
+}
 
 // ── Offertes gekoppeld aan een prospect (verkoopfase, nog geen klant) ──────────
 export async function getProspectQuotes(prospectId) {

@@ -1,5 +1,26 @@
 const { requireUser } = require('../_shared')
 
+// Pikt de bruikbare "opportunities" (concrete besparingen) en falende
+// diagnostics uit het Lighthouse-rapport, zodat we straks AI-advies kunnen
+// geven op basis van échte signalen i.p.v. alleen het kale eindcijfer.
+function extractAudits(lighthouseResult) {
+  if (!lighthouseResult?.audits) return []
+  const refs = lighthouseResult.categories?.performance?.auditRefs || []
+  const relevant = refs.filter(r => (r.group === 'load-opportunities' || r.group === 'diagnostics') && r.weight > 0)
+  const audits = []
+  for (const ref of relevant) {
+    const audit = lighthouseResult.audits[ref.id]
+    if (!audit || audit.score === 1 || audit.score === null) continue
+    audits.push({
+      id: ref.id,
+      title: audit.title,
+      displayValue: audit.displayValue || null,
+      savingsMs: audit.details?.overallSavingsMs ? Math.round(audit.details.overallSavingsMs) : null,
+    })
+  }
+  return audits.sort((a, b) => (b.savingsMs || 0) - (a.savingsMs || 0)).slice(0, 8)
+}
+
 async function fetchScore(url, strategy) {
   const key = process.env.PAGESPEED_API_KEY ? `&key=${process.env.PAGESPEED_API_KEY}` : ''
   const endpoint = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=${strategy}${key}`
@@ -10,14 +31,14 @@ async function fetchScore(url, strategy) {
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       console.error(`PageSpeed ${strategy} faalde (${res.status}): ${body.slice(0, 300)}`)
-      return { score: null, error: `HTTP ${res.status}` }
+      return { score: null, audits: [], error: `HTTP ${res.status}` }
     }
     const data = await res.json()
     const score = data?.lighthouseResult?.categories?.performance?.score
-    return { score: typeof score === 'number' ? Math.round(score * 100) : null, error: null }
+    return { score: typeof score === 'number' ? Math.round(score * 100) : null, audits: extractAudits(data?.lighthouseResult), error: null }
   } catch (e) {
     console.error(`PageSpeed ${strategy} exception: ${e.message}`)
-    return { score: null, error: e.message }
+    return { score: null, audits: [], error: e.message }
   } finally {
     clearTimeout(timeout)
   }
@@ -42,6 +63,7 @@ module.exports = async (req, res) => {
 
     const { data: check, error } = await service.from('website_checks').insert([{
       site_id: siteId, is_online: true, pagespeed_mobile: mobile.score, pagespeed_desktop: desktop.score,
+      pagespeed_audits: { mobile: mobile.audits, desktop: desktop.audits },
     }]).select().single()
     if (error) throw error
 

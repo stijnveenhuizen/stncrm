@@ -1,6 +1,26 @@
 const { getServiceClient, requireUser } = require('../_shared')
 const { checkUptime, checkSSL, sniffWordPress } = require('./_lib')
 
+// Zelfde extractie als api/monitor/pagespeed.js — losse helper omdat deze
+// route geen module-export van die file gebruikt (geen eigen endpoint nodig).
+function extractAudits(lighthouseResult) {
+  if (!lighthouseResult?.audits) return []
+  const refs = lighthouseResult.categories?.performance?.auditRefs || []
+  const relevant = refs.filter(r => (r.group === 'load-opportunities' || r.group === 'diagnostics') && r.weight > 0)
+  const audits = []
+  for (const ref of relevant) {
+    const audit = lighthouseResult.audits[ref.id]
+    if (!audit || audit.score === 1 || audit.score === null) continue
+    audits.push({
+      id: ref.id,
+      title: audit.title,
+      displayValue: audit.displayValue || null,
+      savingsMs: audit.details?.overallSavingsMs ? Math.round(audit.details.overallSavingsMs) : null,
+    })
+  }
+  return audits.sort((a, b) => (b.savingsMs || 0) - (a.savingsMs || 0)).slice(0, 8)
+}
+
 // Best-effort: vraagt de publieke wordpress.org plugin-API (geen key nodig) om de
 // nieuwste versie van een gedetecteerde plugin-slug, en vergelijkt die met wat er
 // op de site draait. Werkt alleen voor plugins uit de officiële WordPress-
@@ -49,6 +69,7 @@ async function checkOneSite(service, site) {
   }
 
   const key = process.env.PAGESPEED_API_KEY ? `&key=${process.env.PAGESPEED_API_KEY}` : ''
+  const pagespeedAudits = {}
   for (const strategy of ['mobile', 'desktop']) {
     try {
       const r = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(site.pagespeed_url || site.url)}&strategy=${strategy}${key}`)
@@ -56,9 +77,11 @@ async function checkOneSite(service, site) {
         const data = await r.json()
         const score = data?.lighthouseResult?.categories?.performance?.score
         if (typeof score === 'number') result[`pagespeed_${strategy}`] = Math.round(score * 100)
+        pagespeedAudits[strategy] = extractAudits(data?.lighthouseResult)
       }
     } catch (e) { /* pagespeed is best-effort, mag de rest niet blokkeren */ }
   }
+  result.pagespeed_audits = pagespeedAudits
 
   await service.from('website_checks').insert([{ site_id: site.id, ...result }])
   return result
