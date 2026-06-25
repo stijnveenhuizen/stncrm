@@ -309,6 +309,33 @@ export async function deleteInvoice(id) {
   if (error) throw error
 }
 
+// ── Offertes ─────────────────────────────────────────────────────────────────────
+export async function getQuotes(clientId) {
+  const { data, error } = await supabase.from('quotes').select('*').eq('client_id', clientId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function getAllQuotes(organizationId) {
+  const { data, error } = await supabase
+    .from('quotes').select('*, clients!inner(fname, lname, company, organization_id)').eq('clients.organization_id', organizationId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createQuote(quote) {
+  const { data, error } = await supabase.from('quotes').insert([quote]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateQuote(id, updates) {
+  const { data, error } = await supabase.from('quotes').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteQuote(id) {
+  const { error } = await supabase.from('quotes').delete().eq('id', id)
+  if (error) throw error
+}
+
 // ── Recurring ──────────────────────────────────────────────────────────────────
 export async function getRecurring(clientId) {
   const { data, error } = await supabase

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import * as db from '../lib/db'
-import { fdate, money, today, Badge, MeetingTypeIcon, buildMeetingCalendarUrl, ToastProvider, showToast, TaskComments } from './Dashboard.jsx'
+import { fdate, money, today, Badge, MeetingTypeIcon, buildMeetingCalendarUrl, ToastProvider, showToast, TaskComments, downloadQuotePdf } from './Dashboard.jsx'
 
 const ALLOWED_DOC_TYPES = ['application/pdf','image/png','image/jpeg','image/svg+xml','application/zip','application/x-zip-compressed','application/vnd.openxmlformats-officedocument.wordprocessingml.document']
 const MAX_DOC_SIZE = 20 * 1024 * 1024
@@ -95,6 +95,7 @@ export default function ClientPortal({ session, client }) {
   const [section, setSection] = useState('overzicht')
   const [tasks, setTasks] = useState([])
   const [invoices, setInvoices] = useState([])
+  const [quotes, setQuotes] = useState([])
   const [notes, setNotes] = useState([])
   const [meetings, setMeetings] = useState([])
   const [docs, setDocs] = useState([])
@@ -117,6 +118,7 @@ export default function ClientPortal({ session, client }) {
     db.getNotes(client.id).then(setNotes)
     db.getMeetings(client.id).then(setMeetings)
     db.getInvoices(client.id).then(setInvoices).catch(() => {})
+    db.getQuotes(client.id).then(setQuotes).catch(() => {})
     if (client.organization_id) db.getCompanySettings(client.organization_id).then(setCompanySettings).catch(() => {})
     try {
       if (!localStorage.getItem('stn_portal_welcome_seen_' + client.id)) setShowWelcome(true)
@@ -144,6 +146,11 @@ export default function ClientPortal({ session, client }) {
     try { await db.uploadProjectDocumentAsClient(activeProjectId, file, client.id); refreshDocs(); showToast('Bestand geüpload') }
     catch (e) { showToast('Fout bij uploaden: ' + e.message, 'error') }
     finally { setUploading(false); e.target.value = '' }
+  }
+
+  async function respondQuote(q, status) {
+    try { await db.updateQuote(q.id, { status }); db.getQuotes(client.id).then(setQuotes); showToast(status==='geaccepteerd' ? 'Offerte geaccepteerd' : 'Offerte afgewezen') }
+    catch (e) { showToast('Fout: ' + e.message, 'error') }
   }
 
   useEffect(() => { refreshTasks(); refreshDocs() }, [refreshTasks, refreshDocs])
@@ -203,7 +210,7 @@ export default function ClientPortal({ session, client }) {
             )}
 
             <div className="tabs" style={{marginBottom:16}}>
-              {[['overzicht','Mijn project'],['taken','Taken'],['facturen','Facturen'],['bestanden','Bestanden']].map(([s,label]) => (
+              {[['overzicht','Mijn project'],['taken','Taken'],['facturen','Facturen'],['offertes','Offertes'],['bestanden','Bestanden']].map(([s,label]) => (
                 <button key={s} className={`tab${section===s?' active':''}`} onClick={()=>setSection(s)}>{label}</button>
               ))}
             </div>
@@ -254,6 +261,31 @@ export default function ClientPortal({ session, client }) {
                       <span style={{fontFamily:'var(--mono-font)',fontSize:13,marginRight:8}}>{money(i.amount)}</span>
                       <Badge s={i.status} />
                       <button className="btn btn-ghost btn-xs" style={{marginLeft:8}} onClick={()=>downloadInvoicePdf(i, client, companySettings)}>↓ PDF</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeProject && section==='offertes' && (
+              <div className="sc">
+                <div className="sc-head"><span className="sc-title">Offertes</span></div>
+                <div className="sc-body">
+                  {!quotes.length ? <div className="empty">Nog geen offertes</div> : quotes.map(q => (
+                    <div key={q.id} className="dl-item" style={{alignItems:'center',flexWrap:'wrap'}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:500}}>{q.quote_number ? q.quote_number+' · ' : ''}{q.description}</div>
+                        <div style={{fontSize:11,color:'var(--text-faint)'}}>{q.valid_until ? 'Geldig tot ' + fdate(q.valid_until) : ''}</div>
+                      </div>
+                      <span style={{fontFamily:'var(--mono-font)',fontSize:13,marginRight:8}}>{money(q.amount)}</span>
+                      <Badge s={q.status} />
+                      <div style={{display:'flex',gap:6,marginLeft:8}}>
+                        <button className="btn btn-ghost btn-xs" onClick={()=>downloadQuotePdf(q, client, companySettings)}>↓ PDF</button>
+                        {q.status==='verzonden' && <>
+                          <button className="btn btn-primary btn-xs" onClick={()=>respondQuote(q,'geaccepteerd')}>Accepteren</button>
+                          <button className="btn btn-ghost btn-xs" onClick={()=>respondQuote(q,'afgewezen')}>Afwijzen</button>
+                        </>}
+                      </div>
                     </div>
                   ))}
                 </div>

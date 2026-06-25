@@ -734,7 +734,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} currentUserId={session.user.id} currentUserName={profile?.full_name || session.user.email} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
-        {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} clients={clients} onRefresh={loadAll} />}
+        {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} clients={clients} onRefresh={loadAll} activeOrgId={activeOrgId} companySettings={companySettings} />}
         {view==='hosting' && <HostingView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} />}
         {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} />}
         {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} organizationId={activeOrgId} />}
@@ -1784,8 +1784,46 @@ function TasksView({ allTasks, showView }) {
   )
 }
 
-function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR, clients, onRefresh }) {
+export function downloadQuotePdf(quote, client, companySettings) {
+  const w = window.open('', '_blank')
+  if (!w) return
+  w.document.write(`
+    <html><head><title>Offerte ${quote.quote_number || ''}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:40px;color:#13121c}
+      h1{font-size:20px;margin-bottom:4px}
+      .muted{color:#5d5b72;font-size:13px}
+      table{width:100%;margin-top:30px;border-collapse:collapse}
+      td{padding:8px 0;border-bottom:1px solid #e4e3f0;font-size:14px}
+      .right{text-align:right}
+      .total{font-weight:700;font-size:16px}
+    </style></head><body>
+    <h1>Offerte ${quote.quote_number || ''}</h1>
+    <div class="muted">${client?.fname||''} ${client?.lname||''}${client?.company ? ' · ' + client.company : ''}</div>
+    <table>
+      <tr><td>Omschrijving</td><td class="right">${quote.description || ''}</td></tr>
+      <tr><td>Geldig tot</td><td class="right">${quote.valid_until || '—'}</td></tr>
+      <tr><td>Status</td><td class="right">${quote.status}</td></tr>
+      <tr><td class="total">Bedrag</td><td class="right total">${money(quote.amount)}</td></tr>
+    </table>
+    ${companySettings?.vat_number ? `<div class="muted" style="margin-top:30px">BTW: ${companySettings.vat_number}${companySettings.coc_number ? ' · KVK: ' + companySettings.coc_number : ''}</div>` : ''}
+    </body></html>
+  `)
+  w.document.close()
+  w.focus()
+  w.print()
+}
+
+function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR, clients, onRefresh, activeOrgId, companySettings }) {
   const [period, setPeriod] = useState('all')
+  const [quotes, setQuotes] = useState([])
+  useEffect(() => { if (activeOrgId) db.getAllQuotes(activeOrgId).then(setQuotes).catch(()=>{}) }, [activeOrgId])
+  const refreshQuotes = () => db.getAllQuotes(activeOrgId).then(setQuotes)
+  async function removeQuote(q) {
+    if (!confirm('Offerte verwijderen?')) return
+    try { await db.deleteQuote(q.id); refreshQuotes() }
+    catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
   const lateAmt = allInvoices.filter(i=>i.status==='te laat').reduce((s,i)=>s+Number(i.amount),0)
   const byFreq = { maandelijks:0, kwartaallijks:0, jaarlijks:0 }
   allRecurring.filter(r=>r.status==='actief').forEach(r=>{ byFreq[r.freq]=(byFreq[r.freq]||0)+Number(r.amount) })
@@ -1830,6 +1868,7 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
             <option value="year">Dit jaar</option>
           </select>
           <button className="btn btn-ghost btn-sm" onClick={exportCsv}>↓ Exporteer CSV</button>
+          <QuoteModal clients={clients} onSave={refreshQuotes} trigger={<button className="btn btn-ghost btn-sm">+ Offerte</button>} />
           <InvoiceModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Factuur</button>} />
         </div>
       </div>
@@ -1867,6 +1906,25 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
                 <div className="info-row"><span className="info-label">ARR totaal</span><span className="info-val" style={{fontFamily:'var(--mono-font)',fontWeight:500}}>{money(totalMRR*12)}</span></div>
               </div>
             </div>
+          </div>
+        </div>
+        <div className="sc" style={{marginTop:16}}>
+          <div className="sc-head"><span className="sc-title">Offertes</span></div>
+          <div className="sc-body">
+            {!quotes.length ? <div className="empty">Nog geen offertes</div> : quotes.map(q => (
+              <div key={q.id} className="info-row" style={{alignItems:'center'}}>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:500,fontSize:13}}>{q.quote_number ? q.quote_number+' · ' : ''}{q.description}</div>
+                  <div style={{fontSize:11,color:'var(--text-muted)'}}>{q.clients?.fname} {q.clients?.lname}{q.clients?.company?' · '+q.clients.company:''}{q.valid_until ? ' · geldig tot ' + fdate(q.valid_until) : ''}</div>
+                </div>
+                <span style={{fontFamily:'var(--mono-font)',fontSize:13,marginRight:8}}>{money(q.amount)}</span>
+                <Badge s={q.status} />
+                <div style={{display:'flex',gap:5,marginLeft:8}}>
+                  <button className="btn btn-ghost btn-xs" onClick={()=>downloadQuotePdf(q, q.clients, companySettings)}>PDF</button>
+                  <button type="button" className="task-del" onClick={()=>removeQuote(q)} aria-label="Offerte verwijderen">×</button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -2425,6 +2483,37 @@ function InvoiceModal({ clientId, clients, onSave, trigger }) {
       <FG label="Omschrijving"><input value={form.description} onChange={f('description')} autoFocus /></FG>
       <FR><FG label="Bedrag (€)"><input type="number" value={form.amount} onChange={f('amount')} step="0.01" min="0" /></FG><FG label="Factuurdatum"><input type="date" value={form.date} onChange={f('date')} /></FG></FR>
       <FR><FG label="Vervaldatum"><input type="date" value={form.due_date} onChange={f('due_date')} /></FG><FG label="Status"><select value={form.status} onChange={f('status')}><option value="concept">Concept</option><option value="verzonden">Verzonden</option><option value="betaald">Betaald</option><option value="te laat">Te laat</option></select></FG></FR>
+      <ModalActions onCancel={()=>setOpen(false)} onSave={save} saving={saving} />
+    </Modal>
+  </>
+}
+
+function QuoteModal({ clientId, clients, onSave, trigger }) {
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ client_id: clientId||'', description:'', amount:'', valid_until:'' })
+  const f = k => e => setForm(p=>({...p,[k]:e.target.value}))
+  async function save() {
+    const targetClient = clientId || form.client_id
+    if(!targetClient) return showToast('Kies een klant.', 'error')
+    if(!form.description.trim()||!form.amount) return
+    setSaving(true)
+    try {
+      await db.createQuote({ client_id: targetClient, description: form.description, amount: parseFloat(form.amount), valid_until: form.valid_until||null, status: 'verzonden' })
+      setOpen(false); onSave()
+      showToast('Offerte aangemaakt')
+    } catch(e) {
+      showToast('Fout bij opslaan: ' + e.message, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+  return <>
+    {React.cloneElement(trigger,{onClick:()=>{setForm({client_id:clientId||'',description:'',amount:'',valid_until:''});setOpen(true)}})}
+    <Modal open={open} onClose={()=>setOpen(false)} title="Nieuwe offerte">
+      {!clientId && <FG label="Klant"><select value={form.client_id} onChange={f('client_id')}><option value="">— Kies een klant —</option>{(clients||[]).map(c=><option key={c.id} value={c.id}>{c.fname} {c.lname}{c.company?' ('+c.company+')':''}</option>)}</select></FG>}
+      <FG label="Omschrijving"><input value={form.description} onChange={f('description')} autoFocus /></FG>
+      <FR><FG label="Bedrag (€)"><input type="number" value={form.amount} onChange={f('amount')} step="0.01" min="0" /></FG><FG label="Geldig tot"><input type="date" value={form.valid_until} onChange={f('valid_until')} /></FG></FR>
       <ModalActions onCancel={()=>setOpen(false)} onSave={save} saving={saving} />
     </Modal>
   </>
