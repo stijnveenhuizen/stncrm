@@ -886,7 +886,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
         {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} currentUserId={session.user.id} currentUserName={profile?.full_name || session.user.email} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
         {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} clients={clients} onRefresh={loadAll} activeOrgId={activeOrgId} companySettings={companySettings} allHosting={allHosting} />}
-        {view==='hosting' && <WebsitesView allHosting={allHosting} clients={clients} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
+        {view==='hosting' && <WebsitesView allHosting={allHosting} clients={clients} projects={projects} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} myRole={myRole} onRestartOnboarding={restartOnboardingWizard} />}
         {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} organizationId={activeOrgId} />}
         {view==='team' && myRole === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} myProfile={profile} activeOrgId={activeOrgId} />}
@@ -2792,7 +2792,7 @@ function NoteModal({ clientId, onSave, trigger }) {
 }
 
 // ── Hosting View ───────────────────────────────────────────────────────────────
-function WebsitesView({ allHosting, clients, showView, onRefresh, activeOrgId }) {
+function WebsitesView({ allHosting, clients, projects, showView, onRefresh, activeOrgId }) {
   const [tab, setTab] = useState(() => { try { return localStorage.getItem('stn_websites_tab') || 'sites' } catch (e) { return 'sites' } })
   const [q, setQ] = useState('')
   useEffect(() => { try { localStorage.setItem('stn_websites_tab', tab) } catch (e) {} }, [tab])
@@ -2818,7 +2818,7 @@ function WebsitesView({ allHosting, clients, showView, onRefresh, activeOrgId })
         </div>
       </div>
       {tab === 'sites' && <SitesTab allHosting={allHosting} clients={clients} showView={showView} onRefresh={onRefresh} q={q} />}
-      {tab === 'monitor' && <MonitorTab allHosting={allHosting} onRefresh={onRefresh} activeOrgId={activeOrgId} />}
+      {tab === 'monitor' && <MonitorTab allHosting={allHosting} projects={projects} onRefresh={onRefresh} activeOrgId={activeOrgId} />}
       {tab === 'licenties' && <LicensesTab clients={clients} allHosting={allHosting} activeOrgId={activeOrgId} />}
     </div>
   )

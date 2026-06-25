@@ -29,7 +29,7 @@ function CountUp({ value }) {
   return <>{value == null ? '—' : display}</>
 }
 
-export default function MonitorTab({ allHosting, onRefresh, activeOrgId }) {
+export default function MonitorTab({ allHosting, projects = [], onRefresh, activeOrgId }) {
   const [latestChecks, setLatestChecks] = useState({})
   const [checkingAll, setCheckingAll] = useState(false)
   const [checkingSite, setCheckingSite] = useState(null)
@@ -97,7 +97,7 @@ export default function MonitorTab({ allHosting, onRefresh, activeOrgId }) {
       )}
 
       <AnimatePresence>
-        {detailSite && <SiteDetailPanel site={detailSite} onClose={() => setDetailSite(null)} />}
+        {detailSite && <SiteDetailPanel site={detailSite} projects={projects} onClose={() => setDetailSite(null)} />}
       </AnimatePresence>
     </div>
   )
@@ -156,12 +156,24 @@ function StatusDot({ status }) {
   return <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--text-muted-tok)', display: 'inline-block' }} />
 }
 
-function SiteDetailPanel({ site, onClose }) {
+// Splitst de genummerde AI-tekst ("1. ... 2. ...") in losse punten zodat elk
+// punt los als taak toegevoegd kan worden. Valt terug op de hele tekst als 1
+// item wanneer het model toch geen nette lijst teruggeeft.
+function parseAdviceItems(text) {
+  if (!text) return []
+  const parts = text.split(/\n?(?=\d+\.\s)/).map(s => s.trim()).filter(Boolean).filter(s => /^\d+\.\s/.test(s)).map(s => s.replace(/^\d+\.\s*/, ''))
+  return parts.length ? parts : [text.trim()]
+}
+
+function SiteDetailPanel({ site, projects = [], onClose }) {
   const [tab, setTab] = useState('overzicht')
   const [history, setHistory] = useState([])
   const [plugins, setPlugins] = useState([])
   const [advice, setAdvice] = useState(site.ai_advice || '')
   const [adviceLoading, setAdviceLoading] = useState(false)
+  const [addedItems, setAddedItems] = useState([])
+  const siteProjects = projects.filter(p => p.client_id === site.client_id)
+  const [taskProjectId, setTaskProjectId] = useState(siteProjects[0]?.id || '')
 
   useEffect(() => {
     db.getWebsiteChecks(site.id, 30).then(setHistory).catch(() => {})
@@ -173,9 +185,21 @@ function SiteDetailPanel({ site, onClose }) {
     try {
       const { result } = await db.getWebsiteAiAdvice(site.id)
       setAdvice(result)
+      setAddedItems([])
     } catch (e) { showToast(e.message, 'error') }
     finally { setAdviceLoading(false) }
   }
+
+  async function addAdviceAsTask(text, index) {
+    if (!taskProjectId) return showToast('Kies eerst een project om de taak aan toe te voegen.', 'error')
+    try {
+      await db.createTask({ project_id: taskProjectId, description: text, due_date: null, priority: 'normaal', assigned_to: null, done: false, visible_to_client: false, created_by: 'staff' })
+      setAddedItems(items => [...items, index])
+      showToast('Taak toegevoegd')
+    } catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+
+  const adviceItems = useMemo(() => parseAdviceItems(advice), [advice])
 
   const chartData = useMemo(() => [...history].reverse().map(h => ({
     date: fdate(h.checked_at?.slice(0, 10)), uptime: h.is_online ? 100 : 0, mobile: h.pagespeed_mobile, desktop: h.pagespeed_desktop,
@@ -217,8 +241,26 @@ function SiteDetailPanel({ site, onClose }) {
                 </div>
               ) : advice ? (
                 <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
-                  style={{ background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)', padding: 12, fontSize: 13, marginBottom: 20, whiteSpace: 'pre-line' }}>
-                  {advice}
+                  style={{ background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)', padding: 12, marginBottom: 20 }}>
+                  {siteProjects.length > 1 && (
+                    <div style={{ marginBottom: 10 }}>
+                      <select value={taskProjectId} onChange={e => setTaskProjectId(e.target.value)} style={{ width: 'auto', fontSize: 12 }}>
+                        {siteProjects.map(p => <option key={p.id} value={p.id}>Taken toevoegen aan: {p.name}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {adviceItems.map((item, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, marginBottom: 8, paddingBottom: 8, borderBottom: i < adviceItems.length - 1 ? '1px solid var(--accent-border)' : 'none' }}>
+                      <span style={{ flex: 1 }}>{item}</span>
+                      {siteProjects.length > 0 ? (
+                        <button className="btn btn-ghost btn-xs" style={{ flexShrink: 0 }} disabled={addedItems.includes(i)} onClick={() => addAdviceAsTask(item, i)}>
+                          {addedItems.includes(i) ? '✓ Taak' : '+ Taak'}
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--text-faint)', flexShrink: 0 }}>geen project</span>
+                      )}
+                    </div>
+                  ))}
                 </motion.div>
               ) : <div style={{ fontSize: 12, color: 'var(--text-muted-tok)', marginBottom: 20 }}>Nog geen AI-advies gegenereerd. Zorg dat er eerst een PageSpeed-check is uitgevoerd.</div>}
 
