@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import * as db from '../lib/db'
-import { money, fdate, daysN, showToast } from './Dashboard.jsx'
+import { money, fdate, daysN, showToast, EmptyState, EmptyIcons } from './Dashboard.jsx'
 import PipelineSettingsModal from './pipeline/PipelineSettingsModal.jsx'
 import ProspectPanel from './pipeline/ProspectPanel.jsx'
 import WonLostModals from './pipeline/WonLostModals.jsx'
@@ -122,7 +122,8 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
 
       <div className="content">
         {!activePipeline ? (
-          <div className="empty">Nog geen pipeline. Maak er een aan om te beginnen.</div>
+          <EmptyState icon={EmptyIcons.pipeline} title="Pipeline is leeg" sub="Maak een pipeline aan om je sales bij te houden."
+            cta={<button className="btn btn-primary btn-sm" onClick={() => setNewPipelineOpen(true)}>+ Pipeline aanmaken</button>} />
         ) : (
           <>
             {view === 'kanban' && (

@@ -85,6 +85,8 @@
   --shadow-xl:0 20px 30px rgba(0,0,0,0.5);
 }
 
+html { scroll-behavior: smooth; }
+
 body {
   font-family: var(--body-font);
   background: var(--bg-app);
@@ -95,24 +97,42 @@ body {
 }
 
 h1,h2,h3,h4,h5 { font-family: var(--heading-font); }
-button { font-family: var(--body-font); cursor: pointer; border: none; background: none; font-size: 13px; font-weight: 500; user-select: none; -webkit-touch-callout: none; transition: all 120ms ease; }
+button { font-family: var(--body-font); cursor: pointer; border: none; background: none; font-size: 13px; font-weight: 500; user-select: none; -webkit-touch-callout: none; transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease, box-shadow 150ms ease, transform 120ms ease; }
 button:active { transform: scale(0.98); }
+button:disabled { cursor: not-allowed; }
 input,textarea,select {
   font-family: var(--body-font); font-size: 13px;
-  height: 32px;
+  height: 34px;
   border: 1px solid var(--border-default); border-radius: var(--radius-md);
-  padding: 0 10px; background: var(--bg-base); color: var(--text-primary);
-  width: 100%; outline: none; transition: border-color .15s, box-shadow .15s, background .2s;
+  padding: 0 12px; background: var(--bg-base); color: var(--text-primary);
+  width: 100%; outline: none; transition: border-color 150ms ease, box-shadow 150ms ease, background .2s;
 }
-textarea { height: auto; padding: 8px 10px; }
+textarea { height: auto; padding: 10px 12px; }
 input::placeholder,textarea::placeholder { color: var(--text-muted-tok); }
 input:focus,textarea:focus,select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(61,182,142,0.12);
 }
+input:invalid:not(:placeholder-shown),.field-error input,.field-error select,.field-error textarea {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(220,38,38,0.12);
+}
 label { font-size: 12px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 4px; text-transform: none; letter-spacing: 0; }
 textarea { resize: vertical; min-height: 80px; }
 a { color: inherit; text-decoration: none; }
+
+/* ── Toegankelijkheid: zichtbare focus-ring op elk interactief element ──── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+input:focus-visible,textarea:focus-visible,select:focus-visible { outline: none; } /* heeft al een eigen focus box-shadow hierboven */
+
+/* ── Klikbare rijen/kaarten: nooit tekst selecteren bij het klikken ──────── */
+.cl-row,.pl-row,.fin-row,.host-row,.task-item,.dl-item,.folder-card,.item-card,.sidebar2-item,.tab,.client-tab,.menu-item {
+  user-select: none;
+}
 
 /* Mobile responsive styles */
 @media(max-width: 768px) {

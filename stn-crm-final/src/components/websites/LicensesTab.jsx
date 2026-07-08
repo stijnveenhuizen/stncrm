@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as db from '../../lib/db'
-import { money, fdate, daysN, showToast } from '../Dashboard.jsx'
+import { money, fdate, daysN, showToast, EmptyState, EmptyIcons } from '../Dashboard.jsx'
 
 const CATEGORY_LABEL = { plugin: 'Plugin', theme: 'Theme', hosting: 'Hosting', tool: 'Tool', domein: 'Domein', ssl: 'SSL', overig: 'Overig' }
 
@@ -72,7 +72,10 @@ export default function LicensesTab({ clients, allHosting, activeOrgId }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 1fr 0.9fr 0.7fr 0.7fr 0.8fr', padding: '8px 16px', background: 'var(--bg-subtle)', fontSize: 11, fontWeight: 600, color: 'var(--text-muted-tok)', textTransform: 'uppercase' }}>
           <div>Naam</div><div>Categorie</div><div>Klant</div><div>Verlenging</div><div>Prijs</div><div>Cycle</div><div>Betaald door</div>
         </div>
-        {!loading && !filtered.length ? <div className="empty">Geen licenties gevonden</div> : filtered.map(l => (
+        {!loading && !filtered.length ? (
+          <EmptyState icon={EmptyIcons.licenses} title="Geen licenties" sub="Houd al je software licenties bij op één plek."
+            cta={<button className="btn btn-primary btn-sm" onClick={() => setCreateOpen(true)}>+ Licentie toevoegen</button>} />
+        ) : filtered.map(l => (
           <div key={l.id} style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 1fr 0.9fr 0.7fr 0.7fr 0.8fr', padding: '10px 16px', borderTop: '1px solid var(--border-default)', fontSize: 13, alignItems: 'center', cursor: 'pointer' }}
             onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-subtle)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             onClick={() => setDetailLicense(l)}>

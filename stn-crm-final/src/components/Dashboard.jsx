@@ -38,7 +38,7 @@ export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
   useEffect(() => {
     _toastFn = (msg, type) => {
-      const id = Date.now()
+      const id = Date.now() + Math.random()
       setToasts(t => [...t, { id, msg, type }])
       setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000)
     }
@@ -48,21 +48,26 @@ export function ToastProvider({ children }) {
     <>
       {children}
       <div style={{position:'fixed',bottom:24,right:24,zIndex:999,display:'flex',flexDirection:'column',gap:8,alignItems:'flex-end'}}>
-        {toasts.map(t => (
-          <div key={t.id} style={{
-            display:'flex',alignItems:'flex-start',gap:10,
-            background:'var(--bg-base)', border:'1px solid var(--border-default)', borderLeft:`4px solid ${t.type==='error'?'var(--danger)':'var(--success)'}`,
-            color:'var(--text-primary)', padding:'12px 16px', borderRadius:'var(--radius-lg)',
-            fontSize:13, boxShadow:'var(--shadow-lg)',
-            animation:'toast-in .2s cubic-bezier(.16,1,.3,1)',
-            width:320, lineHeight:1.4
-          }}>
-            <span style={{flexShrink:0,fontWeight:700,color:t.type==='error'?'var(--danger)':'var(--success)'}}>{t.type==='error'?'✕':'✓'}</span>
-            <span>{t.msg}</span>
-          </div>
-        ))}
+        <AnimatePresence>
+          {toasts.map(t => (
+            <motion.div key={t.id}
+              initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 40 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              style={{
+                position:'relative',overflow:'hidden',display:'flex',alignItems:'flex-start',gap:10,
+                background:'var(--bg-base)', border:'1px solid var(--border-default)', borderLeft:`4px solid ${t.type==='error'?'var(--danger)':'var(--success)'}`,
+                color:'var(--text-primary)', padding:'12px 16px', borderRadius:'var(--radius-lg)',
+                fontSize:13, boxShadow:'var(--shadow-lg)',
+                width:320, lineHeight:1.4
+              }}>
+              <span style={{flexShrink:0,fontWeight:700,color:t.type==='error'?'var(--danger)':'var(--success)'}}>{t.type==='error'?'✕':'✓'}</span>
+              <span>{t.msg}</span>
+              <motion.div initial={{ scaleX: 1 }} animate={{ scaleX: 0 }} transition={{ duration: 4, ease: 'linear' }}
+                style={{ position:'absolute', left:0, bottom:0, height:2, width:'100%', transformOrigin:'left', background: t.type==='error'?'var(--danger)':'var(--success)', opacity:.4 }} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
-      <style>{`@keyframes toast-in{from{transform:translateX(40px);opacity:0}to{transform:translateX(0);opacity:1}}`}</style>
     </>
   )
 }
@@ -74,6 +79,29 @@ export function Badge({ s }) {
 
 function ChevronIcon({ size = 12 }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+}
+
+// Herbruikbare lege-staat: icoon + titel + subtekst + optionele CTA-knop.
+// Gebruikt op elke pagina i.p.v. een kale ".empty" tekstregel.
+export function EmptyState({ icon, title, sub, cta }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-state-icon">{icon}</div>
+      <div className="empty-state-title">{title}</div>
+      {sub && <div className="empty-state-sub">{sub}</div>}
+      {cta}
+    </div>
+  )
+}
+export const EmptyIcons = {
+  clients: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  projects: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
+  tasks: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
+  pipeline: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54z"/></svg>,
+  finance: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+  websites: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>,
+  licenses: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+  time: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
 }
 
 export function MeetingTypeIcon({ type, size = 14 }) {
@@ -502,15 +530,17 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     .sidebar2-role-badge{display:inline-flex;align-items:center;gap:4px;margin-top:9px;padding:2px 6px;border-radius:var(--radius-full);background:var(--accent-subtle);color:var(--accent);font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
     .sidebar2-section{margin:6px 0;padding-top:10px}
     .sidebar2-section:first-of-type{padding-top:0}
-    .sidebar2-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:var(--radius-md);font-size:13px;font-weight:500;color:var(--text-secondary);cursor:pointer;margin-bottom:1px;border:none;background:none;width:100%;text-align:left;transition:all 120ms ease}
+    .sidebar2-item{position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:var(--radius-md);font-size:13px;font-weight:500;color:var(--text-secondary);cursor:pointer;margin-bottom:1px;border:none;background:none;width:100%;text-align:left;transition:color 120ms ease}
     .sidebar2-item:hover{background:var(--bg-subtle);color:var(--text-primary)}
-    .sidebar2-item.active{background:var(--accent-subtle);color:var(--accent);font-weight:600}
+    .sidebar2-item.active{color:var(--accent);font-weight:600}
+    .sidebar2-item>*{position:relative;z-index:1}
+    .sidebar2-item>.sidebar2-item-bg{position:absolute;inset:0;z-index:0;background:var(--accent-subtle);border-radius:var(--radius-md)}
     .sidebar2-item .chev{color:var(--text-muted-tok);font-size:11px}
     .sidebar2-section-label{font-size:10px;font-weight:600;color:var(--text-muted-tok);letter-spacing:.06em;text-transform:uppercase;padding:12px 10px 4px}
 
     /* ── Paginakop + toolbar (gedeeld patroon voor elke view) ───────────── */
-    .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:22px 28px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;transition:background .2s,border .2s}
-    .topbar h2{font-size:26px;font-weight:800;letter-spacing:-.02em;font-family:var(--heading-font)}
+    .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:22px 28px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;transition:background .2s,border .2s;margin-bottom:0}
+    .topbar h2{font-size:20px;font-weight:700;line-height:28px;letter-spacing:-.01em;font-family:var(--heading-font)}
     .topbar p.page-sub{font-size:13px;color:var(--text-muted);margin-top:6px}
     .topbar-left{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
     .topbar-left .tabs{margin-top:2px}
@@ -536,12 +566,15 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     .bc .crumb{cursor:pointer;transition:color .1s}.bc .crumb:hover{color:var(--text)}
     .bc .sep{color:var(--text-faint);font-size:11px}
     .bc .bactive{color:var(--text);font-weight:600;font-family:var(--heading-font)}
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border-radius:var(--radius-md);font-size:13px;font-weight:500;cursor:pointer;transition:all 120ms ease;border:1px solid transparent;line-height:1;white-space:nowrap}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 14px;border-radius:var(--radius-md);font-size:13px;font-weight:500;cursor:pointer;transition:background-color 120ms ease,color 120ms ease,border-color 120ms ease,box-shadow 150ms ease,transform 120ms ease;border:1px solid transparent;line-height:1;white-space:nowrap}
     .btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent-hover);box-shadow:var(--shadow-sm)}.btn-primary:disabled{opacity:.5;cursor:not-allowed}
-    .btn-ghost{background:var(--bg-base);border-color:var(--border-default);color:var(--text-primary)}.btn-ghost:hover{background:var(--bg-subtle)}
-    .btn-danger{background:var(--danger);color:#fff;border-color:transparent}.btn-danger:hover{background:#B91C1C}
-    .btn-sm{height:24px;padding:0 10px;font-size:12px}.btn-xs{height:22px;padding:0 8px;font-size:11px}
-    .content{padding:26px}
+    .btn-ghost{background:var(--bg-base);border-color:var(--border-default);color:var(--text-primary);padding:0 12px}.btn-ghost:hover{background:var(--bg-subtle)}
+    .btn-danger{background:var(--danger);color:#fff;border-color:transparent}.btn-danger:hover{opacity:.9}
+    .btn-sm{height:28px;padding:0 10px;font-size:12px}.btn-xs{height:22px;padding:0 8px;font-size:11px}
+    .btn-icon{width:32px;height:32px;padding:0;flex-shrink:0}
+    .btn:not(.btn-danger):not(:disabled):hover{transform:scale(1.01)}
+    .btn:not(:disabled):active{transform:scale(0.97)}
+    .content{padding:32px}
     .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
     .stat-card{background:var(--bg-base);border:1px solid var(--border-default);border-radius:var(--radius-lg);padding:20px 24px;transition:border-color .15s;box-shadow:none}
     .stat-card:hover{border-color:var(--border-strong)}
@@ -550,22 +583,22 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     .stat-value{font-size:24px;font-weight:700;letter-spacing:0;font-family:var(--heading-font);color:var(--text-primary)}
     .stat-sub{font-size:12px;color:var(--text-secondary);margin-top:2px}
     .sc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);margin-bottom:16px;overflow:hidden;box-shadow:var(--shadow);transition:background .2s,border .2s}
-    .sc-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
-    .sc-title{font-size:13px;font-weight:600;font-family:var(--heading-font);display:flex;align-items:center;gap:8px}
-    .sc-body{padding:16px 18px}
-    .cl-header{display:grid;grid-template-columns:2fr 1.2fr 0.8fr 1fr 1fr 100px;padding:9px 20px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em}
+    .sc-head{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border)}
+    .sc-title{font-size:14px;font-weight:600;line-height:20px;font-family:var(--heading-font);display:flex;align-items:center;gap:8px}
+    .sc-body{padding:20px 24px}
+    .cl-header{display:grid;grid-template-columns:2fr 1.2fr 0.8fr 1fr 1fr 100px;padding:10px 16px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
     .cl-header .sortable{cursor:pointer;user-select:none;display:flex;align-items:center;gap:3px}
     .cl-header .sortable:hover{color:var(--accent-text)}
-    .cl-row{display:grid;grid-template-columns:2fr 1.2fr 0.8fr 1fr 1fr 100px;padding:13px 20px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background .1s}
+    .cl-row{display:grid;grid-template-columns:2fr 1.2fr 0.8fr 1fr 1fr 100px;padding:12px 16px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background 100ms ease}
     .cl-row:last-child{border-bottom:none}.cl-row:hover{background:var(--bg-subtle)}
-    .pl-header{display:grid;grid-template-columns:2fr 1.4fr 1fr 0.8fr 120px;padding:9px 20px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em}
-    .pl-row{display:grid;grid-template-columns:2fr 1.4fr 1fr 0.8fr 120px;padding:13px 20px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background .1s}
+    .pl-header{display:grid;grid-template-columns:2fr 1.4fr 1fr 0.8fr 120px;padding:10px 16px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+    .pl-row{display:grid;grid-template-columns:2fr 1.4fr 1fr 0.8fr 120px;padding:12px 16px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background 100ms ease}
     .pl-row:last-child{border-bottom:none}.pl-row:hover{background:var(--bg-subtle)}
-    .fin-header{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 110px;padding:8px 18px;background:var(--bg);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
-    .fin-row{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 110px;gap:10px;align-items:center;padding:11px 18px;border-bottom:1px solid var(--border);font-size:13px;transition:background .1s}
+    .fin-header{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 110px;padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+    .fin-row{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 110px;gap:10px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px;transition:background 100ms ease}
     .fin-row:last-child{border-bottom:none}.fin-row:hover{background:var(--bg-subtle)}
-    .host-header{display:grid;grid-template-columns:2fr 1.2fr 1fr 1fr 1fr 120px;padding:8px 18px;background:var(--bg);border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
-    .host-row{display:grid;grid-template-columns:2fr 1.2fr 1fr 1fr 1fr 120px;padding:12px 18px;border-bottom:1px solid var(--border);align-items:center;font-size:13px;transition:background .1s}
+    .host-header{display:grid;grid-template-columns:2fr 1.2fr 1fr 1fr 1fr 120px;padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+    .host-row{display:grid;grid-template-columns:2fr 1.2fr 1fr 1fr 1fr 120px;padding:12px 16px;border-bottom:1px solid var(--border);align-items:center;font-size:13px;transition:background 100ms ease}
     .host-row:last-child{border-bottom:none}.host-row:hover{background:var(--bg-subtle)}
     .cl-name-cell{display:flex;align-items:center;gap:11px}
     .avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;font-family:var(--heading-font)}
@@ -609,6 +642,10 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     .form-group{margin-bottom:14px}.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border-default)}
     .empty{text-align:center;padding:32px 16px;color:var(--text-faint);font-size:13px}
+    .empty-state{display:flex;flex-direction:column;align-items:center;gap:12px;padding:64px 24px;text-align:center}
+    .empty-state-icon{width:40px;height:40px;border-radius:12px;background:var(--accent-subtle);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .empty-state-title{font-size:15px;font-weight:600;color:var(--text-primary)}
+    .empty-state-sub{font-size:13px;color:var(--text-muted-tok);max-width:320px;line-height:20px}
     .quick-add{display:flex;gap:8px;padding:0 18px 14px}
     .quick-add input[type=text]{flex:1}.quick-add input[type=date]{width:130px}
     .color-opts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
@@ -757,7 +794,10 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   if (loading) return <SkeletonScreen />
 
   const navItem = (key, label, activeWhen) => (
-    <button className={`sidebar2-item${activeWhen?' active':''}`} onClick={() => { showView(key); setSidebarOpen(false) }}>{label}</button>
+    <button className={`sidebar2-item${activeWhen?' active':''}`} onClick={() => { showView(key); setSidebarOpen(false) }}>
+      {activeWhen && <motion.div className="sidebar2-item-bg" layoutId="nav-active-bg" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
+      <span>{label}</span>
+    </button>
   )
 
   return (
@@ -888,6 +928,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
           {navItem('projects', 'Projecten', ['projects','project-detail'].includes(view))}
           {navItem('tasks', 'Taken', view==='tasks')}
           <button className={`sidebar2-item${view==='time'?' active':''}`} onClick={() => { showView('time'); setSidebarOpen(false) }} style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            {view==='time' && <motion.div className="sidebar2-item-bg" layoutId="nav-active-bg" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
             <span>Tijd</span>
             {runningTimer && <SidebarTimerTicker startedAt={runningTimer.started_at} />}
           </button>
@@ -929,20 +970,24 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
             </div>
           </div>
         )}
-        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} orgMembers={orgMembers} companySettings={companySettings} allReviews={allReviews} />}
-        {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
-        {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} currentUserName={profile?.full_name || session.user.email} allReviews={allReviews} />}
-        {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
-        {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} currentUserId={session.user.id} currentUserName={profile?.full_name || session.user.email} />}
-        {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
-        {view==='time' && <TimeTrackingView projects={projects} clients={clients} allTimeEntries={allTimeEntries} activeOrgId={activeOrgId} currentUserId={session.user.id} currentUserName={profile?.full_name || session.user.email} companySettings={companySettings} onRefresh={loadAll} runningTimer={runningTimer} onRunningTimerChange={setRunningTimer} />}
-        {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} clients={clients} onRefresh={loadAll} activeOrgId={activeOrgId} companySettings={companySettings} allHosting={allHosting} />}
-        {view==='quote-editor' && <QuoteEditorView quoteId={curQuoteId === 'new' ? null : curQuoteId} clients={clients} activeOrgId={activeOrgId} companySettings={companySettings} showView={showView} />}
-        {view==='hosting' && <WebsitesView allHosting={allHosting} clients={clients} projects={projects} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
-        {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} myRole={myRole} onRestartOnboarding={restartOnboardingWizard} />}
-        {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} organizationId={activeOrgId} />}
-        {view==='team' && myRole === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} myProfile={profile} activeOrgId={activeOrgId} />}
-        {view==='company-settings' && myRole === 'owner' && <CompanySettingsView activeOrgId={activeOrgId} orgName={orgName} settings={companySettings} onRefresh={() => { loadCompanySettings(); loadOrganizations() }} onAddWorkspace={() => setShowNewWorkspace(true)} />}
+        <AnimatePresence mode="wait">
+          <motion.div key={view} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
+            {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} orgMembers={orgMembers} companySettings={companySettings} allReviews={allReviews} />}
+            {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
+            {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} currentUserName={profile?.full_name || session.user.email} allReviews={allReviews} />}
+            {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
+            {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} currentUserId={session.user.id} currentUserName={profile?.full_name || session.user.email} />}
+            {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
+            {view==='time' && <TimeTrackingView projects={projects} clients={clients} allTimeEntries={allTimeEntries} activeOrgId={activeOrgId} currentUserId={session.user.id} currentUserName={profile?.full_name || session.user.email} companySettings={companySettings} onRefresh={loadAll} runningTimer={runningTimer} onRunningTimerChange={setRunningTimer} />}
+            {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} clients={clients} onRefresh={loadAll} activeOrgId={activeOrgId} companySettings={companySettings} allHosting={allHosting} />}
+            {view==='quote-editor' && <QuoteEditorView quoteId={curQuoteId === 'new' ? null : curQuoteId} clients={clients} activeOrgId={activeOrgId} companySettings={companySettings} showView={showView} />}
+            {view==='hosting' && <WebsitesView allHosting={allHosting} clients={clients} projects={projects} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
+            {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} myRole={myRole} onRestartOnboarding={restartOnboardingWizard} />}
+            {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} organizationId={activeOrgId} />}
+            {view==='team' && myRole === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} myProfile={profile} activeOrgId={activeOrgId} />}
+            {view==='company-settings' && myRole === 'owner' && <CompanySettingsView activeOrgId={activeOrgId} orgName={orgName} settings={companySettings} onRefresh={() => { loadCompanySettings(); loadOrganizations() }} onAddWorkspace={() => setShowNewWorkspace(true)} />}
+          </motion.div>
+        </AnimatePresence>
       </div>
       <NewWorkspaceModal
         open={showNewWorkspace}
@@ -1328,7 +1373,12 @@ function ClientsView({ clients, projects, allTasks, allInvoices = [], showView, 
       </div>
       {viewMode === 'grid' ? (
         <div className="item-card-grid">
-          {!filtered.length ? <div className="empty">Geen klanten</div> : filtered.map(c => (
+          {!filtered.length ? (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <EmptyState icon={EmptyIcons.clients} title="Nog geen klanten" sub="Voeg je eerste klant toe om je CRM te starten."
+                cta={<ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Nieuwe klant</button>} />} />
+            </div>
+          ) : filtered.map(c => (
             <div key={c.id} className="item-card" onClick={()=>showView('client-detail',c.id)}>
               <div className="item-card-thumb" style={{background:'var(--accent-soft)'}}>
                 <div className={`avatar ${avC(c.id)}`} style={{width:48,height:48,fontSize:16}}>{ini(c)}</div>
@@ -1352,11 +1402,15 @@ function ClientsView({ clients, projects, allTasks, allInvoices = [], showView, 
               <div>Laatste activiteit</div>
               <div></div>
             </div>
-            {!filtered.length ? <div className="empty">Geen klanten</div> : filtered.map((c,idx) => {
+            {!filtered.length ? (
+              <EmptyState icon={EmptyIcons.clients} title="Nog geen klanten" sub="Voeg je eerste klant toe om je CRM te starten."
+                cta={<ClientModal onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Nieuwe klant</button>} />} />
+            ) : filtered.map((c,idx) => {
               const pCount=projects.filter(p=>p.client_id===c.id).length
               const openT=allTasks.filter(t=>!t.done&&projects.find(p=>p.id===t.project_id)?.client_id===c.id).length
               const { revenue, lastActivity } = clientStats(c)
-              return <div key={c.id} className="cl-row" onClick={()=>showView('client-detail',c.id)}>
+              return <motion.div key={c.id} className="cl-row" onClick={()=>showView('client-detail',c.id)}
+                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(idx,8)*0.04, duration: 0.2, ease: 'easeOut' }}>
                 <div className="cl-name-cell"><div className={`avatar ${avC(c.id)}`}>{ini(c)}</div><div><div style={{fontWeight:500,fontSize:14}}>{c.fname} {c.lname}</div><div style={{fontSize:11,color:'var(--text-muted)'}}>{c.company||'—'}</div></div></div>
                 <div style={{fontSize:13,color:'var(--text-muted)'}}>{c.email||'—'}</div>
                 <div><Badge s={c.status||'actief'} /></div>
@@ -1366,7 +1420,7 @@ function ClientsView({ clients, projects, allTasks, allInvoices = [], showView, 
                   {pCount>0&&<span className="badge bg-blue">{pCount} proj</span>}
                   {openT>0&&<span className="badge bg-amber">{openT} taken</span>}
                 </div>
-              </div>
+              </motion.div>
             })}
           </div>
         </div>
@@ -1654,20 +1708,18 @@ function ProjectsView({ projects, clients, clientName, allTasks = [], showView, 
           ))}
         </div>
         {!filtered.length ? (
-          <div className="empty" style={{padding:'48px 20px'}}>
-            <div style={{fontSize:14,fontWeight:600,color:'var(--text)',marginBottom:6}}>{projects.length ? 'Geen projecten gevonden' : 'Nog geen projecten'}</div>
-            <div style={{fontSize:13,marginBottom:16,maxWidth:380,marginLeft:'auto',marginRight:'auto'}}>
-              {projects.length ? 'Pas je zoekopdracht of filter aan.' : 'Een project is de werkruimte voor één klus — bijv. een website voor een klant. Hier houd je taken, documenten en collega\'s bij, en kun je de klant uitnodigen om mee te kijken.'}
-            </div>
-            {!projects.length && <ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Eerste project aanmaken</button>} />}
-          </div>
+          <EmptyState icon={EmptyIcons.projects}
+            title={projects.length ? 'Geen projecten gevonden' : 'Nog geen projecten'}
+            sub={projects.length ? 'Pas je zoekopdracht of filter aan.' : 'Maak een project aan voor een klant. Hier houd je taken, documenten en collega\'s bij, en kun je de klant uitnodigen om mee te kijken.'}
+            cta={!projects.length && <ProjectModal clients={clients} onSave={onRefresh} activeOrgId={activeOrgId} trigger={<button className="btn btn-primary btn-sm">+ Nieuw project</button>} />} />
         ) : viewMode === 'grid' ? (
           <div className="item-card-grid">
-            {filtered.map(p => {
+            {filtered.map((p, idx) => {
               const dd=p.deadline?daysN(p.deadline):null; const dC=dd!=null?(dd<0?'var(--red-text)':dd<=7?'var(--amber-text)':'var(--text-muted)'):'var(--text-muted)'
               const pct = progressOf(p)
               return (
-                <div key={p.id} className="item-card" onClick={()=>showView('project-detail',p.id)}>
+                <motion.div key={p.id} className="item-card" onClick={()=>showView('project-detail',p.id)}
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(idx,8)*0.04, duration: 0.2, ease: 'easeOut' }}>
                   <ProjectThumb project={p} />
                   <div className="item-card-body">
                     <div style={{fontWeight:600,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
@@ -1685,7 +1737,7 @@ function ProjectsView({ projects, clients, clientName, allTasks = [], showView, 
                       <a href={p.url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{textDecoration:'none'}}>↗ Open</a>
                     </div>}
                   </div>
-                </div>
+                </motion.div>
               )
             })}
           </div>
@@ -2048,7 +2100,10 @@ function TasksView({ allTasks, showView }) {
       </div>
       <div className="content">
         <div className="sc"><div className="sc-body">
-          {!filtered.length ? <div className="empty">Geen taken</div> : filtered.map(t => {
+          {!filtered.length ? (
+            <EmptyState icon={EmptyIcons.tasks} title="Geen open taken" sub="Alle taken zijn afgerond, of er zijn er nog geen. Taken voeg je toe vanuit een project."
+              cta={<button className="btn btn-ghost btn-sm" onClick={()=>showView('projects')}>Naar projecten</button>} />
+          ) : filtered.map(t => {
             const dd = t.due_date ? daysN(t.due_date) : null
             const overdue = dd !== null && dd < 0 && !t.done
             return (
@@ -2219,7 +2274,10 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
         <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:16}}>
           <div className="sc" style={{padding:0}}>
             <div className="fin-header"><div>Nr. / Klant</div><div>Datum</div><div>Vervaldatum</div><div style={{textAlign:'right'}}>Bedrag</div><div style={{textAlign:'right'}}>Status</div></div>
-            {!sorted.length ? <div className="empty">Geen facturen in deze periode</div> : sorted.map(i => (
+            {!sorted.length ? (
+              <EmptyState icon={EmptyIcons.finance} title="Geen facturen" sub="Maak je eerste factuur aan."
+                cta={<InvoiceModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Factuur aanmaken</button>} />} />
+            ) : sorted.map(i => (
               <div key={i.id} className="fin-row">
                 <div><div style={{fontWeight:500}}>{i.invoice_number ? i.invoice_number+' · ' : ''}{i.description}</div><div style={{fontSize:11,color:'var(--text-muted)'}}>{i.clients?.fname} {i.clients?.lname}{i.clients?.company?' · '+i.clients.company:''}</div></div>
                 <div style={{color:'var(--text-muted)'}}>{fdate(i.date)}</div>
@@ -3236,7 +3294,10 @@ function SitesTab({ allHosting, clients, showView, onRefresh, q }) {
           <div className="host-header">
             <div>Site</div><div>Klant</div><div>Hoster</div><div>Domein verloopt</div><div>SSL verloopt</div><div></div>
           </div>
-          {!filtered.length ? <div className="empty">Geen sites toegevoegd</div> : filtered.map(h => (
+          {!filtered.length ? (
+            <EmptyState icon={EmptyIcons.websites} title="Geen sites toegevoegd" sub="Voeg een klantwebsite toe om te monitoren."
+              cta={<HostingModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Site toevoegen</button>} />} />
+          ) : filtered.map(h => (
             <div key={h.id} className="host-row">
               <div>
                 <div style={{fontWeight:500}}>{h.site_name}</div>

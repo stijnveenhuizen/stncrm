@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as db from '../lib/db'
-import { money, fdate, today, showToast } from './Dashboard.jsx'
+import { money, fdate, today, showToast, EmptyState, EmptyIcons } from './Dashboard.jsx'
 
 const fmtHM = m => `${Math.floor((m || 0) / 60)}u ${(m || 0) % 60}m`
 const fmtHM2 = ms => {
@@ -122,7 +122,8 @@ export default function TimeTrackingView({ projects = [], clients = [], allTimeE
       </div>
 
       {!byDay.length ? (
-        <div className="empty">Nog geen tijd geregistreerd in deze periode.</div>
+        <EmptyState icon={EmptyIcons.time} title="Nog geen uren geregistreerd" sub="Start een timer of voeg uren handmatig toe."
+          cta={!runningTimer && <button className="btn btn-primary btn-sm" onClick={() => setShowStart(true)}>▶ Start timer</button>} />
       ) : byDay.map(([date, entries]) => {
         const dayTotal = entries.reduce((s, e) => s + (e.minutes || 0), 0)
         return (
@@ -151,8 +152,8 @@ export default function TimeTrackingView({ projects = [], clients = [], allTimeE
                     </div>
                     <span style={{ fontFamily: 'var(--mono-font, monospace)', fontSize: 13, flexShrink: 0 }}>{fmtHM(e.minutes)}</span>
                     <span style={{ fontSize: 12, color: 'var(--text-muted-tok)', width: 64, textAlign: 'right', flexShrink: 0 }}>{e.hourly_rate ? money((e.minutes || 0) / 60 * e.hourly_rate) : '—'}</span>
-                    <button className="btn btn-ghost btn-xs" onClick={() => setEditEntry(e)} title="Bewerken">✏</button>
-                    <button className="btn btn-ghost btn-xs" onClick={() => deleteEntry(e.id)} title="Verwijderen">🗑</button>
+                    <button className="btn btn-ghost btn-xs" onClick={() => setEditEntry(e)} aria-label="Bewerken" title="Bewerken">✏</button>
+                    <button className="btn btn-ghost btn-xs" onClick={() => deleteEntry(e.id)} aria-label="Verwijderen" title="Verwijderen">🗑</button>
                   </motion.div>
                 )
               })}
