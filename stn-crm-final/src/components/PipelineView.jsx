@@ -82,6 +82,7 @@ export default function PipelineView({ showView, onRefresh, organizationId }) {
   async function performMove(prospect, stage, extra = {}) {
     try {
       await db.moveProspectToStage(prospect, stage, extra)
+      db.logEvent('action', stage.is_won ? 'prospect_won' : stage.is_lost ? 'prospect_lost' : 'prospect_stage_changed', {}, organizationId)
       await refreshAll()
     } catch (e) { showToast('Fout: ' + e.message, 'error') }
   }

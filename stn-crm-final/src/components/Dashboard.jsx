@@ -202,7 +202,7 @@ function SkeletonScreen() {
   )
 }
 
-export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }) {
+export default function Dashboard({ session, isPlatformAdmin, onOpenAdmin }) {
   const [view, setView] = useState('overview')
   const [profile, setProfile] = useState(null)
   const [myOrganizations, setMyOrganizations] = useState([])
@@ -481,6 +481,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     if (v === 'project-detail') setCurProjectId(id)
     if (v === 'quote-editor') setCurQuoteId(id || null)
     window.scrollTo(0, 0)
+    db.logEvent('page_view', v, {}, activeOrgId)
   }
 
   async function logout() { await supabase.auth.signOut() }
@@ -878,6 +879,11 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
               </div>
             )}
           </div>
+          {isPlatformAdmin && (
+            <span onClick={onOpenAdmin} title="Naar het admin-dashboard"
+              style={{background:'#DC2626',color:'#fff',fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:9999,cursor:'pointer',marginRight:4,userSelect:'none'}}
+            >Admin</span>
+          )}
           <div className="profile-trigger" onClick={() => { setProfileMenuOpen(o => !o); setOrgMenuOpen(false); setNotifMenuOpen(false) }}>
             <div style={{
               width:30,height:30,borderRadius:'50%',flexShrink:0,overflow:'hidden',
@@ -896,7 +902,6 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
                   <div style={{fontSize:11,color:'var(--text-faint)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{session.user.email}</div>
                 </div>
                 <div className="menu-item" onClick={() => { showView('profile'); setProfileMenuOpen(false) }}>Profiel</div>
-                {isPlatformAdmin && <div className="menu-item" onClick={() => { setProfileMenuOpen(false); onOpenAdminPanel() }}>Platform-admin</div>}
                 <div className="menu-item" style={{justifyContent:'space-between',cursor:'default'}}>
                   <span>Donker thema</span>
                   <button className={darkMode ? 'theme-toggle dark' : 'theme-toggle'} onClick={() => setDarkMode(!darkMode)} title={darkMode ? 'Licht thema' : 'Donker thema'}>
@@ -1465,7 +1470,7 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
 
   async function delClient() {
     if (!confirm('Klant verwijderen?')) return
-    await db.deleteClient(client.id); onRefresh(); showView('clients')
+    await db.deleteClient(client.id); db.logEvent('action', 'client_deleted', {}, activeOrgId); onRefresh(); showView('clients')
   }
 
   return (
@@ -1853,6 +1858,7 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
     setInviting(true)
     try {
       await db.inviteClientToProject(project, client)
+      db.logEvent('action', 'client_portal_invited', {}, project.organization_id)
       showToast('Uitnodiging verstuurd naar ' + client.email)
     } catch (e) { showToast('Fout bij uitnodigen: ' + e.message, 'error') }
     finally { setInviting(false) }
@@ -2987,8 +2993,8 @@ function ClientModal({ client, onSave, trigger, activeOrgId }) {
     if(!form.fname&&!form.lname) return showToast('Vul een naam in.','error')
     setSaving(true)
     try {
-      if(client) await db.updateClient(client.id, form)
-      else await db.createClient({ ...form, organization_id: activeOrgId })
+      if(client) { await db.updateClient(client.id, form); db.logEvent('action', 'client_updated', {}, activeOrgId) }
+      else { await db.createClient({ ...form, organization_id: activeOrgId }); db.logEvent('action', 'client_created', {}, activeOrgId) }
       setOpen(false); onSave(); showToast(client ? 'Klant bijgewerkt' : 'Klant aangemaakt')
     } catch(e) {
       showToast('Fout bij opslaan: ' + e.message, 'error')
@@ -3041,6 +3047,7 @@ function ProjectModal({ project, clients, defaultClientId, onSave, trigger, acti
         await db.updateProject(project.id, data)
       } else {
         const newProject = await db.createProject({ ...data, organization_id: activeOrgId })
+        db.logEvent('action', 'project_created', {}, activeOrgId)
         const template = templates.find(t => t.id === templateId)
         if (template?.project_template_tasks?.length) {
           for (const t of template.project_template_tasks) {
@@ -3138,6 +3145,8 @@ function InvoiceModal({ clientId, clients, onSave, trigger }) {
     setSaving(true)
     try {
       await db.createInvoice({ client_id: targetClient, description: form.description, amount: parseFloat(form.amount), date: form.date, due_date: form.due_date||null, status: form.status })
+      db.logEvent('action', 'invoice_created')
+      if (form.status === 'verzonden') db.logEvent('action', 'invoice_sent')
       setOpen(false); onSave()
       showToast('Factuur aangemaakt')
     } catch(e) {

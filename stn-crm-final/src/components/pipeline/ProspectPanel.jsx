@@ -499,6 +499,7 @@ function NewProspectForm({ organizationId, pipelineId, stageId, stages, onCreate
     setSaving(true)
     try {
       const p = await db.createProspect({ organization_id: organizationId, pipeline_id: pipelineId, stage_id: stage?.id, win_probability: stage?.win_probability, fname: form.fname, lname: form.lname || '—', company: form.company || null, email: form.email || null, phone: form.phone || null, source: form.source, deal_value: form.deal_value ? parseFloat(form.deal_value) : null })
+      db.logEvent('action', 'prospect_created', {}, organizationId)
       onCreated(p.id)
     } catch (e) { showToast('Fout: ' + e.message, 'error') }
     finally { setSaving(false) }

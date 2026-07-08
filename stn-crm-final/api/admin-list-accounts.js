@@ -26,12 +26,26 @@ module.exports = async (req, res) => {
       })
     }
 
-    const users = userList.users.map(u => ({
-      id: u.id,
-      email: u.email,
-      full_name: profileById[u.id]?.full_name || null,
-      memberships: membershipsByUser[u.id] || []
-    }))
+    // Clients hebben ook een auth.users-rij (portaalaccount) — voor het onderscheid
+    // EIGENAAR/TEAMLID/CLIENT in de gebruikerstabel.
+    const { data: clientAuthRows } = await service.from('clients').select('auth_user_id').not('auth_user_id', 'is', null)
+    const clientAuthIds = new Set((clientAuthRows || []).map(c => c.auth_user_id))
+
+    const users = userList.users.map(u => {
+      const memberships = membershipsByUser[u.id] || []
+      const role = memberships.some(m => m.role === 'owner') ? 'owner' : memberships.length ? 'member' : clientAuthIds.has(u.id) ? 'client' : 'member'
+      const lastActive = u.last_sign_in_at ? new Date(u.last_sign_in_at) : null
+      return {
+        id: u.id,
+        email: u.email,
+        full_name: profileById[u.id]?.full_name || null,
+        memberships,
+        role,
+        created_at: u.created_at,
+        last_sign_in_at: u.last_sign_in_at || null,
+        status: lastActive && (Date.now() - lastActive.getTime()) > 30 * 86400000 ? 'inactief' : 'actief',
+      }
+    })
 
     res.status(200).json({ users })
   } catch (e) {

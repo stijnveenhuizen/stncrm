@@ -260,8 +260,34 @@ async function authedFetch(path, options = {}) {
 export async function adminListAccounts() {
   return authedFetch('/api/admin-list-accounts')
 }
-export async function adminImpersonate(email) {
-  return authedFetch('/api/admin-impersonate', { method: 'POST', body: JSON.stringify({ email }) })
+export async function adminImpersonate(email, { reason, workspaceId } = {}) {
+  return authedFetch('/api/admin-impersonate', { method: 'POST', body: JSON.stringify({ email, reason, workspaceId }) })
+}
+export async function adminEndImpersonation(logId) {
+  return authedFetch('/api/admin-end-impersonation', { method: 'POST', body: JSON.stringify({ logId }) })
+}
+export async function adminGetOverview() { return authedFetch('/api/admin-overview') }
+export async function adminGetUserDetail(userId) { return authedFetch(`/api/admin-user-detail?userId=${encodeURIComponent(userId)}`) }
+export async function adminGetWorkspaces() { return authedFetch('/api/admin-workspaces') }
+export async function adminGetWorkspaceDetail(organizationId) { return authedFetch(`/api/admin-workspace-detail?organizationId=${encodeURIComponent(organizationId)}`) }
+export async function adminGetStats({ from, to } = {}) {
+  const params = new URLSearchParams(); if (from) params.set('from', from); if (to) params.set('to', to)
+  return authedFetch(`/api/admin-stats?${params.toString()}`)
+}
+export async function adminGetHealth() { return authedFetch('/api/admin-health') }
+export async function adminGetErrors() { return authedFetch('/api/admin-errors') }
+export async function adminResolveError(id) { return authedFetch('/api/admin-errors', { method: 'PATCH', body: JSON.stringify({ id }) }) }
+export async function adminGetImpersonationLog() { return authedFetch('/api/admin-impersonation-log') }
+
+// Fire-and-forget: loggen mag een echte gebruikersactie nooit blokkeren of laten falen.
+export function logEvent(eventType, eventName, metadata = {}, workspaceId = null) {
+  authedFetch('/api/admin-log-event', { method: 'POST', body: JSON.stringify({ eventType, eventName, metadata, workspaceId }) }).catch(() => {})
+}
+export function logClientError(message, stack, route) {
+  fetch('/api/admin-log-error', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, stack, route }),
+  }).catch(() => {})
 }
 
 // ── Projects ───────────────────────────────────────────────────────────────────

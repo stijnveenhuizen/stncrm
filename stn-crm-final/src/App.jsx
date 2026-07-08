@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import { supabase } from './lib/supabase'
 import * as db from './lib/db'
 import Login from './components/Login.jsx'
 import Signup from './components/Signup.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import ClientPortal from './components/ClientPortal.jsx'
-import AdminPanel from './components/AdminPanel.jsx'
-
-const ADMIN_SESSION_KEY = 'stn_admin_original_session'
+import AdminApp from './components/admin/AdminApp.jsx'
+import { ADMIN_SESSION_KEY } from './lib/constants.js'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -16,21 +16,23 @@ export default function App() {
   const [roleError, setRoleError] = useState(false)
   const [showSignup, setShowSignup] = useState(false)
   const [fatalError, setFatalError] = useState('')
-  const [showAdminPanel, setShowAdminPanel] = useState(false)
   const [restoringSession, setRestoringSession] = useState(false)
 
   const isPlatformAdmin = !!session?.user?.email && session.user.email === import.meta.env.VITE_PLATFORM_ADMIN_EMAIL
   const impersonationActive = !!sessionStorage.getItem(ADMIN_SESSION_KEY)
+  const onAdminRoute = window.location.pathname.startsWith('/admin')
 
   async function stopImpersonating() {
     const raw = sessionStorage.getItem(ADMIN_SESSION_KEY)
     if (!raw) return
     setRestoringSession(true)
     try {
-      const { access_token, refresh_token } = JSON.parse(raw)
+      const { access_token, refresh_token, logId } = JSON.parse(raw)
       await supabase.auth.setSession({ access_token, refresh_token })
-    } finally {
       sessionStorage.removeItem(ADMIN_SESSION_KEY)
+      if (logId) await db.adminEndImpersonation(logId).catch(() => {})
+      window.location.href = '/admin/gebruikers'
+    } finally {
       setRestoringSession(false)
     }
   }
@@ -68,13 +70,27 @@ export default function App() {
       setSession(session)
       resolveRole(session).catch(e => setFatalError(e.message || 'Onbekende fout')).finally(() => setLoading(false))
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
       setRoleError(false)
       setFatalError('')
       resolveRole(session).catch(e => setFatalError(e.message || 'Onbekende fout'))
+      // Impersonatie zet zelf ook een SIGNED_IN event af (verifyOtp) — die niet als
+      // gewone inlog loggen, anders lijkt het alsof de admin zelf continu inlogt.
+      if (event === 'SIGNED_IN' && session && !sessionStorage.getItem(ADMIN_SESSION_KEY)) db.logEvent('login', 'login')
+      if (event === 'SIGNED_OUT') db.logEvent('logout', 'logout')
     })
     return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    function handleError(event) {
+      const err = event.error || event.reason
+      db.logClientError(err?.message || String(event.message || event.reason || 'Onbekende fout'), err?.stack, window.location.pathname)
+    }
+    window.addEventListener('error', handleError)
+    window.addEventListener('unhandledrejection', handleError)
+    return () => { window.removeEventListener('error', handleError); window.removeEventListener('unhandledrejection', handleError) }
   }, [])
 
   if (loading) return (
@@ -86,6 +102,14 @@ export default function App() {
   if (!session) return showSignup
     ? <Signup onBackToLogin={() => setShowSignup(false)} />
     : <Login onSignupClick={() => setShowSignup(true)} />
+
+  // /admin is een losstaand deel van de app — staat los van de normale
+  // staff/klant-rol hierboven. AdminApp doet zelf nogmaals de echte (server-side)
+  // autorisatiecheck bij elke data-aanroep; dit is alleen de client-side UX-redirect.
+  if (onAdminRoute) {
+    if (!isPlatformAdmin) { window.location.href = '/'; return null }
+    return <AdminApp session={session} />
+  }
 
   if (fatalError) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:10,color:'var(--text-muted)',fontSize:13,textAlign:'center',padding:24}}>
@@ -103,18 +127,17 @@ export default function App() {
     </div>
   )
 
-  if (showAdminPanel) return <AdminPanel onClose={() => setShowAdminPanel(false)} onImpersonated={() => setShowAdminPanel(false)} />
-
   const banner = impersonationActive && (
-    <div style={{background:'var(--amber)',color:'#1a1a18',fontSize:13,fontWeight:600,textAlign:'center',padding:'8px 16px',display:'flex',alignItems:'center',justifyContent:'center',gap:12,position:'sticky',top:0,zIndex:200}}>
-      <span>Je kijkt als {session.user.email}</span>
+    <motion.div initial={{ y: -52, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+      style={{background:'var(--amber)',color:'#1a1a18',fontSize:13,fontWeight:600,textAlign:'center',padding:'8px 16px',display:'flex',alignItems:'center',justifyContent:'center',gap:12,position:'sticky',top:0,zIndex:200}}>
+      <span>⚠️ Je bekijkt de app als {session.user.email}</span>
       <button onClick={stopImpersonating} disabled={restoringSession} style={{padding:'4px 10px',borderRadius:6,border:'1px solid rgba(0,0,0,.25)',background:'rgba(255,255,255,.4)',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-        {restoringSession ? 'Terugschakelen…' : 'Stop impersoneren'}
+        {restoringSession ? 'Terugschakelen…' : 'Terug naar admin →'}
       </button>
-    </div>
+    </motion.div>
   )
 
-  if (role === 'staff') return <>{banner}<Dashboard session={session} isPlatformAdmin={isPlatformAdmin} onOpenAdminPanel={() => setShowAdminPanel(true)} /></>
+  if (role === 'staff') return <>{banner}<Dashboard session={session} isPlatformAdmin={isPlatformAdmin} onOpenAdmin={() => { window.location.href = '/admin' }} /></>
   if (role && role.client) return <>{banner}<ClientPortal session={session} client={role.client} /></>
   return null
 }
