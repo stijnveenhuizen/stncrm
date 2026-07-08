@@ -9,9 +9,20 @@ import OnboardingWizard, { ONBOARDING_STEPS } from './OnboardingWizard.jsx'
 import MonitorTab from './websites/MonitorTab.jsx'
 import LicensesTab from './websites/LicensesTab.jsx'
 import MaintenanceTab from './finance/MaintenanceTab.jsx'
+import TimeTrackingView, { SidebarTimerTicker } from './TimeTrackingView.jsx'
+import QuoteEditorView from './QuoteEditorView.jsx'
 
 export const money = n => '€\u202f' + Number(n).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 export const fdate = d => { if (!d) return '—'; return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) }
+// Simpele hex-kleur darken/lighten zonder externe library — percent > 0 = lichter, < 0 = donkerder.
+export function shadeColor(hex, percent) {
+  if (!hex) return hex
+  const num = parseInt(hex.replace('#', ''), 16)
+  const amt = Math.round(2.55 * percent)
+  const clamp = v => Math.max(0, Math.min(255, v))
+  const r = clamp((num >> 16) + amt), g = clamp(((num >> 8) & 0x00ff) + amt), b = clamp((num & 0x0000ff) + amt)
+  return '#' + (0x1000000 + r * 0x10000 + g * 0x100 + b).toString(16).slice(1)
+}
 export const today = () => new Date().toISOString().slice(0, 10)
 export const daysN = d => { if (!d) return null; return Math.ceil((new Date(d) - new Date(today())) / 86400000) }
 const AVC = ['av-b','av-g','av-p','av-a','av-r','av-t']
@@ -172,6 +183,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   const [darkMode, setDarkMode] = useState(() => { try { return localStorage.getItem('stn_theme') === 'dark' } catch(e) { return false } })
   const [curClientId, setCurClientId] = useState(null)
   const [curProjectId, setCurProjectId] = useState(null)
+  const [curQuoteId, setCurQuoteId] = useState(null)
   const [clients, setClients] = useState([])
   const [projects, setProjects] = useState([])
   const [allTasks, setAllTasks] = useState([])
@@ -183,6 +195,9 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   const [allDocs, setAllDocs] = useState([])
   const [latestChecks, setLatestChecks] = useState({})
   const [allLicenses, setAllLicenses] = useState([])
+  const [allTimeEntries, setAllTimeEntries] = useState([])
+  const [runningTimer, setRunningTimer] = useState(null)
+  const [allReviews, setAllReviews] = useState([])
   const [orgMembers, setOrgMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [orgMenuOpen, setOrgMenuOpen] = useState(false)
@@ -223,19 +238,21 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
   const loadAll = useCallback(async () => {
     if (!activeOrgId) return
     try {
-      const [c, p, i, r, t, h, m, pl, d, checks, lic] = await Promise.all([
+      const [c, p, i, r, t, h, m, pl, d, checks, lic, te, rv] = await Promise.all([
         db.getClients(activeOrgId), db.getProjects(activeOrgId), db.getAllInvoices(activeOrgId), db.getAllRecurring(activeOrgId),
         db.getAllTasks(activeOrgId), db.getAllHosting(activeOrgId), db.getAllMeetings(activeOrgId), db.getPipeline(activeOrgId),
-        db.getAllProjectDocuments(activeOrgId), db.getLatestChecksWithPrevious(activeOrgId).catch(() => ({})), db.getLicenses(activeOrgId).catch(() => [])
+        db.getAllProjectDocuments(activeOrgId), db.getLatestChecksWithPrevious(activeOrgId).catch(() => ({})), db.getLicenses(activeOrgId).catch(() => []),
+        db.getAllTimeEntries(activeOrgId).catch(() => []), db.getAllReviews(activeOrgId).catch(() => [])
       ])
       setClients(c); setProjects(p); setAllInvoices(i); setAllRecurring(r); setAllHosting(h); setAllMeetings(m); setPipeline(pl); setAllDocs(d)
       setAllTasks(t.map(task => ({ ...task, project: task.projects })))
-      setLatestChecks(checks); setAllLicenses(lic)
+      setLatestChecks(checks); setAllLicenses(lic); setAllTimeEntries(te); setAllReviews(rv)
     } catch(e) { console.error(e) }
     setLoading(false)
   }, [activeOrgId])
 
   useEffect(() => { loadAll() }, [loadAll])
+  useEffect(() => { db.getMyRunningTimer().then(setRunningTimer).catch(() => {}) }, [activeOrgId])
   useEffect(() => { db.getProfile(session.user.id).then(p => { if(p) { setProfile(p); applyProfileTheme(p) } }) }, [session.user.id])
 
   const loadOrganizations = useCallback(() => {
@@ -271,6 +288,25 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     db.getCompanySettings(activeOrgId).then(setCompanySettings).catch(() => setCompanySettings(null))
   }, [activeOrgId])
   useEffect(() => { loadCompanySettings() }, [loadCompanySettings])
+
+  // White-label: als ingeschakeld overschrijft de werkruimte-branding de persoonlijke
+  // accentkleur/titel/favicon (relevant voor bureaus die dit CRM doorverkopen).
+  useEffect(() => {
+    if (!companySettings?.white_label_enabled) return
+    if (companySettings.primary_color) {
+      document.documentElement.style.setProperty('--accent', companySettings.primary_color)
+      document.documentElement.style.setProperty('--accent-hover', shadeColor(companySettings.primary_color, -10))
+      document.documentElement.style.setProperty('--accent-soft', companySettings.primary_color + '18')
+      document.documentElement.style.setProperty('--accent-subtle', shadeColor(companySettings.primary_color, 40))
+      document.documentElement.style.setProperty('--accent-text', companySettings.primary_color)
+    }
+    if (companySettings.brand_name) document.title = companySettings.brand_name
+    if (companySettings.brand_favicon_url) {
+      let link = document.querySelector("link[rel~='icon']")
+      if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link) }
+      link.href = companySettings.brand_favicon_url
+    }
+  }, [companySettings])
 
   useEffect(() => { db.getReadNotificationKeys().then(setReadNotifKeys).catch(() => {}) }, [])
 
@@ -318,6 +354,15 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
       if (entry.previous && c.pagespeed_mobile != null && entry.previous.pagespeed_mobile != null) {
         const drop = entry.previous.pagespeed_mobile - c.pagespeed_mobile
         if (drop > 20) items.push({ key: `speed-${h.id}-${c.checked_at}`, text: `PageSpeed (mobile) van ${h.site_name || h.domain} daalde met ${drop} punten`, severity: 'amber', date: c.checked_at, view: 'hosting' })
+      }
+    })
+    projects.forEach(p => {
+      if (p.status === 'afgerond' && p.completed_at && !p.review_request_sent_at) {
+        const d = daysN(p.completed_at.slice(0, 10))
+        if (d !== null && d <= -1) {
+          const client = clients.find(c => c.id === p.client_id)
+          items.push({ key: `review-request-${p.id}`, text: `Stuur een feedbackverzoek aan ${client ? `${client.fname} ${client.lname}` : 'de klant'} voor project "${p.name}"`, severity: 'amber', date: p.completed_at, view: 'project-detail', viewId: p.id })
+        }
       }
     })
     allLicenses.forEach(l => {
@@ -406,6 +451,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
     setView(v)
     if (v === 'client-detail') setCurClientId(id)
     if (v === 'project-detail') setCurProjectId(id)
+    if (v === 'quote-editor') setCurQuoteId(id || null)
     window.scrollTo(0, 0)
   }
 
@@ -733,8 +779,8 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
         <div className="topbar-dark-logo">
-          <div className="topbar-dark-logo-icon"><span>S</span></div>
-          <b>STN CRM</b>
+          <div className="topbar-dark-logo-icon"><span>{(companySettings?.white_label_enabled && companySettings.brand_name ? companySettings.brand_name : 'STN CRM')[0]}</span></div>
+          <b>{companySettings?.white_label_enabled && companySettings.brand_name ? companySettings.brand_name : 'STN CRM'}</b>
         </div>
         {myOrganizations.length > 1 ? (
           <div className="org-switcher" onClick={() => { setOrgMenuOpen(o => !o); setProfileMenuOpen(false) }} onMouseLeave={() => setOrgMenuOpen(false)}>
@@ -841,6 +887,10 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
           {navItem('clients', 'Klanten', ['clients','client-detail'].includes(view))}
           {navItem('projects', 'Projecten', ['projects','project-detail'].includes(view))}
           {navItem('tasks', 'Taken', view==='tasks')}
+          <button className={`sidebar2-item${view==='time'?' active':''}`} onClick={() => { showView('time'); setSidebarOpen(false) }} style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span>Tijd</span>
+            {runningTimer && <SidebarTimerTicker startedAt={runningTimer.started_at} />}
+          </button>
         </div>
         <div className="sidebar2-section">
           <div className="sidebar2-section-label">Beheer</div>
@@ -879,13 +929,15 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdminPanel }
             </div>
           </div>
         )}
-        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} orgMembers={orgMembers} companySettings={companySettings} />}
+        {view==='overview' && <OverviewView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} allRecurring={allRecurring} allMeetings={allMeetings} allHosting={allHosting} pipeline={pipeline} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} onRefresh={loadAll} myProfile={profile} myRole={myRole} activeOrgId={activeOrgId} orgMembers={orgMembers} companySettings={companySettings} allReviews={allReviews} />}
         {view==='clients' && <ClientsView clients={clients} projects={projects} allTasks={allTasks} allInvoices={allInvoices} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
-        {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} currentUserName={profile?.full_name || session.user.email} />}
+        {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} currentUserName={profile?.full_name || session.user.email} allReviews={allReviews} />}
         {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} currentUserId={session.user.id} currentUserName={profile?.full_name || session.user.email} />}
         {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
+        {view==='time' && <TimeTrackingView projects={projects} clients={clients} allTimeEntries={allTimeEntries} activeOrgId={activeOrgId} currentUserId={session.user.id} currentUserName={profile?.full_name || session.user.email} companySettings={companySettings} onRefresh={loadAll} runningTimer={runningTimer} onRunningTimerChange={setRunningTimer} />}
         {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} clients={clients} onRefresh={loadAll} activeOrgId={activeOrgId} companySettings={companySettings} allHosting={allHosting} />}
+        {view==='quote-editor' && <QuoteEditorView quoteId={curQuoteId === 'new' ? null : curQuoteId} clients={clients} activeOrgId={activeOrgId} companySettings={companySettings} showView={showView} />}
         {view==='hosting' && <WebsitesView allHosting={allHosting} clients={clients} projects={projects} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
         {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} myRole={myRole} onRestartOnboarding={restartOnboardingWizard} />}
         {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} organizationId={activeOrgId} />}
@@ -984,7 +1036,9 @@ function TrendBadge({ value, format }) {
   )
 }
 
-function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, allHosting = [], pipeline = [], totalPaid, totalOpen, totalMRR, showView, onRefresh, myProfile, myRole, activeOrgId, orgMembers = [], companySettings }) {
+function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, allMeetings, allHosting = [], pipeline = [], totalPaid, totalOpen, totalMRR, showView, onRefresh, myProfile, myRole, activeOrgId, orgMembers = [], companySettings, allReviews = [] }) {
+  const submittedReviews = allReviews.filter(r => r.submitted_at).sort((a,b) => b.submitted_at.localeCompare(a.submitted_at))
+  const avgScore = submittedReviews.length ? submittedReviews.reduce((s,r) => s + (r.score||0), 0) / submittedReviews.length : null
   const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
     try { return localStorage.getItem('stn_onboarding_dismissed_' + activeOrgId) === '1' } catch(e) { return false }
   })
@@ -1164,6 +1218,22 @@ function OverviewView({ clients, projects, allTasks, allInvoices, allRecurring, 
             </div>
           </div>
         )}
+        {submittedReviews.length > 0 && (
+          <div className="sc" style={{marginBottom:16,cursor:'pointer'}} onClick={()=>showView('company-settings')}>
+            <div className="sc-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <span className="sc-title">Klanttevredenheid</span>
+              <span style={{fontSize:13,color:'var(--amber-text)'}}>{'★'.repeat(Math.round(avgScore))}{'☆'.repeat(5-Math.round(avgScore))} <span style={{color:'var(--text-muted)',fontSize:12}}>({avgScore.toFixed(1)})</span></span>
+            </div>
+            <div className="sc-body">
+              {submittedReviews.slice(0,3).map(r => (
+                <div key={r.id} className="info-row" style={{alignItems:'flex-start'}}>
+                  <span style={{color:'var(--amber-text)',fontSize:13,flexShrink:0}}>{'★'.repeat(r.score||0)}{'☆'.repeat(5-(r.score||0))}</span>
+                  <span className="info-val" style={{fontSize:13}}>{r.review_text ? `"${r.review_text}" — ` : ''}{r.clients ? `${r.clients.fname} ${r.clients.lname}` : ''}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:16}}>
           <div className="sc">
             <div className="sc-head"><span className="sc-title">Omzet per klant (betaald)</span></div>
@@ -1305,7 +1375,8 @@ function ClientsView({ clients, projects, allTasks, allInvoices = [], showView, 
   )
 }
 
-function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeetings = [], showView, onRefresh, activeOrgId, currentUserName }) {
+function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeetings = [], showView, onRefresh, activeOrgId, currentUserName, allReviews = [] }) {
+  const clientReviews = allReviews.filter(r => r.client_id === client.id && r.submitted_at)
   const [activeTab, setActiveTab] = useState('projects')
   const [invoices, setInvoices] = useState([])
   const [recurring, setRecurring] = useState([])
@@ -1477,6 +1548,23 @@ function ClientDetailView({ client, projects, allTasks, allHosting = [], allMeet
                 </div>
               </div>
             </div>
+            {clientReviews.length > 0 && (
+              <div className="sc">
+                <div className="sc-head"><span className="sc-title">Reviews</span></div>
+                <div className="sc-body">
+                  {clientReviews.map(r => (
+                    <div key={r.id} className="info-row" style={{alignItems:'flex-start',flexDirection:'column',gap:4}}>
+                      <div style={{display:'flex',justifyContent:'space-between',width:'100%'}}>
+                        <span style={{color:'var(--amber-text)',fontSize:13}}>{'★'.repeat(r.score||0)}{'☆'.repeat(5-(r.score||0))}</span>
+                        {r.is_public && <span className="badge bg-teal">Testimonial</span>}
+                      </div>
+                      {r.review_text && <div style={{fontSize:13,color:'var(--text-muted)'}}>"{r.review_text}"</div>}
+                      <div style={{fontSize:11,color:'var(--text-faint)'}}>{r.projects?.name} · {fdate(r.submitted_at?.slice(0,10))}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="sc">
               <div className="sc-head"><span className="sc-title">Snel overzicht</span></div>
               <div className="sc-body">
@@ -1647,6 +1735,8 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
   const [clientAccess, setClientAccess] = useState([])
   const [docs, setDocs] = useState([])
   const [timeEntries, setTimeEntries] = useState([])
+  const [reviews, setReviews] = useState([])
+  const [sendingReview, setSendingReview] = useState(false)
   const [timerRunning, setTimerRunning] = useState(false)
   const [timerStart, setTimerStart] = useState(null)
   const [timerNow, setTimerNow] = useState(Date.now())
@@ -1665,7 +1755,18 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
   const refreshAccess = () => db.getProjectClientAccess(project.id).then(setClientAccess)
   const refreshDocs = () => db.getProjectDocuments(project.id).then(setDocs)
   const refreshTime = () => db.getTimeEntries(project.id).then(setTimeEntries)
-  useEffect(() => { refreshTeam(); refreshAccess(); refreshDocs(); refreshTime() }, [project.id])
+  const refreshReviews = () => db.getClientReviews(project.client_id).then(rs => setReviews(rs.filter(r => r.project_id === project.id)))
+  useEffect(() => { refreshTeam(); refreshAccess(); refreshDocs(); refreshTime(); refreshReviews() }, [project.id])
+
+  async function sendReview() {
+    setSendingReview(true)
+    try {
+      await db.sendReviewRequest({ organizationId: project.organization_id, projectId: project.id, clientId: project.client_id })
+      refreshReviews(); onRefresh()
+      showToast('Feedbackverzoek verstuurd — de klant ziet het in het klantportaal')
+    } catch (e) { showToast('Fout: ' + e.message, 'error') }
+    finally { setSendingReview(false) }
+  }
 
   useEffect(() => {
     if (!timerRunning) return
@@ -1852,6 +1953,24 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
                 <div className="info-row"><span className="info-label">Tijd besteed</span><span className="info-val">{fmtHM(totalMinutes)}</span></div>
               </div>
             </div>
+            {project.status === 'afgerond' && (
+              <div className="sc">
+                <div className="sc-head"><span className="sc-title">Klant-tevredenheid</span></div>
+                <div className="sc-body">
+                  {reviews.some(r => r.submitted_at) ? reviews.filter(r => r.submitted_at).map(r => (
+                    <div key={r.id}>
+                      <div style={{ fontSize: 15, color: 'var(--amber-text)', marginBottom: 4 }}>{'★'.repeat(r.score || 0)}{'☆'.repeat(5 - (r.score || 0))}</div>
+                      {r.review_text && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 4 }}>"{r.review_text}"</div>}
+                      {r.is_public && <span className="badge bg-teal">Testimonial</span>}
+                    </div>
+                  )) : reviews.some(r => !r.submitted_at) ? (
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Feedbackverzoek verstuurd op {fdate(reviews[0].request_sent_at?.slice(0,10))}, nog geen reactie.</div>
+                  ) : (
+                    <button className="btn btn-ghost btn-sm" onClick={sendReview} disabled={sendingReview}>{sendingReview ? 'Versturen…' : 'Stuur feedbackverzoek'}</button>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="sc">
               <div className="sc-head"><span className="sc-title">Team</span></div>
               <div className="sc-body">
@@ -1958,6 +2077,16 @@ function TasksView({ allTasks, showView }) {
 export function downloadQuotePdf(quote, client, companySettings) {
   const w = window.open('', '_blank')
   if (!w) return
+  const items = Array.isArray(quote.items) ? quote.items.filter(i => i.included !== false) : []
+  const itemRows = items.length
+    ? items.map(i => `<tr><td>${i.name}</td><td class="right">${money(i.price)}</td></tr>`).join('')
+    : `<tr><td>Omschrijving</td><td class="right">${quote.description || ''}</td></tr>`
+  const totalsRows = items.length ? `
+      <tr><td>Subtotaal</td><td class="right">${money(quote.subtotal ?? quote.amount)}</td></tr>
+      ${quote.discount_amount ? `<tr><td>Korting</td><td class="right">-${money(quote.discount_amount)}</td></tr>` : ''}
+      <tr><td>BTW (${quote.btw_percentage ?? 21}%)</td><td class="right">${money((quote.total ?? quote.amount) - (quote.subtotal ?? quote.amount) + (quote.discount_amount || 0))}</td></tr>
+      <tr><td class="total">Totaal</td><td class="right total">${money(quote.total ?? quote.amount)}</td></tr>
+    ` : `<tr><td class="total">Bedrag</td><td class="right total">${money(quote.amount)}</td></tr>`
   w.document.write(`
     <html><head><title>Offerte ${quote.quote_number || ''}</title>
     <style>
@@ -1969,14 +2098,16 @@ export function downloadQuotePdf(quote, client, companySettings) {
       .right{text-align:right}
       .total{font-weight:700;font-size:16px}
     </style></head><body>
-    <h1>Offerte ${quote.quote_number || ''}</h1>
+    <h1>${quote.title || 'Offerte'} ${quote.quote_number ? '· ' + quote.quote_number : ''}</h1>
     <div class="muted">${client?.fname||''} ${client?.lname||''}${client?.company ? ' · ' + client.company : ''}</div>
+    ${quote.notes ? `<p class="muted">${quote.notes}</p>` : ''}
     <table>
-      <tr><td>Omschrijving</td><td class="right">${quote.description || ''}</td></tr>
+      ${itemRows}
       <tr><td>Geldig tot</td><td class="right">${quote.valid_until || '—'}</td></tr>
       <tr><td>Status</td><td class="right">${quote.status}</td></tr>
-      <tr><td class="total">Bedrag</td><td class="right total">${money(quote.amount)}</td></tr>
+      ${totalsRows}
     </table>
+    ${quote.payment_terms ? `<div class="muted" style="margin-top:16px">${quote.payment_terms}</div>` : ''}
     ${companySettings?.vat_number ? `<div class="muted" style="margin-top:30px">BTW: ${companySettings.vat_number}${companySettings.coc_number ? ' · KVK: ' + companySettings.coc_number : ''}</div>` : ''}
     </body></html>
   `)
@@ -1985,7 +2116,7 @@ export function downloadQuotePdf(quote, client, companySettings) {
   w.print()
 }
 
-function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR, clients, onRefresh, activeOrgId, companySettings, allHosting = [] }) {
+function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR, clients, onRefresh, activeOrgId, companySettings, allHosting = [], showView }) {
   const [financeTab, setFinanceTab] = useState(() => { try { return localStorage.getItem('stn_finance_tab') || 'facturen' } catch (e) { return 'facturen' } })
   useEffect(() => { try { localStorage.setItem('stn_finance_tab', financeTab) } catch (e) {} }, [financeTab])
   const [period, setPeriod] = useState('all')
@@ -2035,7 +2166,7 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
         <div className="topbar-left">
           <h2>Financiën</h2>
           <div className="tabs">
-            {[['facturen', 'Facturen'], ['onderhoud', 'Onderhoud']].map(([t, label]) => (
+            {[['facturen', 'Facturen'], ['offertes', 'Offertes'], ['onderhoud', 'Onderhoud']].map(([t, label]) => (
               <button key={t} className={`tab${financeTab === t ? ' active' : ''}`} onClick={() => setFinanceTab(t)}>{label}</button>
             ))}
           </div>
@@ -2049,12 +2180,34 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
               <option value="year">Dit jaar</option>
             </select>
             <button className="btn btn-ghost btn-sm" onClick={exportCsv}>↓ Exporteer CSV</button>
-            <QuoteModal clients={clients} onSave={refreshQuotes} trigger={<button className="btn btn-ghost btn-sm">+ Offerte</button>} />
             <InvoiceModal clients={clients} onSave={onRefresh} trigger={<button className="btn btn-primary btn-sm">+ Factuur</button>} />
           </>}
+          {financeTab === 'offertes' && <button className="btn btn-primary btn-sm" onClick={() => showView('quote-editor', 'new')}>+ Nieuwe offerte</button>}
         </div>
       </div>
       {financeTab === 'onderhoud' && <MaintenanceTab activeOrgId={activeOrgId} clients={clients} allHosting={allHosting} companySettings={companySettings} />}
+      {financeTab === 'offertes' && (
+        <div className="content">
+          <div className="sc">
+            <div className="sc-body">
+              {!quotes.length ? <div className="empty">Nog geen offertes</div> : quotes.map(q => (
+                <div key={q.id} className="info-row" style={{alignItems:'center'}}>
+                  <div style={{flex:1,cursor:'pointer'}} onClick={() => showView('quote-editor', q.id)}>
+                    <div style={{fontWeight:500,fontSize:13}}>{q.quote_number ? q.quote_number+' · ' : ''}{q.title || q.description}</div>
+                    <div style={{fontSize:11,color:'var(--text-muted)'}}>{q.clients?.fname} {q.clients?.lname}{q.clients?.company?' · '+q.clients.company:''}{q.valid_until ? ' · geldig tot ' + fdate(q.valid_until) : ''}</div>
+                  </div>
+                  <span style={{fontFamily:'var(--mono-font)',fontSize:13,marginRight:8}}>{money(q.total ?? q.amount)}</span>
+                  <Badge s={q.status} />
+                  <div style={{display:'flex',gap:5,marginLeft:8}}>
+                    <button className="btn btn-ghost btn-xs" onClick={()=>downloadQuotePdf(q, q.clients, companySettings)}>PDF</button>
+                    <button type="button" className="task-del" onClick={()=>removeQuote(q)} aria-label="Offerte verwijderen">×</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {financeTab === 'facturen' && (
       <div className="content">
         <div className="stats-grid">
@@ -2092,25 +2245,6 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
             </div>
           </div>
         </div>
-        <div className="sc" style={{marginTop:16}}>
-          <div className="sc-head"><span className="sc-title">Offertes</span></div>
-          <div className="sc-body">
-            {!quotes.length ? <div className="empty">Nog geen offertes</div> : quotes.map(q => (
-              <div key={q.id} className="info-row" style={{alignItems:'center'}}>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:500,fontSize:13}}>{q.quote_number ? q.quote_number+' · ' : ''}{q.description}</div>
-                  <div style={{fontSize:11,color:'var(--text-muted)'}}>{q.clients?.fname} {q.clients?.lname}{q.clients?.company?' · '+q.clients.company:''}{q.valid_until ? ' · geldig tot ' + fdate(q.valid_until) : ''}</div>
-                </div>
-                <span style={{fontFamily:'var(--mono-font)',fontSize:13,marginRight:8}}>{money(q.amount)}</span>
-                <Badge s={q.status} />
-                <div style={{display:'flex',gap:5,marginLeft:8}}>
-                  <button className="btn btn-ghost btn-xs" onClick={()=>downloadQuotePdf(q, q.clients, companySettings)}>PDF</button>
-                  <button type="button" className="task-del" onClick={()=>removeQuote(q)} aria-label="Offerte verwijderen">×</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
       )}
     </div>
@@ -2118,6 +2252,7 @@ function FinanceView({ allInvoices, allRecurring, totalPaid, totalOpen, totalMRR
 }
 
 function CompanySettingsView({ activeOrgId, orgName, settings, onRefresh, onAddWorkspace }) {
+  const [tab, setTab] = useState('algemeen')
   const [templates, setTemplates] = useState([])
   const [hasDemo, setHasDemo] = useState(false)
   const [removingDemo, setRemovingDemo] = useState(false)
@@ -2190,6 +2325,15 @@ function CompanySettingsView({ activeOrgId, orgName, settings, onRefresh, onAddW
     <div>
       <div className="topbar"><h2>Bedrijfsinstellingen</h2></div>
       <div className="content" style={{ maxWidth: 680 }}>
+        <div className="tabs" style={{marginBottom:16}}>
+          {[['algemeen','Algemeen'],['prijsblokken','Prijsblokken'],['reviews','Reviews'],['white-label','White-label']].map(([t,label]) => (
+            <button key={t} className={`tab${tab===t?' active':''}`} onClick={()=>setTab(t)}>{label}</button>
+          ))}
+        </div>
+        {tab === 'prijsblokken' && <QuoteTemplatesTab activeOrgId={activeOrgId} />}
+        {tab === 'reviews' && <ReviewsSettingsTab activeOrgId={activeOrgId} />}
+        {tab === 'white-label' && <WhiteLabelTab activeOrgId={activeOrgId} settings={settings} onRefresh={onRefresh} />}
+        {tab === 'algemeen' && <>
         <div className="sc">
           <div className="sc-head"><span className="sc-title">Bedrijfsprofiel</span></div>
           <div className="sc-body">
@@ -2285,7 +2429,253 @@ function CompanySettingsView({ activeOrgId, orgName, settings, onRefresh, onAddW
             <button className="btn btn-ghost btn-sm" onClick={onAddWorkspace}>+ Extra werkruimte toevoegen</button>
           </div>
         </div>
+        </>}
       </div>
+    </div>
+  )
+}
+
+function QuoteTemplatesTab({ activeOrgId }) {
+  const [items, setItems] = useState([])
+  const [showModal, setShowModal] = useState(false)
+  const [editItem, setEditItem] = useState(null)
+  const refresh = () => db.getQuoteTemplates(activeOrgId).then(setItems).catch(() => {})
+  useEffect(() => { if (activeOrgId) refresh() }, [activeOrgId])
+
+  async function remove(id) {
+    if (!confirm('Prijsblok verwijderen?')) return
+    try { await db.deleteQuoteTemplate(id); refresh() } catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+
+  const byCategory = items.reduce((acc, t) => { (acc[t.category] = acc[t.category] || []).push(t); return acc }, {})
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>Herbruikbare regels voor de offerte calculator.</div>
+        <button className="btn btn-primary btn-sm" onClick={() => { setEditItem(null); setShowModal(true) }}>+ Nieuw blok</button>
+      </div>
+      {!items.length ? <div className="empty">Nog geen prijsblokken.</div> : Object.entries(byCategory).map(([cat, list]) => (
+        <div className="sc" key={cat} style={{ marginBottom: 14 }}>
+          <div className="sc-head"><span className="sc-title" style={{ textTransform: 'capitalize' }}>{cat}</span></div>
+          <div className="sc-body">
+            {list.map(t => (
+              <div key={t.id} className="info-row" style={{ alignItems: 'center' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{t.name}{t.is_optional && <span className="badge bg-gray" style={{ fontSize: 9, marginLeft: 6 }}>optioneel</span>}</div>
+                  {t.description && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.description}</div>}
+                </div>
+                <span style={{ fontFamily: 'var(--mono-font)', fontSize: 13, marginRight: 10 }}>{money(t.price)}</span>
+                <button className="btn btn-ghost btn-xs" onClick={() => { setEditItem(t); setShowModal(true) }}>✏</button>
+                <button type="button" className="task-del" onClick={() => remove(t.id)} aria-label="Verwijderen">×</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      <QuoteTemplateModal open={showModal} item={editItem} activeOrgId={activeOrgId} onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); refresh() }} />
+    </div>
+  )
+}
+
+function QuoteTemplateModal({ open, item, activeOrgId, onClose, onSaved }) {
+  const [form, setForm] = useState({ name: '', description: '', price: '', category: 'overig', is_optional: false })
+  const [saving, setSaving] = useState(false)
+  useEffect(() => {
+    if (open) setForm(item ? { name: item.name, description: item.description || '', price: item.price, category: item.category, is_optional: item.is_optional } : { name: '', description: '', price: '', category: 'overig', is_optional: false })
+  }, [open, item])
+  if (!open) return null
+  const f = k => e => setForm(p => ({ ...p, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+  async function save() {
+    if (!form.name.trim() || !form.price) return showToast('Vul naam en prijs in.', 'error')
+    setSaving(true)
+    try {
+      const payload = { name: form.name.trim(), description: form.description.trim() || null, price: parseFloat(form.price), category: form.category, is_optional: form.is_optional }
+      if (item) await db.updateQuoteTemplate(item.id, payload)
+      else await db.createQuoteTemplate({ ...payload, organization_id: activeOrgId })
+      onSaved()
+    } catch (e) { showToast('Fout: ' + e.message, 'error') }
+    finally { setSaving(false) }
+  }
+  return (
+    <div className="modal-bg open" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <h3>{item ? 'Prijsblok bewerken' : 'Nieuw prijsblok'}</h3>
+        <div className="form-group"><label>Naam</label><input value={form.name} onChange={f('name')} placeholder="Bijv. WordPress website basis" autoFocus /></div>
+        <div className="form-group"><label>Omschrijving</label><input value={form.description} onChange={f('description')} /></div>
+        <div className="form-row">
+          <div className="form-group"><label>Prijs (€)</label><input type="number" step="0.01" min="0" value={form.price} onChange={f('price')} /></div>
+          <div className="form-group"><label>Categorie</label>
+            <select value={form.category} onChange={f('category')}>
+              {['website', 'design', 'hosting', 'onderhoud', 'marketing', 'overig'].map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <input type="checkbox" checked={form.is_optional} onChange={f('is_optional')} /> Verschijnt als optioneel item in offertes
+        </label>
+        <div className="modal-actions">
+          <button className="btn btn-ghost" onClick={onClose}>Annuleren</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Opslaan…' : 'Opslaan'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ReviewsSettingsTab({ activeOrgId }) {
+  const [reviews, setReviews] = useState([])
+  useEffect(() => { if (activeOrgId) db.getAllReviews(activeOrgId).then(setReviews).catch(() => {}) }, [activeOrgId])
+  const submitted = reviews.filter(r => r.submitted_at)
+  const publicReviews = submitted.filter(r => r.is_public)
+
+  async function togglePublic(r) {
+    try { await db.updateReview(r.id, { is_public: !r.is_public }); setReviews(rs => rs.map(x => x.id === r.id ? { ...x, is_public: !r.is_public } : x)) }
+    catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+
+  // Zelfstandig stukje HTML+JS (geen losse gehoste pagina nodig): haalt publieke
+  // testimonials rechtstreeks op via de Supabase REST API met de anon key — die is
+  // per ontwerp openbaar (RLS regelt de daadwerkelijke toegang, zie public_testimonials-view).
+  function copyEmbedCode() {
+    const url = import.meta.env.VITE_SUPABASE_URL
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const code = `<div id="stn-testimonials-${activeOrgId}"></div>
+<script>
+(function(){
+  var el = document.getElementById("stn-testimonials-${activeOrgId}");
+  fetch("${url}/rest/v1/public_testimonials?organization_id=eq.${activeOrgId}&select=*&order=submitted_at.desc", {
+    headers: { apikey: "${anonKey}", Authorization: "Bearer ${anonKey}" }
+  }).then(function(r){ return r.json(); }).then(function(reviews){
+    el.innerHTML = reviews.map(function(r){
+      var stars = "★".repeat(r.score||0) + "☆".repeat(5-(r.score||0));
+      var name = [r.fname, r.lname].filter(Boolean).join(" ") + (r.company ? " — " + r.company : "");
+      return '<div style="margin-bottom:16px;font-family:sans-serif">' +
+        '<div style="color:#f5b400;font-size:18px">' + stars + '</div>' +
+        (r.review_text ? '<p style="margin:4px 0">"' + r.review_text + '"</p>' : '') +
+        '<div style="font-size:13px;color:#666">' + name + '</div></div>';
+    }).join("");
+  });
+})();
+<\/script>`
+    navigator.clipboard?.writeText(code)
+    showToast('Embed-code gekopieerd')
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>{publicReviews.length} publieke testimonial(s) van {submitted.length} review(s).</div>
+        <button className="btn btn-ghost btn-sm" onClick={copyEmbedCode} disabled={!publicReviews.length}>Kopieer embed-code</button>
+      </div>
+      <div className="sc">
+        <div className="sc-body">
+          {!submitted.length ? <div className="empty">Nog geen reviews ontvangen.</div> : submitted.map(r => (
+            <div key={r.id} className="info-row" style={{ alignItems: 'center' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: 'var(--amber-text)', fontSize: 13 }}>{'★'.repeat(r.score || 0)}{'☆'.repeat(5 - (r.score || 0))}</div>
+                {r.review_text && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>"{r.review_text}"</div>}
+                <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>{r.clients?.fname} {r.clients?.lname}{r.clients?.company ? ` — ${r.clients.company}` : ''} · {r.projects?.name}</div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                <input type="checkbox" checked={!!r.is_public} onChange={() => togglePublic(r)} /> Testimonial
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function WhiteLabelTab({ activeOrgId, settings, onRefresh }) {
+  const [form, setForm] = useState({
+    white_label_enabled: settings?.white_label_enabled || false,
+    brand_name: settings?.brand_name || '',
+    custom_domain: settings?.custom_domain || '',
+    brand_support_email: settings?.brand_support_email || '',
+    brand_footer_text: settings?.brand_footer_text || '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const faviconRef = useRef()
+  useEffect(() => {
+    setForm({
+      white_label_enabled: settings?.white_label_enabled || false,
+      brand_name: settings?.brand_name || '',
+      custom_domain: settings?.custom_domain || '',
+      brand_support_email: settings?.brand_support_email || '',
+      brand_footer_text: settings?.brand_footer_text || '',
+    })
+  }, [settings])
+  const f = k => e => setForm(p => ({ ...p, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+
+  async function save() {
+    setSaving(true)
+    try {
+      await db.upsertCompanySettings(activeOrgId, form)
+      onRefresh()
+      showToast('White-label instellingen opgeslagen')
+    } catch (e) { showToast('Fout: ' + e.message, 'error') }
+    finally { setSaving(false) }
+  }
+
+  async function uploadFavicon(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `${activeOrgId}/favicon.${ext}`
+      await supabase.storage.from('company-logos').upload(path, file, { upsert: true })
+      const { data } = supabase.storage.from('company-logos').getPublicUrl(path)
+      await db.upsertCompanySettings(activeOrgId, { brand_favicon_url: data.publicUrl + '?t=' + Date.now() })
+      onRefresh()
+      showToast('Favicon bijgewerkt')
+    } catch (e) { showToast('Fout: ' + e.message, 'error') }
+    finally { setUploading(false) }
+  }
+
+  return (
+    <div>
+      <div className="sc">
+        <div className="sc-body">
+          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontWeight: 500 }}>White-label inschakelen</span>
+            <input type="checkbox" checked={form.white_label_enabled} onChange={f('white_label_enabled')} />
+          </label>
+        </div>
+      </div>
+      {form.white_label_enabled && <>
+        <div className="sc" style={{ marginTop: 16 }}>
+          <div className="sc-head"><span className="sc-title">Branding</span></div>
+          <div className="sc-body">
+            <div className="form-group"><label>Merknaam</label><input value={form.brand_name} onChange={f('brand_name')} placeholder="Bijv. Mijn Bureau CRM" /></div>
+            <div className="form-group">
+              <label>Favicon uploaden</label>
+              <button className="btn btn-ghost btn-sm" onClick={() => faviconRef.current.click()} disabled={uploading}>{uploading ? 'Uploaden…' : 'Kies bestand'}</button>
+              <input ref={faviconRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={uploadFavicon} />
+              {settings?.brand_favicon_url && <img src={settings.brand_favicon_url} alt="" style={{ width: 20, height: 20, marginLeft: 10, verticalAlign: 'middle' }} />}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>Logo en primaire kleur stel je in bij het tabblad Algemeen.</div>
+          </div>
+        </div>
+        <div className="sc" style={{ marginTop: 16 }}>
+          <div className="sc-head"><span className="sc-title">Domein</span></div>
+          <div className="sc-body">
+            <div className="form-group"><label>Eigen domein</label><input value={form.custom_domain} onChange={f('custom_domain')} placeholder="crm.mijnbureau.nl" /></div>
+            <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>ℹ️ Wijs een CNAME-record aan naar stncrm.vercel.app en configureer het domein in Vercel.</div>
+          </div>
+        </div>
+        <div className="sc" style={{ marginTop: 16 }}>
+          <div className="sc-head"><span className="sc-title">Contact</span></div>
+          <div className="sc-body">
+            <div className="form-group"><label>Support e-mail</label><input value={form.brand_support_email} onChange={f('brand_support_email')} /></div>
+            <div className="form-group"><label>Footer tekst</label><textarea value={form.brand_footer_text} onChange={f('brand_footer_text')} rows={2} placeholder="© 2026 Mijn Bureau" /></div>
+          </div>
+        </div>
+      </>}
+      <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={save} disabled={saving}>{saving ? 'Opslaan…' : 'Instellingen opslaan'}</button>
     </div>
   )
 }
@@ -2705,37 +3095,6 @@ function InvoiceModal({ clientId, clients, onSave, trigger }) {
       <FG label="Omschrijving"><input value={form.description} onChange={f('description')} autoFocus /></FG>
       <FR><FG label="Bedrag (€)"><input type="number" value={form.amount} onChange={f('amount')} step="0.01" min="0" /></FG><FG label="Factuurdatum"><input type="date" value={form.date} onChange={f('date')} /></FG></FR>
       <FR><FG label="Vervaldatum"><input type="date" value={form.due_date} onChange={f('due_date')} /></FG><FG label="Status"><select value={form.status} onChange={f('status')}><option value="concept">Concept</option><option value="verzonden">Verzonden</option><option value="betaald">Betaald</option><option value="te laat">Te laat</option></select></FG></FR>
-      <ModalActions onCancel={()=>setOpen(false)} onSave={save} saving={saving} />
-    </Modal>
-  </>
-}
-
-function QuoteModal({ clientId, clients, onSave, trigger }) {
-  const [open, setOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ client_id: clientId||'', description:'', amount:'', valid_until:'' })
-  const f = k => e => setForm(p=>({...p,[k]:e.target.value}))
-  async function save() {
-    const targetClient = clientId || form.client_id
-    if(!targetClient) return showToast('Kies een klant.', 'error')
-    if(!form.description.trim()||!form.amount) return
-    setSaving(true)
-    try {
-      await db.createQuote({ client_id: targetClient, description: form.description, amount: parseFloat(form.amount), valid_until: form.valid_until||null, status: 'verzonden' })
-      setOpen(false); onSave()
-      showToast('Offerte aangemaakt')
-    } catch(e) {
-      showToast('Fout bij opslaan: ' + e.message, 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
-  return <>
-    {React.cloneElement(trigger,{onClick:()=>{setForm({client_id:clientId||'',description:'',amount:'',valid_until:''});setOpen(true)}})}
-    <Modal open={open} onClose={()=>setOpen(false)} title="Nieuwe offerte">
-      {!clientId && <FG label="Klant"><select value={form.client_id} onChange={f('client_id')}><option value="">— Kies een klant —</option>{(clients||[]).map(c=><option key={c.id} value={c.id}>{c.fname} {c.lname}{c.company?' ('+c.company+')':''}</option>)}</select></FG>}
-      <FG label="Omschrijving"><input value={form.description} onChange={f('description')} autoFocus /></FG>
-      <FR><FG label="Bedrag (€)"><input type="number" value={form.amount} onChange={f('amount')} step="0.01" min="0" /></FG><FG label="Geldig tot"><input type="date" value={form.valid_until} onChange={f('valid_until')} /></FG></FR>
       <ModalActions onCancel={()=>setOpen(false)} onSave={save} saving={saving} />
     </Modal>
   </>

@@ -1,4 +1,5 @@
 const { requireUser } = require('../_shared')
+const { normalizeUrl } = require('./_lib')
 
 // Pikt de bruikbare "opportunities" (concrete besparingen) en falende
 // diagnostics uit het Lighthouse-rapport, zodat we straks AI-advies kunnen
@@ -53,7 +54,7 @@ module.exports = async (req, res) => {
 
     const { data: site, error: siteErr } = await service.from('hosting').select('*').eq('id', siteId).single()
     if (siteErr || !site) return res.status(404).json({ error: 'Site niet gevonden.' })
-    const checkUrl = site.pagespeed_url || site.url
+    const checkUrl = normalizeUrl(site.pagespeed_url || site.url)
     if (!checkUrl) return res.status(400).json({ error: 'Deze site heeft geen URL ingesteld.' })
 
     // PageSpeed Insights zonder API-key heeft een zeer lage, gedeelde anonieme

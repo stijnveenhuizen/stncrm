@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import * as db from '../lib/db'
-import { fdate, money, today, Badge, MeetingTypeIcon, buildMeetingCalendarUrl, ToastProvider, showToast, TaskComments, downloadQuotePdf } from './Dashboard.jsx'
+import { fdate, money, today, Badge, MeetingTypeIcon, buildMeetingCalendarUrl, ToastProvider, showToast, TaskComments, downloadQuotePdf, shadeColor } from './Dashboard.jsx'
 
 const ALLOWED_DOC_TYPES = ['application/pdf','image/png','image/jpeg','image/svg+xml','application/zip','application/x-zip-compressed','application/vnd.openxmlformats-officedocument.wordprocessingml.document']
 const MAX_DOC_SIZE = 20 * 1024 * 1024
@@ -106,6 +107,7 @@ export default function ClientPortal({ session, client }) {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [showWelcome, setShowWelcome] = useState(false)
+  const [pendingReview, setPendingReview] = useState(null)
   const fileRef = useRef()
 
   const loadProjects = useCallback(async () => {
@@ -123,6 +125,7 @@ export default function ClientPortal({ session, client }) {
     db.getClientMaintenanceLogs(client.id).then(setMaintenanceLogs).catch(() => {})
     db.getInvoices(client.id).then(setInvoices).catch(() => {})
     db.getQuotes(client.id).then(setQuotes).catch(() => {})
+    db.getPendingReviewRequest(client.id).then(setPendingReview).catch(() => {})
     if (client.organization_id) db.getCompanySettings(client.organization_id).then(setCompanySettings).catch(() => {})
     try {
       if (!localStorage.getItem('stn_portal_welcome_seen_' + client.id)) setShowWelcome(true)
@@ -152,9 +155,22 @@ export default function ClientPortal({ session, client }) {
     finally { setUploading(false); e.target.value = '' }
   }
 
+  async function submitReview(score, reviewText, isPublic) {
+    try {
+      await db.submitReview(pendingReview.id, { score, review_text: reviewText || null, is_public: isPublic })
+      setPendingReview(null)
+      showToast('Bedankt voor je feedback!')
+    } catch (e) { showToast('Fout: ' + e.message, 'error') }
+  }
+
   async function respondQuote(q, status) {
-    try { await db.updateQuote(q.id, { status }); db.getQuotes(client.id).then(setQuotes); showToast(status==='geaccepteerd' ? 'Offerte geaccepteerd' : 'Offerte afgewezen') }
-    catch (e) { showToast('Fout: ' + e.message, 'error') }
+    let rejection_reason = null
+    if (status === 'afgewezen') rejection_reason = window.prompt('Wil je een reden opgeven? (optioneel)') || null
+    try {
+      await db.updateQuote(q.id, { status, ...(status === 'geaccepteerd' ? { accepted_at: new Date().toISOString() } : { rejection_reason }) })
+      db.getQuotes(client.id).then(setQuotes)
+      showToast(status==='geaccepteerd' ? 'Offerte geaccepteerd' : 'Offerte afgewezen')
+    } catch (e) { showToast('Fout: ' + e.message, 'error') }
   }
 
   useEffect(() => { refreshTasks(); refreshDocs() }, [refreshTasks, refreshDocs])
@@ -165,6 +181,21 @@ export default function ClientPortal({ session, client }) {
   }
 
   async function logout() { await supabase.auth.signOut() }
+
+  const whiteLabel = !!(companySettings?.white_label_enabled && companySettings.brand_name)
+  useEffect(() => {
+    if (!whiteLabel) return
+    if (companySettings.primary_color) {
+      document.documentElement.style.setProperty('--accent', companySettings.primary_color)
+      document.documentElement.style.setProperty('--accent-hover', shadeColor(companySettings.primary_color, -10))
+    }
+    document.title = `${companySettings.brand_name} — Klantportaal`
+    if (companySettings.brand_favicon_url) {
+      let link = document.querySelector("link[rel~='icon']")
+      if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link) }
+      link.href = companySettings.brand_favicon_url
+    }
+  }, [whiteLabel, companySettings])
 
   if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--text-muted)',fontSize:13}}>Laden…</div>
 
@@ -189,12 +220,13 @@ export default function ClientPortal({ session, client }) {
           </div>
         </div>
       )}
+      {pendingReview && !showWelcome && <ReviewRequestModal review={pendingReview} onSubmit={submitReview} onDismiss={() => setPendingReview(null)} />}
       <div className="cp-topbar">
         <div className="cp-logo">
           {companySettings?.logo_url
             ? <img src={companySettings.logo_url} alt="" style={{height:28,maxWidth:120,objectFit:'contain'}} />
             : <div className="cp-logo-icon"><span>S</span></div>}
-          <div><h1>{companySettings?.logo_url ? '' : 'STN CRM'}</h1><span>Klantportaal</span></div>
+          <div><h1>{companySettings?.logo_url ? '' : (whiteLabel ? companySettings.brand_name : 'STN CRM')}</h1><span>Klantportaal</span></div>
         </div>
         <div className="cp-topbar-right">
           <span style={{fontSize:13,color:'var(--text-muted)'}}>{client.fname} {client.lname}</span>
@@ -278,10 +310,10 @@ export default function ClientPortal({ session, client }) {
                   {!quotes.length ? <div className="empty">Nog geen offertes</div> : quotes.map(q => (
                     <div key={q.id} className="dl-item" style={{alignItems:'center',flexWrap:'wrap'}}>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:13,fontWeight:500}}>{q.quote_number ? q.quote_number+' · ' : ''}{q.description}</div>
+                        <div style={{fontSize:13,fontWeight:500}}>{q.quote_number ? q.quote_number+' · ' : ''}{q.title || q.description}</div>
                         <div style={{fontSize:11,color:'var(--text-faint)'}}>{q.valid_until ? 'Geldig tot ' + fdate(q.valid_until) : ''}</div>
                       </div>
-                      <span style={{fontFamily:'var(--mono-font)',fontSize:13,marginRight:8}}>{money(q.amount)}</span>
+                      <span style={{fontFamily:'var(--mono-font)',fontSize:13,marginRight:8}}>{money(q.total ?? q.amount)}</span>
                       <Badge s={q.status} />
                       <div style={{display:'flex',gap:6,marginLeft:8}}>
                         <button className="btn btn-ghost btn-xs" onClick={()=>downloadQuotePdf(q, client, companySettings)}>↓ PDF</button>
@@ -378,6 +410,67 @@ function PortalTaskRow({ task, client, done }) {
           {task.created_by==='client' && <span className="badge bg-blue" style={{fontSize:10}}>Door jou</span>}
         </div>
         <TaskComments taskId={task.id} authorName={`${client.fname} ${client.lname}`} authorType="client" />
+      </div>
+    </div>
+  )
+}
+
+function StarRatingInput({ value, onChange }) {
+  const [hover, setHover] = useState(0)
+  return (
+    <div style={{ display: 'flex', gap: 6 }}>
+      {[1, 2, 3, 4, 5].map(n => (
+        <motion.span
+          key={n}
+          whileHover={{ scale: 1.2 }}
+          whileTap={{ scale: 0.9 }}
+          onMouseEnter={() => setHover(n)}
+          onMouseLeave={() => setHover(0)}
+          onClick={() => onChange(n)}
+          style={{
+            fontSize: 32, cursor: 'pointer', lineHeight: 1,
+            color: n <= (hover || value) ? '#f5b400' : 'var(--border-strong, #d1d5db)',
+            transition: 'color 150ms',
+          }}
+        >★</motion.span>
+      ))}
+    </div>
+  )
+}
+
+function ReviewRequestModal({ review, onSubmit, onDismiss }) {
+  const [score, setScore] = useState(0)
+  const [text, setText] = useState('')
+  const [isPublic, setIsPublic] = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  async function submit() {
+    if (!score) return showToast('Kies eerst een aantal sterren.', 'error')
+    setSaving(true)
+    try { await onSubmit(score, text.trim(), isPublic === true) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className="modal-bg open">
+      <div className="modal" style={{ maxWidth: 420, textAlign: 'center' }}>
+        <h2 style={{ marginBottom: 4 }}>Hoe was je ervaring{review.projects?.name ? ` met ${review.projects.name}` : ''}?</h2>
+        <div style={{ display: 'flex', justifyContent: 'center', margin: '18px 0' }}>
+          <StarRatingInput value={score} onChange={setScore} />
+        </div>
+        <textarea
+          value={text} onChange={e => setText(e.target.value)} rows={4} placeholder="Vertel ons wat je vond (optioneel)"
+          style={{ width: '100%', marginBottom: 14 }}
+        />
+        <div style={{ fontSize: 13, marginBottom: 16, textAlign: 'left' }}>
+          <div style={{ marginBottom: 6, color: 'var(--text-muted)' }}>Mag deze review als testimonial gebruikt worden?</div>
+          <label style={{ marginRight: 16 }}><input type="radio" name="public" checked={isPublic === true} onChange={() => setIsPublic(true)} /> Ja, graag</label>
+          <label><input type="radio" name="public" checked={isPublic === false} onChange={() => setIsPublic(false)} /> Nee, liever niet</label>
+        </div>
+        <div className="modal-actions" style={{ justifyContent: 'center' }}>
+          <button className="btn btn-ghost" onClick={onDismiss}>Later</button>
+          <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Versturen…' : 'Feedback versturen'}</button>
+        </div>
       </div>
     </div>
   )

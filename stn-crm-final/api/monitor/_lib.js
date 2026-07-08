@@ -1,13 +1,38 @@
 // Gedeelde check-logica voor de monitor-routes. Geen eigen endpoint (begint met "_").
 const tls = require('tls')
 
-async function checkUptime(url) {
-  const start = Date.now()
+// hosting.url komt uit een vrij tekstveld en mist regelmatig het schema
+// (bv. "voorbeeld.nl" i.p.v. "https://voorbeeld.nl"). fetch() gooit daar
+// synchroon op (vóór er ook maar íets van netwerk-I/O gebeurt), wat de site
+// binnen milliseconden als "offline" deed registreren — dus overal waar we
+// een URL naar fetch/new URL geven, eerst hierdoorheen halen.
+function normalizeUrl(url) {
+  if (!url) return url
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 10000)
-    const res = await fetch(url, { method: 'GET', redirect: 'follow', signal: controller.signal })
+    return await fetch(url, { ...options, signal: controller.signal })
+  } finally {
     clearTimeout(timeout)
+  }
+}
+
+async function checkUptime(rawUrl) {
+  const start = Date.now()
+  const url = normalizeUrl(rawUrl)
+  const headers = { 'User-Agent': 'STN-CRM-Monitor/1.0' }
+  try {
+    // HEAD is sneller, maar sommige servers/CDN's/WAF's blokkeren of
+    // misconfigureren HEAD-requests — val dan terug op GET voordat we de
+    // site als offline bestempelen.
+    let res = await fetchWithTimeout(url, { method: 'HEAD', redirect: 'follow', headers }, 15000).catch(() => null)
+    if (!res || res.status >= 400) {
+      res = await fetchWithTimeout(url, { method: 'GET', redirect: 'follow', headers }, 15000)
+    }
     return { isOnline: res.status < 500, responseTimeMs: Date.now() - start }
   } catch (e) {
     return { isOnline: false, responseTimeMs: Date.now() - start }
@@ -34,12 +59,9 @@ function checkSSL(hostname) {
 
 // Best-effort WordPress/plugin-detectie uit de publieke HTML — net als een passieve
 // scanner: geen login, geen API-key, alleen wat iedereen al ziet die de pagina bezoekt.
-async function sniffWordPress(url) {
+async function sniffWordPress(rawUrl) {
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 8000)
-    const res = await fetch(url, { signal: controller.signal })
-    clearTimeout(timeout)
+    const res = await fetchWithTimeout(normalizeUrl(rawUrl), {}, 8000)
     const html = await res.text()
     const wpMatch = html.match(/<meta name="generator" content="WordPress ([\d.]+)"/i)
     const phpHeader = res.headers.get('x-powered-by') || ''
@@ -57,4 +79,4 @@ async function sniffWordPress(url) {
   }
 }
 
-module.exports = { checkUptime, checkSSL, sniffWordPress }
+module.exports = { checkUptime, checkSSL, sniffWordPress, normalizeUrl }

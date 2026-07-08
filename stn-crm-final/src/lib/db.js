@@ -390,6 +390,11 @@ export async function getQuotes(clientId) {
   if (error) throw error
   return data
 }
+export async function getQuote(id) {
+  const { data, error } = await supabase.from('quotes').select('*, clients(fname, lname, company, email)').eq('id', id).single()
+  if (error) throw error
+  return data
+}
 export async function getAllQuotes(organizationId) {
   const { data, error } = await supabase
     .from('quotes').select('*, clients!inner(fname, lname, company, organization_id)').eq('clients.organization_id', organizationId).order('created_at', { ascending: false })
@@ -409,6 +414,67 @@ export async function updateQuote(id, updates) {
 export async function deleteQuote(id) {
   const { error } = await supabase.from('quotes').delete().eq('id', id)
   if (error) throw error
+}
+
+// ── Offerte-prijsblokken (herbruikbare templates) ──────────────────────────────
+export async function getQuoteTemplates(organizationId) {
+  const { data, error } = await supabase
+    .from('quote_templates').select('*').eq('organization_id', organizationId).order('category').order('sort_order')
+  if (error) throw error
+  return data
+}
+export async function createQuoteTemplate(template) {
+  const { data, error } = await supabase.from('quote_templates').insert([template]).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateQuoteTemplate(id, updates) {
+  const { data, error } = await supabase.from('quote_templates').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteQuoteTemplate(id) {
+  const { error } = await supabase.from('quote_templates').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Klant-tevredenheid / reviews ────────────────────────────────────────────────
+export async function getAllReviews(organizationId) {
+  const { data, error } = await supabase
+    .from('client_reviews').select('*, clients(fname, lname, company), projects(name)').eq('organization_id', organizationId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function getClientReviews(clientId) {
+  const { data, error } = await supabase
+    .from('client_reviews').select('*, projects(name)').eq('client_id', clientId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+// Het portaal toont een feedbackvraag zolang er een verzoek is verstuurd dat nog
+// niet beantwoord is (submitted_at is null).
+export async function getPendingReviewRequest(clientId) {
+  const { data, error } = await supabase
+    .from('client_reviews').select('*, projects(name)').eq('client_id', clientId).is('submitted_at', null).order('created_at', { ascending: false }).maybeSingle()
+  if (error) throw error
+  return data
+}
+export async function sendReviewRequest({ organizationId, projectId, clientId }) {
+  const { data, error } = await supabase.from('client_reviews').insert([{ organization_id: organizationId, project_id: projectId, client_id: clientId, request_sent_at: new Date().toISOString() }]).select().single()
+  if (error) throw error
+  const { error: projErr } = await supabase.from('projects').update({ review_request_sent_at: new Date().toISOString() }).eq('id', projectId)
+  if (projErr) throw projErr
+  return data
+}
+export async function submitReview(id, { score, review_text, is_public }) {
+  const { data, error } = await supabase.from('client_reviews').update({ score, review_text, is_public, submitted_at: new Date().toISOString() }).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateReview(id, updates) {
+  const { data, error } = await supabase.from('client_reviews').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
 }
 
 // ── Recurring ──────────────────────────────────────────────────────────────────
@@ -1076,13 +1142,82 @@ export async function getTimeEntries(projectId) {
   if (error) throw error
   return data
 }
+// Org-breed overzicht (Tijd-pagina): via projects!inner gescoped op organization_id,
+// dezelfde manier als getAllTasks/getAllHosting hierboven joinen op hun eigenaar-tabel.
+export async function getAllTimeEntries(organizationId) {
+  const { data, error } = await supabase
+    .from('time_entries')
+    .select('*, profiles(full_name), projects!inner(id, name, color, organization_id, client_id, clients(fname, lname, company))')
+    .eq('projects.organization_id', organizationId)
+    .order('date', { ascending: false })
+  if (error) throw error
+  return data
+}
 export async function createTimeEntry(entry) {
   const userId = (await supabase.auth.getUser()).data.user.id
   const { data, error } = await supabase.from('time_entries').insert([{ ...entry, user_id: userId }]).select().single()
   if (error) throw error
   return data
 }
+export async function updateTimeEntry(id, updates) {
+  const { data, error } = await supabase.from('time_entries').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
 export async function deleteTimeEntry(id) {
   const { error } = await supabase.from('time_entries').delete().eq('id', id)
   if (error) throw error
+}
+
+// Lopende timer van de ingelogde gebruiker (ended_at is null) — persisteert in de
+// database i.p.v. lokale state, zodat hij de navigatie tussen pagina's en een
+// pagina-refresh overleeft.
+export async function getMyRunningTimer() {
+  const userId = (await supabase.auth.getUser()).data.user.id
+  const { data, error } = await supabase
+    .from('time_entries').select('*, projects(id, name, color)').eq('user_id', userId).is('ended_at', null).maybeSingle()
+  if (error) throw error
+  return data
+}
+export async function startTimer({ project_id, description }) {
+  const userId = (await supabase.auth.getUser()).data.user.id
+  const { data, error } = await supabase.from('time_entries').insert([{
+    project_id, description, user_id: userId, minutes: 0, started_at: new Date().toISOString(), ended_at: null, date: new Date().toISOString().slice(0, 10),
+  }]).select().single()
+  if (error) throw error
+  return data
+}
+export async function stopTimer(id, { description, hourly_rate, is_billable } = {}) {
+  const { data: entry, error: readErr } = await supabase.from('time_entries').select('started_at').eq('id', id).single()
+  if (readErr) throw readErr
+  const minutes = Math.max(1, Math.round((Date.now() - new Date(entry.started_at).getTime()) / 60000))
+  const { data, error } = await supabase.from('time_entries').update({
+    ended_at: new Date().toISOString(), minutes, ...(description !== undefined ? { description } : {}),
+    ...(hourly_rate !== undefined ? { hourly_rate } : {}), ...(is_billable !== undefined ? { is_billable } : {}),
+  }).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+
+// Prioriteit voor het uurtarief van een nieuwe registratie: project > klant > werkruimte.
+export function effectiveHourlyRate(project, client, companySettings) {
+  return project?.default_hourly_rate ?? client?.default_hourly_rate ?? companySettings?.default_hourly_rate ?? null
+}
+
+// Verzamelt alle niet-gefactureerde, factureerbare uren van een klant in de gekozen
+// periode tot één factuurregel (de bestaande invoices-tabel heeft geen losse
+// regelitems — net als de rest van de facturatiemodule houden we dat bewust simpel).
+export async function exportTimeEntriesToInvoice({ clientId, entries, description }) {
+  const totalMinutes = entries.reduce((sum, e) => sum + (e.minutes || 0), 0)
+  const amount = entries.reduce((sum, e) => sum + (e.minutes || 0) / 60 * (e.hourly_rate || 0), 0)
+  const invoice = await createInvoice({
+    client_id: clientId,
+    desc: description || `Urenoverzicht — ${(totalMinutes / 60).toFixed(2)} uur`,
+    amount: Math.round(amount * 100) / 100,
+    date: new Date().toISOString().slice(0, 10),
+    status: 'concept',
+  })
+  const { error } = await supabase.from('time_entries').update({ is_invoiced: true, invoice_id: invoice.id }).in('id', entries.map(e => e.id))
+  if (error) throw error
+  return invoice
 }

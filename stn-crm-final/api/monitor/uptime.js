@@ -1,5 +1,5 @@
 const { requireUser } = require('../_shared')
-const { checkUptime, checkSSL } = require('./_lib')
+const { checkUptime, checkSSL, normalizeUrl } = require('./_lib')
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -14,7 +14,7 @@ module.exports = async (req, res) => {
 
     const uptime = await checkUptime(site.url)
     let hostname
-    try { hostname = new URL(site.url).hostname } catch (e) { hostname = site.domain }
+    try { hostname = new URL(normalizeUrl(site.url)).hostname } catch (e) { hostname = site.domain }
     const ssl = hostname ? await checkSSL(hostname) : { valid: null, expiresAt: null }
 
     const { data: check, error } = await service.from('website_checks').insert([{

@@ -1,5 +1,5 @@
 const { getServiceClient, requireUser } = require('../_shared')
-const { checkUptime, checkSSL, sniffWordPress } = require('./_lib')
+const { checkUptime, checkSSL, sniffWordPress, normalizeUrl } = require('./_lib')
 
 // Zelfde extractie als api/monitor/pagespeed.js — losse helper omdat deze
 // route geen module-export van die file gebruikt (geen eigen endpoint nodig).
@@ -46,7 +46,7 @@ async function checkOneSite(service, site) {
   result.response_time_ms = uptime.responseTimeMs
 
   let hostname
-  try { hostname = new URL(site.url).hostname } catch (e) { hostname = site.domain }
+  try { hostname = new URL(normalizeUrl(site.url)).hostname } catch (e) { hostname = site.domain }
   if (hostname) {
     const ssl = await checkSSL(hostname)
     result.ssl_valid = ssl.valid
@@ -70,9 +70,10 @@ async function checkOneSite(service, site) {
 
   const key = process.env.PAGESPEED_API_KEY ? `&key=${process.env.PAGESPEED_API_KEY}` : ''
   const pagespeedAudits = {}
+  const pagespeedUrl = normalizeUrl(site.pagespeed_url || site.url)
   for (const strategy of ['mobile', 'desktop']) {
     try {
-      const r = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(site.pagespeed_url || site.url)}&strategy=${strategy}${key}`)
+      const r = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(pagespeedUrl)}&strategy=${strategy}${key}`)
       if (r.ok) {
         const data = await r.json()
         const score = data?.lighthouseResult?.categories?.performance?.score
@@ -111,11 +112,11 @@ module.exports = async (req, res) => {
     // Beperkte gelijktijdigheid i.p.v. alles tegelijk, anders kan een groot aantal
     // sites de functie-tijdslimiet of externe API-rate-limits raken.
     const results = []
-    const batchSize = 3
+    const batchSize = 5
     for (let i = 0; i < sites.length; i += batchSize) {
       const batch = sites.slice(i, i + batchSize)
-      const batchResults = await Promise.all(batch.map(s => checkOneSite(service, s).catch(() => null)))
-      results.push(...batchResults)
+      const batchResults = await Promise.allSettled(batch.map(s => checkOneSite(service, s)))
+      results.push(...batchResults.map(r => r.status === 'fulfilled' ? r.value : null))
     }
 
     res.status(200).json({ checked: sites.length, results })
