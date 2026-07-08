@@ -1,5 +1,6 @@
 import React from 'react'
 import { motion } from 'framer-motion'
+import ProductMockup from './ProductMockup.jsx'
 
 const FEATURES = [
   'Pipeline en sales bijhouden',
@@ -14,22 +15,25 @@ export default function AuthLayout({ title, children }) {
     <div className="auth-shell">
       <style>{`
         .auth-shell{min-height:100vh;display:flex;background:var(--bg-app)}
-        .auth-side{width:40%;background:#09090B;color:#fff;display:flex;flex-direction:column;justify-content:center;padding:56px;flex-shrink:0}
-        .auth-side-logo{width:44px;height:44px;border-radius:12px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:32px}
-        .auth-side h2{font-size:24px;font-weight:700;line-height:1.3;margin-bottom:12px;font-family:var(--heading-font)}
-        .auth-side p{font-size:14px;color:#A1A1AA;margin-bottom:32px}
-        .auth-feature{display:flex;align-items:center;gap:10px;font-size:13px;color:#E4E4E7;margin-bottom:12px}
+        .auth-side{width:46%;background:#09090B;background-image:radial-gradient(circle at 15% 8%, rgba(61,182,142,.16), transparent 45%);color:#fff;display:flex;flex-direction:column;justify-content:center;padding:56px;flex-shrink:0;overflow:hidden}
+        .auth-side-logo{width:40px;height:40px;border-radius:11px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:24px}
+        .auth-side h2{font-size:22px;font-weight:700;line-height:1.3;margin-bottom:10px;font-family:var(--heading-font);max-width:380px}
+        .auth-side p{font-size:13px;color:#A1A1AA;margin-bottom:36px}
+        .auth-mockup-wrap{margin-bottom:40px}
+        .auth-feature{display:flex;align-items:center;gap:10px;font-size:12px;color:#A1A1AA;margin-bottom:10px}
         .auth-feature-check{color:var(--accent);flex-shrink:0}
         .auth-form-panel{flex:1;display:flex;align-items:center;justify-content:center;padding:24px}
         .auth-form-inner{width:100%;max-width:380px}
+        @media(max-width:1024px){ .auth-mockup-wrap{display:none} }
         @media(max-width:768px){ .auth-side{display:none} .auth-form-panel{padding:16px} }
       `}</style>
       <div className="auth-side">
-        <div className="auth-side-logo"><span style={{ color: '#fff', fontSize: 18, fontWeight: 700, fontFamily: 'var(--heading-font)' }}>S</span></div>
+        <div className="auth-side-logo"><span style={{ color: '#fff', fontSize: 17, fontWeight: 700, fontFamily: 'var(--heading-font)' }}>S</span></div>
         <h2>Het CRM speciaal voor webdesigners</h2>
         <p>Beheer klanten, projecten en facturen op één plek.</p>
+        <div className="auth-mockup-wrap"><ProductMockup /></div>
         {FEATURES.map((f, i) => (
-          <motion.div key={f} className="auth-feature" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.08, duration: 0.3 }}>
+          <motion.div key={f} className="auth-feature" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.9 + i * 0.08, duration: 0.3 }}>
             <span className="auth-feature-check">✓</span>{f}
           </motion.div>
         ))}
