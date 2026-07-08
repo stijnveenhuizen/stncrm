@@ -226,7 +226,7 @@ export async function createDemoData(organizationId) {
 }
 
 export async function adminGetOnboardingStats() {
-  return authedFetch('/api/admin-onboarding-stats')
+  return authedFetch('/api/admin?resource=onboarding-stats')
 }
 export async function getOrgMembers(organizationId) {
   const { data, error } = await supabase
@@ -257,36 +257,39 @@ async function authedFetch(path, options = {}) {
   if (!res.ok) throw new Error(body.error || 'Serverfout')
   return body
 }
+// Alle READ-only admin-queries lopen door één serverless function (/api/admin,
+// ?resource=...) en alle admin-only schrijfacties door /api/admin-write
+// (action: ...) — Vercel Hobby staat max 12 functions per deployment toe.
 export async function adminListAccounts() {
-  return authedFetch('/api/admin-list-accounts')
+  return authedFetch('/api/admin?resource=list-accounts')
 }
 export async function adminImpersonate(email, { reason, workspaceId } = {}) {
-  return authedFetch('/api/admin-impersonate', { method: 'POST', body: JSON.stringify({ email, reason, workspaceId }) })
+  return authedFetch('/api/admin-write', { method: 'POST', body: JSON.stringify({ action: 'impersonate', email, reason, workspaceId }) })
 }
 export async function adminEndImpersonation(logId) {
-  return authedFetch('/api/admin-end-impersonation', { method: 'POST', body: JSON.stringify({ logId }) })
+  return authedFetch('/api/admin-write', { method: 'POST', body: JSON.stringify({ action: 'end-impersonation', logId }) })
 }
-export async function adminGetOverview() { return authedFetch('/api/admin-overview') }
-export async function adminGetUserDetail(userId) { return authedFetch(`/api/admin-user-detail?userId=${encodeURIComponent(userId)}`) }
-export async function adminGetWorkspaces() { return authedFetch('/api/admin-workspaces') }
-export async function adminGetWorkspaceDetail(organizationId) { return authedFetch(`/api/admin-workspace-detail?organizationId=${encodeURIComponent(organizationId)}`) }
+export async function adminGetOverview() { return authedFetch('/api/admin?resource=overview') }
+export async function adminGetUserDetail(userId) { return authedFetch(`/api/admin?resource=user-detail&userId=${encodeURIComponent(userId)}`) }
+export async function adminGetWorkspaces() { return authedFetch('/api/admin?resource=workspaces') }
+export async function adminGetWorkspaceDetail(organizationId) { return authedFetch(`/api/admin?resource=workspace-detail&organizationId=${encodeURIComponent(organizationId)}`) }
 export async function adminGetStats({ from, to } = {}) {
-  const params = new URLSearchParams(); if (from) params.set('from', from); if (to) params.set('to', to)
-  return authedFetch(`/api/admin-stats?${params.toString()}`)
+  const params = new URLSearchParams({ resource: 'stats' }); if (from) params.set('from', from); if (to) params.set('to', to)
+  return authedFetch(`/api/admin?${params.toString()}`)
 }
-export async function adminGetHealth() { return authedFetch('/api/admin-health') }
-export async function adminGetErrors() { return authedFetch('/api/admin-errors') }
-export async function adminResolveError(id) { return authedFetch('/api/admin-errors', { method: 'PATCH', body: JSON.stringify({ id }) }) }
-export async function adminGetImpersonationLog() { return authedFetch('/api/admin-impersonation-log') }
+export async function adminGetHealth() { return authedFetch('/api/admin?resource=health') }
+export async function adminGetErrors() { return authedFetch('/api/admin?resource=errors') }
+export async function adminResolveError(id) { return authedFetch('/api/admin-write', { method: 'POST', body: JSON.stringify({ action: 'resolve-error', id }) }) }
+export async function adminGetImpersonationLog() { return authedFetch('/api/admin?resource=impersonation-log') }
 
 // Fire-and-forget: loggen mag een echte gebruikersactie nooit blokkeren of laten falen.
 export function logEvent(eventType, eventName, metadata = {}, workspaceId = null) {
-  authedFetch('/api/admin-log-event', { method: 'POST', body: JSON.stringify({ eventType, eventName, metadata, workspaceId }) }).catch(() => {})
+  authedFetch('/api/admin-log', { method: 'POST', body: JSON.stringify({ type: 'event', eventType, eventName, metadata, workspaceId }) }).catch(() => {})
 }
 export function logClientError(message, stack, route) {
-  fetch('/api/admin-log-error', {
+  fetch('/api/admin-log', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, stack, route }),
+    body: JSON.stringify({ type: 'error', message, stack, route }),
   }).catch(() => {})
 }
 
