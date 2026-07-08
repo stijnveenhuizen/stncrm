@@ -351,6 +351,28 @@ async function impersonationLog(service) {
   return { log: data }
 }
 
+// Uitnodigingen zijn gewone auth.users-rijen met user_metadata.invited_by_admin_email
+// gezet (zie api/admin-write.js: sendInvite) — geen aparte tabel, status volgt uit
+// Supabase's eigen invited_at/confirmed_at velden.
+async function invitations(service) {
+  const { data: userList, error } = await service.auth.admin.listUsers({ perPage: 1000 })
+  if (error) throw error
+  const list = userList.users
+    .filter(u => u.user_metadata?.invited_by_admin_email)
+    .map(u => {
+      const sentAt = u.invited_at || u.created_at
+      const used = !!u.confirmed_at || !!u.email_confirmed_at
+      const expired = !used && sentAt && (Date.now() - new Date(sentAt).getTime()) > 7 * 86400000
+      return {
+        id: u.id, email: u.email, sent_at: sentAt,
+        invited_by: u.user_metadata?.invited_by_admin_email,
+        status: used ? 'gebruikt' : expired ? 'verlopen' : 'openstaand',
+      }
+    })
+    .sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at))
+  return { invitations: list }
+}
+
 // Elke resource-handler heeft de vorm (service, query) => Promise<object>.
 const RESOURCES = {
   overview: (service) => overview(service),
@@ -363,6 +385,7 @@ const RESOURCES = {
   'onboarding-stats': (service) => computeOnboardingFunnel(service),
   errors: (service) => errorsList(service),
   'impersonation-log': (service) => impersonationLog(service),
+  invitations: (service) => invitations(service),
 }
 
 module.exports = async (req, res) => {

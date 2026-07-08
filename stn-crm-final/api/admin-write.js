@@ -35,7 +35,41 @@ async function resolveError(service, adminUser, body) {
   return { ok: true }
 }
 
-const ACTIONS = { impersonate, 'end-impersonation': endImpersonation, 'resolve-error': resolveError }
+// Nieuwe-klant-uitnodigingen: hergebruikt Supabase's eigen invite-mechanisme
+// (auth.admin.inviteUserByEmail) i.p.v. een eigen tokens-tabel + e-mailservice te
+// bouwen — Supabase verstuurt de e-mail zelf (Auth → Email Templates in het
+// dashboard om de tekst aan te passen) en de invite-status volgt uit auth.users
+// zelf (invited_at/confirmed_at), dus geen aparte "invitations"-tabel nodig.
+// user_metadata.invited_by_admin_email markeert dat dit specifiek een
+// platform-invite is (i.p.v. een team- of klantportaal-uitnodiging, die al
+// bestaande, andere mechanismes gebruiken).
+async function sendInvite(service, adminUser, body) {
+  const { email } = body
+  if (!email || !email.trim()) { const e = new Error('E-mailadres ontbreekt.'); e.status = 400; throw e }
+  const redirectTo = body.redirectTo || undefined
+  const { error } = await service.auth.admin.inviteUserByEmail(email.trim(), {
+    redirectTo,
+    data: { invited_by_admin_email: adminUser.email },
+  })
+  if (error) throw error
+  return { ok: true }
+}
+
+async function revokeInvite(service, adminUser, body) {
+  const { userId } = body
+  if (!userId) { const e = new Error('userId ontbreekt.'); e.status = 400; throw e }
+  const { data: userData, error: getErr } = await service.auth.admin.getUserById(userId)
+  if (getErr) throw getErr
+  if (userData?.user?.email_confirmed_at) { const e = new Error('Deze uitnodiging is al gebruikt — het account kan hier niet meer worden ingetrokken.'); e.status = 400; throw e }
+  const { error } = await service.auth.admin.deleteUser(userId)
+  if (error) throw error
+  return { ok: true }
+}
+
+const ACTIONS = {
+  impersonate, 'end-impersonation': endImpersonation, 'resolve-error': resolveError,
+  'send-invite': sendInvite, 'revoke-invite': revokeInvite,
+}
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })

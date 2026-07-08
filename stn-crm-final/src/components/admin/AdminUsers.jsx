@@ -44,7 +44,7 @@ export default function AdminUsers() {
   return (
     <div>
       <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 20 }}>Gebruikers</h1>
-      {error && <div style={{ color: '#fca5a5', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <input className="admin-input" style={{ flex: 1 }} placeholder="Zoeken op naam/email…" value={q} onChange={e => setQ(e.target.value)} />
         <select className="admin-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
@@ -57,19 +57,19 @@ export default function AdminUsers() {
           <option value="naam">Gesorteerd op: Naam</option>
         </select>
       </div>
-      {loading ? <div style={{ color: '#71717A', fontSize: 13 }}>Laden…</div> : (
+      {loading ? <div style={{ color: 'var(--text-muted-tok)', fontSize: 13 }}>Laden…</div> : (
         <div className="admin-card" style={{ overflow: 'hidden' }}>
           <table className="admin-table">
             <thead><tr><th>Gebruiker</th><th>Werkruimtes</th><th>Rol</th><th>Aangemaakt</th><th>Laatste login</th><th>Status</th><th>Acties</th></tr></thead>
             <tbody>
               {filtered.map(u => (
                 <tr key={u.id} className="clickable" onClick={() => setDetailUserId(u.id)}>
-                  <td><div style={{ fontWeight: 500 }}>{u.full_name || '(geen naam)'}</div><div style={{ fontSize: 11, color: '#71717A' }}>{u.email}</div></td>
+                  <td><div style={{ fontWeight: 500 }}>{u.full_name || '(geen naam)'}</div><div style={{ fontSize: 11, color: 'var(--text-muted-tok)' }}>{u.email}</div></td>
                   <td>{u.memberships.length}</td>
-                  <td><span className="admin-badge" style={{ background: '#232323', color: '#A1A1AA' }}>{ROLE_LABEL[u.role] || u.role}</span></td>
+                  <td><span className="admin-badge" style={{ background: 'var(--bg-subtle)', color: 'var(--text-secondary)' }}>{ROLE_LABEL[u.role] || u.role}</span></td>
                   <td>{fdate(u.created_at?.slice(0, 10))}</td>
                   <td>{timeAgo(u.last_sign_in_at)}</td>
-                  <td><span className="admin-badge" style={{ background: u.status === 'actief' ? '#0d2e22' : '#232323', color: u.status === 'actief' ? '#4ade80' : '#71717A' }}>{u.status}</span></td>
+                  <td><span className="admin-badge" style={{ background: u.status === 'actief' ? 'var(--accent-subtle)' : 'var(--bg-subtle)', color: u.status === 'actief' ? 'var(--success)' : 'var(--text-muted-tok)' }}>{u.status}</span></td>
                   <td onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button className="admin-btn" onClick={() => setDetailUserId(u.id)}>Bekijk details</button>
@@ -78,7 +78,7 @@ export default function AdminUsers() {
                   </td>
                 </tr>
               ))}
-              {!filtered.length && <tr><td colSpan={7} style={{ color: '#71717A', textAlign: 'center', padding: 24 }}>Geen gebruikers gevonden.</td></tr>}
+              {!filtered.length && <tr><td colSpan={7} style={{ color: 'var(--text-muted-tok)', textAlign: 'center', padding: 24 }}>Geen gebruikers gevonden.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -109,15 +109,15 @@ function UserDetailPanel({ userId, onClose, onImpersonate }) {
         style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(2px)' }} />
       <motion.div initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
         transition={{ type: 'spring', stiffness: 320, damping: 32, mass: 0.8 }}
-        style={{ position: 'relative', width: 480, maxWidth: '100vw', height: '100%', background: '#161616', borderLeft: '1px solid #2A2A2A', overflowY: 'auto', color: '#F4F4F5' }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid #2A2A2A', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        style={{ position: 'relative', width: 480, maxWidth: '100vw', height: '100%', background: 'var(--surface)', borderLeft: '1px solid var(--border-default)', overflowY: 'auto', color: 'var(--text-primary)' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-default)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>{data?.profile.full_name || 'Gebruiker'}</div>
-            <div style={{ fontSize: 12, color: '#71717A' }}>{data?.profile.email}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted-tok)' }}>{data?.profile.email}</div>
           </div>
-          <button onClick={onClose} style={{ color: '#71717A', fontSize: 20, background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
+          <button onClick={onClose} style={{ color: 'var(--text-muted-tok)', fontSize: 20, background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
         </div>
-        {!data ? <div style={{ padding: 24, color: '#71717A', fontSize: 13 }}>Laden…</div> : (
+        {!data ? <div style={{ padding: 24, color: 'var(--text-muted-tok)', fontSize: 13 }}>Laden…</div> : (
           <div style={{ padding: 20 }}>
             <div className="admin-tabs">
               {[['profiel', 'Profiel'], ['werkruimtes', 'Werkruimtes'], ['activiteit', 'Activiteit'], ['impersonation', 'Impersonation log']].map(([k, l]) => (
@@ -132,19 +132,19 @@ function UserDetailPanel({ userId, onClose, onImpersonate }) {
                 <Row label="Totaal aantal logins" value={data.profile.totalLogins} />
                 <Row label="Meest bezochte pagina" value={data.profile.mostVisitedPage || '—'} />
                 <div style={{ marginTop: 16 }}>
-                  <div style={{ fontSize: 11, color: '#71717A', textTransform: 'uppercase', marginBottom: 8 }}>Gebruikte features</div>
-                  {!data.profile.featuresUsed.length ? <div style={{ color: '#71717A' }}>Nog geen acties gelogd.</div> :
-                    data.profile.featuresUsed.map(f => <span key={f} className="admin-badge" style={{ background: '#232323', color: '#A1A1AA', marginRight: 6, marginBottom: 6 }}>{f}</span>)}
+                  <div style={{ fontSize: 11, color: 'var(--text-muted-tok)', textTransform: 'uppercase', marginBottom: 8 }}>Gebruikte features</div>
+                  {!data.profile.featuresUsed.length ? <div style={{ color: 'var(--text-muted-tok)' }}>Nog geen acties gelogd.</div> :
+                    data.profile.featuresUsed.map(f => <span key={f} className="admin-badge" style={{ background: 'var(--bg-subtle)', color: 'var(--text-secondary)', marginRight: 6, marginBottom: 6 }}>{f}</span>)}
                 </div>
                 <button className="admin-btn admin-btn-danger" style={{ marginTop: 20 }} onClick={() => onImpersonate({ id: data.profile.id, email: data.profile.email, full_name: data.profile.full_name })}>Login als {data.profile.full_name || data.profile.email}</button>
               </div>
             )}
 
             {tab === 'werkruimtes' && (
-              !data.workspaces.length ? <div style={{ color: '#71717A', fontSize: 13 }}>Geen werkruimtes.</div> : data.workspaces.map(w => (
-                <div key={w.id} style={{ padding: '10px 0', borderBottom: '1px solid #232323' }}>
-                  <div style={{ fontWeight: 500, fontSize: 13 }}>{w.name} <span style={{ fontSize: 10, color: '#71717A' }}>· {w.role}</span></div>
-                  <div style={{ fontSize: 12, color: '#71717A' }}>{w.clientCount} klanten · {w.projectCount} projecten · sinds {fdate(w.created_at?.slice(0, 10))}</div>
+              !data.workspaces.length ? <div style={{ color: 'var(--text-muted-tok)', fontSize: 13 }}>Geen werkruimtes.</div> : data.workspaces.map(w => (
+                <div key={w.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--bg-subtle)' }}>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{w.name} <span style={{ fontSize: 10, color: 'var(--text-muted-tok)' }}>· {w.role}</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted-tok)' }}>{w.clientCount} klanten · {w.projectCount} projecten · sinds {fdate(w.created_at?.slice(0, 10))}</div>
                 </div>
               ))
             )}
@@ -158,21 +158,21 @@ function UserDetailPanel({ userId, onClose, onImpersonate }) {
                   <option value="login">Login</option>
                   <option value="logout">Logout</option>
                 </select>
-                {!activity.length ? <div style={{ color: '#71717A', fontSize: 13 }}>Geen activiteit.</div> : activity.map(e => (
-                  <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #232323', fontSize: 12 }}>
+                {!activity.length ? <div style={{ color: 'var(--text-muted-tok)', fontSize: 13 }}>Geen activiteit.</div> : activity.map(e => (
+                  <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--bg-subtle)', fontSize: 12 }}>
                     <span>{e.event_type === 'page_view' ? '👁' : e.event_type === 'login' ? '🔑' : e.event_type === 'logout' ? '🚪' : '⚡'} {e.event_name}</span>
-                    <span style={{ color: '#71717A' }}>{timeAgo(e.created_at)}</span>
+                    <span style={{ color: 'var(--text-muted-tok)' }}>{timeAgo(e.created_at)}</span>
                   </div>
                 ))}
               </div>
             )}
 
             {tab === 'impersonation' && (
-              !data.impersonationLog.length ? <div style={{ color: '#71717A', fontSize: 13 }}>Nooit geïmpersoneerd.</div> : data.impersonationLog.map(l => (
-                <div key={l.id} style={{ padding: '10px 0', borderBottom: '1px solid #232323', fontSize: 12 }}>
+              !data.impersonationLog.length ? <div style={{ color: 'var(--text-muted-tok)', fontSize: 13 }}>Nooit geïmpersoneerd.</div> : data.impersonationLog.map(l => (
+                <div key={l.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--bg-subtle)', fontSize: 12 }}>
                   <div>{fdate(l.created_at?.slice(0, 10))} · door {l.admin_email}</div>
-                  {l.reason && <div style={{ color: '#A1A1AA' }}>"{l.reason}"</div>}
-                  <div style={{ color: '#71717A' }}>{l.ended_at ? `Duur: ${Math.round((new Date(l.ended_at) - new Date(l.created_at)) / 60000)} min` : 'Nog actief / niet afgesloten'}</div>
+                  {l.reason && <div style={{ color: 'var(--text-secondary)' }}>"{l.reason}"</div>}
+                  <div style={{ color: 'var(--text-muted-tok)' }}>{l.ended_at ? `Duur: ${Math.round((new Date(l.ended_at) - new Date(l.created_at)) / 60000)} min` : 'Nog actief / niet afgesloten'}</div>
                 </div>
               ))
             )}
@@ -184,7 +184,7 @@ function UserDetailPanel({ userId, onClose, onImpersonate }) {
 }
 
 function Row({ label, value }) {
-  return <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #232323' }}><span style={{ color: '#71717A' }}>{label}</span><span>{value}</span></div>
+  return <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--bg-subtle)' }}><span style={{ color: 'var(--text-muted-tok)' }}>{label}</span><span>{value}</span></div>
 }
 
 function ImpersonateModal({ user, onClose }) {
@@ -214,14 +214,14 @@ function ImpersonateModal({ user, onClose }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.6)' }} />
       <motion.div initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }} transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        style={{ position: 'relative', width: 420, background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: 12, padding: 24, color: '#F4F4F5' }}>
+        style={{ position: 'relative', width: 420, background: 'var(--surface)', border: '1px solid var(--border-default)', borderRadius: 12, padding: 24, color: 'var(--text-primary)' }}>
         <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Inloggen als {user.full_name || user.email}</h3>
-        <div style={{ background: '#2d1f0033', border: '1px solid #f59e0b55', color: '#fbbf24', borderRadius: 8, padding: '10px 12px', fontSize: 12, marginBottom: 16 }}>
+        <div style={{ background: 'var(--warning-subtle)33', border: '1px solid var(--warning)55', color: 'var(--warning)', borderRadius: 8, padding: '10px 12px', fontSize: 12, marginBottom: 16 }}>
           Je logt in als deze gebruiker. Al je acties worden gelogd.
         </div>
-        <label style={{ fontSize: 12, color: '#A1A1AA', display: 'block', marginBottom: 6 }}>Reden (verplicht)</label>
+        <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>Reden (verplicht)</label>
         <textarea className="admin-input" style={{ width: '100%', height: 70, resize: 'vertical', padding: 10 }} value={reason} onChange={e => setReason(e.target.value)} placeholder="Bijv. klantprobleem reproduceren voor ticket #123" autoFocus />
-        {error && <div style={{ color: '#fca5a5', fontSize: 12, marginTop: 8 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 8 }}>{error}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
           <button className="admin-btn" onClick={onClose} disabled={busy}>Annuleren</button>
           <button className="admin-btn admin-btn-danger" onClick={confirm} disabled={busy}>{busy ? 'Bezig…' : 'Bevestig en login'}</button>

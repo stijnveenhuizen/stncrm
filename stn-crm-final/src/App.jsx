@@ -3,7 +3,9 @@ import { motion } from 'framer-motion'
 import { supabase } from './lib/supabase'
 import * as db from './lib/db'
 import Login from './components/Login.jsx'
-import Signup from './components/Signup.jsx'
+import CompleteAccount from './components/auth/CompleteAccount.jsx'
+import ForgotPassword from './components/auth/ForgotPassword.jsx'
+import ResetPassword from './components/auth/ResetPassword.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import ClientPortal from './components/ClientPortal.jsx'
 import AdminApp from './components/admin/AdminApp.jsx'
@@ -14,13 +16,13 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [role, setRole] = useState(null) // 'staff' | { client }
   const [roleError, setRoleError] = useState(false)
-  const [showSignup, setShowSignup] = useState(false)
   const [fatalError, setFatalError] = useState('')
   const [restoringSession, setRestoringSession] = useState(false)
 
   const isPlatformAdmin = !!session?.user?.email && session.user.email === import.meta.env.VITE_PLATFORM_ADMIN_EMAIL
   const impersonationActive = !!sessionStorage.getItem(ADMIN_SESSION_KEY)
-  const onAdminRoute = window.location.pathname.startsWith('/admin')
+  const pathname = window.location.pathname
+  const onAdminRoute = pathname.startsWith('/admin')
 
   async function stopImpersonating() {
     const raw = sessionStorage.getItem(ADMIN_SESSION_KEY)
@@ -62,6 +64,24 @@ export default function App() {
         return
       } catch (e) { /* self-link policy rejected it, fall through to error state */ }
     }
+
+    // Laatste redmiddel — maar alleen als er geen enkele aanwijzing is dat dit
+    // eigenlijk een klantportaal-account hoort te zijn (portal_client_id-claim),
+    // anders zou een kapotte/verlopen klant-uitnodiging hier per ongeluk een
+    // staff-profiel krijgen in plaats van de juiste foutmelding te tonen.
+    // Dit vangt specifiek: een bestaand account zonder profiel, klantkoppeling
+    // of invite-claim (bv. na een databasereset die profiles leegmaakte maar
+    // auth.users liet staan) — de RLS-policy "insert own profile" staat dit toe
+    // voor de eigen ingelogde gebruiker. Zo land je op het bestaande "nog geen
+    // werkruimte"-scherm i.p.v. vast te lopen op een foutmelding.
+    if (!session.user.user_metadata?.portal_client_id) {
+      try {
+        await db.upsertProfile(session.user.id, { full_name: session.user.user_metadata?.full_name || null })
+        setRole('staff')
+        return
+      } catch (e) { /* echt niets te doen — toon de foutmelding */ }
+    }
+
     setRoleError(true)
   }
 
@@ -99,9 +119,14 @@ export default function App() {
     </div>
   )
 
-  if (!session) return showSignup
-    ? <Signup onBackToLogin={() => setShowSignup(false)} />
-    : <Login onSignupClick={() => setShowSignup(true)} />
+  // Deze drie routes beheren hun eigen sessie-status (een uitnodigings-/
+  // herstellink zet zelf al een sessie op basis van tokens in de URL) en staan
+  // daarom los van de normale !session/resolveRole-afhandeling hieronder.
+  if (pathname.startsWith('/registreer')) return <CompleteAccount />
+  if (pathname.startsWith('/wachtwoord-vergeten')) return <ForgotPassword />
+  if (pathname.startsWith('/wachtwoord-instellen')) return <ResetPassword />
+
+  if (!session) return <Login />
 
   // /admin is een losstaand deel van de app — staat los van de normale
   // staff/klant-rol hierboven. AdminApp doet zelf nogmaals de echte (server-side)

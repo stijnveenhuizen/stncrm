@@ -281,6 +281,13 @@ export async function adminGetHealth() { return authedFetch('/api/admin?resource
 export async function adminGetErrors() { return authedFetch('/api/admin?resource=errors') }
 export async function adminResolveError(id) { return authedFetch('/api/admin-write', { method: 'POST', body: JSON.stringify({ action: 'resolve-error', id }) }) }
 export async function adminGetImpersonationLog() { return authedFetch('/api/admin?resource=impersonation-log') }
+export async function adminGetInvitations() { return authedFetch('/api/admin?resource=invitations') }
+export async function adminSendInvite(email) {
+  return authedFetch('/api/admin-write', { method: 'POST', body: JSON.stringify({ action: 'send-invite', email, redirectTo: `${window.location.origin}/registreer` }) })
+}
+export async function adminRevokeInvite(userId) {
+  return authedFetch('/api/admin-write', { method: 'POST', body: JSON.stringify({ action: 'revoke-invite', userId }) })
+}
 
 // Fire-and-forget: loggen mag een echte gebruikersactie nooit blokkeren of laten falen.
 export function logEvent(eventType, eventName, metadata = {}, workspaceId = null) {

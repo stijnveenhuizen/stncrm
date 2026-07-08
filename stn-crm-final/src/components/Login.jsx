@@ -1,103 +1,71 @@
 import React, { useState } from 'react'
+import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
+import AuthLayout, { AuthField, AuthError, AuthButton, GoogleButton } from './auth/AuthLayout.jsx'
 
-export default function Login({ onSignupClick }) {
+export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [shake, setShake] = useState(false)
+  const justReset = new URLSearchParams(window.location.search).get('reset') === '1'
 
   async function handleLogin(e) {
     e.preventDefault()
     setLoading(true)
     setError('')
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) setError('Ongeldig e-mailadres of wachtwoord.')
+    if (error) {
+      setError('Ongeldig e-mailadres of wachtwoord.')
+      setShake(true); setTimeout(() => setShake(false), 400)
+    }
     setLoading(false)
   }
 
+  async function handleGoogle() {
+    setError('')
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
+    if (error) setError('Google-login is nog niet geconfigureerd voor dit project.')
+  }
+
   return (
-    <div style={{
-      minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center',
-      background:'var(--bg)', fontFamily:'var(--body-font)', padding: '16px'
-    }}>
-      <style>{`
-        @media(max-width: 600px) {
-          h1 { font-size: 18px !important; }
-          p { font-size: 12px !important; }
-          input { font-size: 16px !important; padding: 10px 12px !important; }
-          label { font-size: 10px !important; }
-          button { font-size: 12px !important; }
-        }
-        @media(max-width: 480px) {
-          .login-card { padding: 20px 16px !important; }
-          h1 { font-size: 16px !important; }
-          p { font-size: 11px !important; }
-          input { font-size: 14px !important; padding: 9px 11px !important; }
-        }
-      `}</style>
-      <div style={{width:'100%', maxWidth: 400, padding:'0 8px'}}>
-        {/* Logo / branding */}
-        <div style={{textAlign:'center', marginBottom:40}}>
-          <div style={{
-            display:'inline-flex', alignItems:'center', justifyContent:'center',
-            width:52, height:52, borderRadius:14, background:'var(--accent)',
-            marginBottom:16, boxShadow:'0 4px 14px rgba(61,182,142,0.35)'
-          }}>
-            <span style={{color:'#fff', fontSize:24, fontFamily:'var(--heading-font)', fontWeight:700}}>S</span>
+    <AuthLayout title="Welkom terug">
+      {justReset && (
+        <div style={{ background: 'var(--green-soft)', color: 'var(--green-text)', borderRadius: 'var(--rsm)', padding: '9px 12px', fontSize: 13, marginBottom: 16 }}>
+          Wachtwoord gewijzigd — log opnieuw in.
+        </div>
+      )}
+      <motion.form onSubmit={handleLogin} animate={shake ? { x: [0, -8, 8, -6, 6, 0] } : {}} transition={{ duration: 0.4 }}>
+        <AuthField label="E-mailadres" index={0}>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="jij@stnwebdesign.nl" required autoFocus />
+        </AuthField>
+        <AuthField label="Wachtwoord" index={1}>
+          <div style={{ position: 'relative' }}>
+            <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required style={{ paddingRight: 66 }} />
+            <span onClick={() => setShowPassword(s => !s)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
+              {showPassword ? 'verberg' : 'toon'}
+            </span>
           </div>
-          <h1 style={{fontFamily:'var(--heading-font)', fontSize:22, fontWeight:700, letterSpacing:'-.02em', marginBottom:6}}>STN CRM</h1>
-          <p style={{fontSize:13, color:'var(--text-muted)'}}>Webdesign klantenbeheer</p>
-        </div>
+        </AuthField>
+        {error && <AuthError>{error}</AuthError>}
+        <AuthButton disabled={loading}>{loading ? 'Inloggen…' : 'Inloggen →'}</AuthButton>
+      </motion.form>
 
-        {/* Card */}
-        <div className="login-card" style={{
-          background:'var(--surface)', border:'1px solid var(--border)',
-          borderRadius:'var(--r)', padding:'32px 28px',
-          boxShadow:'var(--shadow-md)'
-        }}>
-          <h2 style={{fontFamily:'var(--heading-font)', fontSize:17, fontWeight:600, marginBottom:24, letterSpacing:'-.01em'}}>Inloggen</h2>
-          <form onSubmit={handleLogin}>
-            <div style={{marginBottom:14}}>
-              <label>E-mailadres</label>
-              <input
-                type="email" value={email} onChange={e=>setEmail(e.target.value)}
-                placeholder="jij@stnwebdesign.nl" required autoFocus
-              />
-            </div>
-            <div style={{marginBottom:22}}>
-              <label>Wachtwoord</label>
-              <input
-                type="password" value={password} onChange={e=>setPassword(e.target.value)}
-                placeholder="••••••••" required
-              />
-            </div>
-            {error && (
-              <div style={{
-                background:'var(--red-soft)', color:'var(--red-text)',
-                borderRadius:'var(--rsm)', padding:'9px 12px', fontSize:13, marginBottom:16,
-                border:'1px solid rgba(220,38,38,0.15)'
-              }}>{error}</div>
-            )}
-            <button type="submit" disabled={loading} style={{
-              width:'100%', padding:'11px', background:'var(--accent)', color:'#fff',
-              borderRadius:'var(--rsm)', fontWeight:600, fontSize:14,
-              fontFamily:'var(--heading-font)', cursor: loading?'not-allowed':'pointer',
-              opacity: loading?.7:1, transition:'all .15s',
-              boxShadow:'0 2px 8px rgba(61,182,142,0.3)'
-            }}>
-              {loading ? 'Inloggen…' : 'Inloggen →'}
-            </button>
-          </form>
-        </div>
-
-        <div style={{textAlign:'center', marginTop:20, fontSize:12, color:'var(--text-muted)'}}>
-          Nog geen account? <span onClick={onSignupClick} style={{color:'var(--accent-text)', fontWeight:600, cursor:'pointer'}}>Bedrijf registreren</span>
-        </div>
-        <div style={{textAlign:'center', marginTop:12, fontSize:11, color:'var(--text-faint)'}}>
-          STN Webdesign · Hardenberg
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0' }}>
+        <div style={{ flex: 1, height: 1, background: 'var(--border-default)' }} />
+        <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>of</span>
+        <div style={{ flex: 1, height: 1, background: 'var(--border-default)' }} />
       </div>
-    </div>
+      <GoogleButton onClick={handleGoogle} />
+
+      <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12 }}>
+        <span onClick={() => { window.location.href = '/wachtwoord-vergeten' }} style={{ color: 'var(--accent-text)', fontWeight: 600, cursor: 'pointer' }}>Wachtwoord vergeten?</span>
+      </div>
+      <div style={{ textAlign: 'center', marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+        Nog geen account? Je hebt een uitnodigingslink nodig.
+      </div>
+    </AuthLayout>
   )
 }

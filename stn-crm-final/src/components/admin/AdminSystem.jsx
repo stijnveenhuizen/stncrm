@@ -43,17 +43,17 @@ function HealthSection() {
 
   return (
     <div className="admin-card" style={{ padding: 20 }}>
-      {!checks ? <div style={{ color: '#71717A', fontSize: 13 }}>Checks uitvoeren…</div> : checks.slice(0, visibleCount).map((c, i) => {
+      {!checks ? <div style={{ color: 'var(--text-muted-tok)', fontSize: 13 }}>Checks uitvoeren…</div> : checks.slice(0, visibleCount).map((c, i) => {
         const meta = STATUS_META[c.status] || STATUS_META.error
         return (
           <motion.div key={c.name} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}
-            style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: i < checks.length - 1 ? '1px solid #232323' : 'none', fontSize: 13 }}>
+            style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: i < checks.length - 1 ? '1px solid var(--bg-subtle)' : 'none', fontSize: 13 }}>
             <span>{c.name}</span>
             <span>{meta.icon} {meta.label(c)}</span>
           </motion.div>
         )
       })}
-      {checks && visibleCount < checks.length && <div style={{ fontSize: 12, color: '#71717A', marginTop: 8 }}>Controleren…</div>}
+      {checks && visibleCount < checks.length && <div style={{ fontSize: 12, color: 'var(--text-muted-tok)', marginTop: 8 }}>Controleren…</div>}
     </div>
   )
 }
@@ -90,7 +90,7 @@ function ErrorsSection() {
           <option value="7d">Laatste 7 dagen</option>
         </select>
       </div>
-      {loading ? <div style={{ color: '#71717A', fontSize: 13 }}>Laden…</div> : (
+      {loading ? <div style={{ color: 'var(--text-muted-tok)', fontSize: 13 }}>Laden…</div> : (
         <div className="admin-card" style={{ overflow: 'hidden' }}>
           <table className="admin-table">
             <thead><tr><th>Tijdstip</th><th>Route</th><th>Error message</th><th>Acties</th></tr></thead>
@@ -101,11 +101,11 @@ function ErrorsSection() {
                   <td>{e.route || '—'}</td>
                   <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.error_message}</td>
                   <td onClick={ev => ev.stopPropagation()}>
-                    {!e.resolved_at ? <button className="admin-btn" onClick={ev => resolve(ev, e.id)}>Markeer als opgelost</button> : <span style={{ fontSize: 11, color: '#4ade80' }}>Opgelost</span>}
+                    {!e.resolved_at ? <button className="admin-btn" onClick={ev => resolve(ev, e.id)}>Markeer als opgelost</button> : <span style={{ fontSize: 11, color: 'var(--success)' }}>Opgelost</span>}
                   </td>
                 </tr>
               ))}
-              {!filtered.length && <tr><td colSpan={4} style={{ textAlign: 'center', color: '#71717A', padding: 24 }}>Geen errors gevonden.</td></tr>}
+              {!filtered.length && <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted-tok)', padding: 24 }}>Geen errors gevonden.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -115,12 +115,12 @@ function ErrorsSection() {
           <div style={{ position: 'fixed', inset: 0, zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelected(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.6)' }} />
             <motion.div initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 4 }}
-              style={{ position: 'relative', width: 640, maxWidth: '90vw', maxHeight: '80vh', overflowY: 'auto', background: '#111', border: '1px solid #2A2A2A', borderRadius: 12, padding: 24 }}>
+              style={{ position: 'relative', width: 640, maxWidth: '90vw', maxHeight: '80vh', overflowY: 'auto', background: '#111', border: '1px solid var(--border-default)', borderRadius: 12, padding: 24 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#F4F4F5' }}>{selected.error_message}</div>
-                <button onClick={() => setSelected(null)} style={{ color: '#71717A', background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}>×</button>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{selected.error_message}</div>
+                <button onClick={() => setSelected(null)} style={{ color: 'var(--text-muted-tok)', background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}>×</button>
               </div>
-              <div style={{ fontSize: 11, color: '#71717A', marginBottom: 12 }}>{selected.route} · {fdate(selected.created_at?.slice(0, 10))}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted-tok)', marginBottom: 12 }}>{selected.route} · {fdate(selected.created_at?.slice(0, 10))}</div>
               <pre style={{ background: '#000', color: '#4ade80', padding: 14, borderRadius: 8, fontSize: 11, fontFamily: 'var(--mono-font, monospace)', whiteSpace: 'pre-wrap', overflowX: 'auto' }}>
                 {selected.error_stack || '(geen stack trace)'}
               </pre>
@@ -137,7 +137,7 @@ function ImpersonationSection() {
   const [loading, setLoading] = useState(true)
   useEffect(() => { db.adminGetImpersonationLog().then(d => setLog(d.log)).catch(e => showToast(e.message, 'error')).finally(() => setLoading(false)) }, [])
 
-  return loading ? <div style={{ color: '#71717A', fontSize: 13 }}>Laden…</div> : (
+  return loading ? <div style={{ color: 'var(--text-muted-tok)', fontSize: 13 }}>Laden…</div> : (
     <div className="admin-card" style={{ overflow: 'hidden' }}>
       <table className="admin-table">
         <thead><tr><th>Datum</th><th>Admin</th><th>Gebruiker</th><th>Reden</th><th>Duur</th><th>Werkruimte</th></tr></thead>
@@ -152,7 +152,7 @@ function ImpersonationSection() {
               <td>{l.organizations?.name || '—'}</td>
             </tr>
           ))}
-          {!log.length && <tr><td colSpan={6} style={{ textAlign: 'center', color: '#71717A', padding: 24 }}>Nog geen impersonaties.</td></tr>}
+          {!log.length && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted-tok)', padding: 24 }}>Nog geen impersonaties.</td></tr>}
         </tbody>
       </table>
     </div>

@@ -16,8 +16,8 @@ export default function AdminWorkspaces() {
   return (
     <div>
       <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 20 }}>Werkruimtes</h1>
-      {error && <div style={{ color: '#fca5a5', fontSize: 13, marginBottom: 12 }}>{error}</div>}
-      {loading ? <div style={{ color: '#71717A', fontSize: 13 }}>Laden…</div> : (
+      {error && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      {loading ? <div style={{ color: 'var(--text-muted-tok)', fontSize: 13 }}>Laden…</div> : (
         <div className="admin-card" style={{ overflow: 'hidden' }}>
           <table className="admin-table">
             <thead><tr><th>Werkruimte</th><th>Eigenaar</th><th>Gebruikers</th><th>Klanten</th><th>Projecten</th><th>Aangemaakt</th></tr></thead>
@@ -32,7 +32,7 @@ export default function AdminWorkspaces() {
                   <td>{fdate(w.created_at?.slice(0, 10))}</td>
                 </tr>
               ))}
-              {!workspaces.length && <tr><td colSpan={6} style={{ color: '#71717A', textAlign: 'center', padding: 24 }}>Geen werkruimtes.</td></tr>}
+              {!workspaces.length && <tr><td colSpan={6} style={{ color: 'var(--text-muted-tok)', textAlign: 'center', padding: 24 }}>Geen werkruimtes.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -71,12 +71,12 @@ function WorkspaceDetailPanel({ organizationId, onClose }) {
         style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(2px)' }} />
       <motion.div initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
         transition={{ type: 'spring', stiffness: 320, damping: 32, mass: 0.8 }}
-        style={{ position: 'relative', width: 480, maxWidth: '100vw', height: '100%', background: '#161616', borderLeft: '1px solid #2A2A2A', overflowY: 'auto', color: '#F4F4F5', padding: 24 }}>
+        style={{ position: 'relative', width: 480, maxWidth: '100vw', height: '100%', background: 'var(--surface)', borderLeft: '1px solid var(--border-default)', overflowY: 'auto', color: 'var(--text-primary)', padding: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{data?.workspace?.name || 'Werkruimte'}</div>
-          <button onClick={onClose} style={{ color: '#71717A', fontSize: 20, background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
+          <button onClick={onClose} style={{ color: 'var(--text-muted-tok)', fontSize: 20, background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
         </div>
-        {!data ? <div style={{ color: '#71717A', fontSize: 13 }}>Laden…</div> : (
+        {!data ? <div style={{ color: 'var(--text-muted-tok)', fontSize: 13 }}>Laden…</div> : (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
               <div className="admin-kpi"><div className="admin-kpi-label">Klanten</div><div className="admin-kpi-value" style={{ fontSize: 18 }}>{data.stats.clientCount}</div></div>
@@ -84,16 +84,16 @@ function WorkspaceDetailPanel({ organizationId, onClose }) {
               <div className="admin-kpi"><div className="admin-kpi-label">Facturen</div><div className="admin-kpi-value" style={{ fontSize: 18 }}>{data.stats.invoiceCount}</div></div>
               <div className="admin-kpi"><div className="admin-kpi-label">Omzet totaal</div><div className="admin-kpi-value" style={{ fontSize: 18 }}>{money(data.stats.revenueTotal)}</div></div>
             </div>
-            <div style={{ fontSize: 11, color: '#71717A', textTransform: 'uppercase', marginBottom: 8 }}>Teamleden</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted-tok)', textTransform: 'uppercase', marginBottom: 8 }}>Teamleden</div>
             {data.members.map(m => (
-              <div key={m.user_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #232323', fontSize: 13 }}>
-                <span>{m.full_name}</span><span style={{ color: '#71717A' }}>{m.role}</span>
+              <div key={m.user_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--bg-subtle)', fontSize: 13 }}>
+                <span>{m.full_name}</span><span style={{ color: 'var(--text-muted-tok)' }}>{m.role}</span>
               </div>
             ))}
-            <div style={{ fontSize: 11, color: '#71717A', textTransform: 'uppercase', margin: '20px 0 8px' }}>Recente activiteit</div>
-            {!data.recentActivity.length ? <div style={{ color: '#71717A', fontSize: 12 }}>Geen recente activiteit.</div> : data.recentActivity.map(e => (
-              <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 12, color: '#A1A1AA' }}>
-                <span>{e.event_name}</span><span style={{ color: '#71717A' }}>{fdate(e.created_at?.slice(0, 10))}</span>
+            <div style={{ fontSize: 11, color: 'var(--text-muted-tok)', textTransform: 'uppercase', margin: '20px 0 8px' }}>Recente activiteit</div>
+            {!data.recentActivity.length ? <div style={{ color: 'var(--text-muted-tok)', fontSize: 12 }}>Geen recente activiteit.</div> : data.recentActivity.map(e => (
+              <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                <span>{e.event_name}</span><span style={{ color: 'var(--text-muted-tok)' }}>{fdate(e.created_at?.slice(0, 10))}</span>
               </div>
             ))}
             <button className="admin-btn admin-btn-danger" style={{ marginTop: 20 }} onClick={impersonateOwner} disabled={busy}>{busy ? 'Bezig…' : 'Login als eigenaar'}</button>

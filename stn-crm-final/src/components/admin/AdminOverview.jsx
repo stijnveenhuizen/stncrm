@@ -13,8 +13,8 @@ export default function AdminOverview({ onNavigate }) {
 
   useEffect(() => { db.adminGetOverview().then(setData).catch(e => setError(e.message)) }, [])
 
-  if (error) return <div style={{ color: '#fca5a5', fontSize: 13 }}>{error}</div>
-  if (!data) return <div style={{ color: '#71717A', fontSize: 13 }}>Laden…</div>
+  if (error) return <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>
+  if (!data) return <div style={{ color: 'var(--text-muted-tok)', fontSize: 13 }}>Laden…</div>
 
   const kpis = [
     { label: 'Totaal gebruikers', value: data.totalUsers },
@@ -31,7 +31,7 @@ export default function AdminOverview({ onNavigate }) {
           <motion.div key={k.label} className="admin-kpi" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06, duration: 0.3 }}>
             <div className="admin-kpi-label">{k.label}</div>
             <div className="admin-kpi-value">{k.display || <CountUp value={k.value} />}</div>
-            {k.change != null && <div style={{ fontSize: 12, marginTop: 4, color: k.change >= 0 ? '#4ade80' : '#f87171' }}>{k.change >= 0 ? '↑' : '↓'} {Math.abs(k.change)}%</div>}
+            {k.change != null && <div style={{ fontSize: 12, marginTop: 4, color: k.change >= 0 ? 'var(--success)' : 'var(--danger)' }}>{k.change >= 0 ? '↑' : '↓'} {Math.abs(k.change)}%</div>}
           </motion.div>
         ))}
       </div>
@@ -42,11 +42,11 @@ export default function AdminOverview({ onNavigate }) {
           <div style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data.userGrowth}>
-                <CartesianGrid stroke="#2A2A2A" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#71717A' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: '#71717A' }} axisLine={false} tickLine={false} width={30} />
-                <Tooltip contentStyle={{ background: '#1A1A1A', border: '1px solid #2A2A2A', fontSize: 12, color: '#F4F4F5' }} />
-                <Line type="monotone" dataKey="users" stroke="#14B8A6" strokeWidth={2} dot={false} />
+                <CartesianGrid stroke="var(--border-default)" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--text-muted-tok)' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted-tok)' }} axisLine={false} tickLine={false} width={30} />
+                <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border-default)', fontSize: 12, color: 'var(--text-primary)' }} />
+                <Line type="monotone" dataKey="users" stroke="var(--accent)" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -56,11 +56,11 @@ export default function AdminOverview({ onNavigate }) {
           <div style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.dau}>
-                <CartesianGrid stroke="#2A2A2A" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#71717A' }} axisLine={false} tickLine={false} interval={4} />
-                <YAxis tick={{ fontSize: 10, fill: '#71717A' }} axisLine={false} tickLine={false} width={30} />
-                <Tooltip contentStyle={{ background: '#1A1A1A', border: '1px solid #2A2A2A', fontSize: 12, color: '#F4F4F5' }} />
-                <Bar dataKey="users" fill="#14B8A6" radius={[3, 3, 0, 0]} />
+                <CartesianGrid stroke="var(--border-default)" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'var(--text-muted-tok)' }} axisLine={false} tickLine={false} interval={4} />
+                <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted-tok)' }} axisLine={false} tickLine={false} width={30} />
+                <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border-default)', fontSize: 12, color: 'var(--text-primary)' }} />
+                <Bar dataKey="users" fill="var(--accent)" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -70,14 +70,14 @@ export default function AdminOverview({ onNavigate }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <div className="admin-card" style={{ padding: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Feature gebruik — meest bezochte pagina's</div>
-          {!data.featureUsage.length ? <div style={{ fontSize: 12, color: '#71717A' }}>Nog geen data.</div> : (
+          {!data.featureUsage.length ? <div style={{ fontSize: 12, color: 'var(--text-muted-tok)' }}>Nog geen data.</div> : (
             <div>
               {data.featureUsage.map(f => {
                 const max = data.featureUsage[0].count || 1
                 return (
                   <div key={f.name} style={{ marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}><span>{f.name}</span><span style={{ color: '#71717A' }}>{f.count}</span></div>
-                    <div style={{ height: 8, background: '#232323', borderRadius: 4 }}><div style={{ height: '100%', width: `${(f.count / max) * 100}%`, background: '#14B8A6', borderRadius: 4 }} /></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}><span>{f.name}</span><span style={{ color: 'var(--text-muted-tok)' }}>{f.count}</span></div>
+                    <div style={{ height: 8, background: 'var(--bg-subtle)', borderRadius: 4 }}><div style={{ height: '100%', width: `${(f.count / max) * 100}%`, background: 'var(--accent)', borderRadius: 4 }} /></div>
                   </div>
                 )
               })}
@@ -96,9 +96,9 @@ export default function AdminOverview({ onNavigate }) {
               <div key={s.step} style={{ marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
                   <span>{i + 1}. {STEP_LABELS[s.step] || s.step}</span>
-                  <span style={{ color: s.dropoffPct > 10 ? '#f59e0b' : '#71717A' }}>{pct}%{s.dropoffPct > 10 ? ' ⚠️' : ''}</span>
+                  <span style={{ color: s.dropoffPct > 10 ? 'var(--warning)' : 'var(--text-muted-tok)' }}>{pct}%{s.dropoffPct > 10 ? ' ⚠️' : ''}</span>
                 </div>
-                <div style={{ height: 8, background: '#232323', borderRadius: 4 }}><div style={{ height: '100%', width: `${pct}%`, background: '#14B8A6', borderRadius: 4 }} /></div>
+                <div style={{ height: 8, background: 'var(--bg-subtle)', borderRadius: 4 }}><div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 4 }} /></div>
               </div>
             )
           })}

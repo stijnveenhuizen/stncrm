@@ -33,15 +33,15 @@ export default function AdminStats() {
     <div>
       <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 20 }}>Statistieken</h1>
       <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
-        {PERIODS.map(([k, l]) => <button key={k} className="admin-btn" style={period === k ? { background: '#0d2e22', color: '#14B8A6', borderColor: '#1c4538' } : {}} onClick={() => setPeriod(k)}>{l}</button>)}
+        {PERIODS.map(([k, l]) => <button key={k} className="admin-btn" style={period === k ? { background: 'var(--accent-subtle)', color: 'var(--accent)', borderColor: 'var(--accent-border)' } : {}} onClick={() => setPeriod(k)}>{l}</button>)}
       </div>
-      {error && <div style={{ color: '#fca5a5', fontSize: 13 }}>{error}</div>}
-      {!data ? <div style={{ color: '#71717A', fontSize: 13 }}>Laden…</div> : (
+      {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
+      {!data ? <div style={{ color: 'var(--text-muted-tok)', fontSize: 13 }}>Laden…</div> : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
             <div className="admin-card" style={{ padding: 20 }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Populairste pagina's</div>
-              {!data.topPages.length ? <div style={{ color: '#71717A', fontSize: 12 }}>Nog geen data.</div> : data.topPages.map(p => (
+              {!data.topPages.length ? <div style={{ color: 'var(--text-muted-tok)', fontSize: 12 }}>Nog geen data.</div> : data.topPages.map(p => (
                 <BarRow key={p.name} label={p.name} value={p.count} max={data.topPages[0].count} />
               ))}
             </div>
@@ -49,7 +49,7 @@ export default function AdminStats() {
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Populairste acties</div>
               <table className="admin-table"><tbody>
                 {data.topActions.map(a => <tr key={a.name}><td>{a.name}</td><td style={{ textAlign: 'right' }}>{a.count}×</td></tr>)}
-                {!data.topActions.length && <tr><td style={{ color: '#71717A' }}>Nog geen data.</td></tr>}
+                {!data.topActions.length && <tr><td style={{ color: 'var(--text-muted-tok)' }}>Nog geen data.</td></tr>}
               </tbody></table>
             </div>
           </div>
@@ -59,11 +59,11 @@ export default function AdminStats() {
             <div style={{ height: 180 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.avgSessionByDay}>
-                  <CartesianGrid stroke="#2A2A2A" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#71717A' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: '#71717A' }} axisLine={false} tickLine={false} width={30} />
-                  <Tooltip contentStyle={{ background: '#1A1A1A', border: '1px solid #2A2A2A', fontSize: 12, color: '#F4F4F5' }} />
-                  <Bar dataKey="minutes" fill="#14B8A6" radius={[3, 3, 0, 0]} />
+                  <CartesianGrid stroke="var(--border-default)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'var(--text-muted-tok)' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted-tok)' }} axisLine={false} tickLine={false} width={30} />
+                  <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border-default)', fontSize: 12, color: 'var(--text-primary)' }} />
+                  <Bar dataKey="minutes" fill="var(--accent)" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -74,12 +74,12 @@ export default function AdminStats() {
             <div style={{ overflowX: 'auto' }}>
               <div style={{ display: 'grid', gridTemplateColumns: `40px repeat(24, 1fr)`, gap: 2, minWidth: 700 }}>
                 <div />
-                {Array.from({ length: 24 }, (_, h) => <div key={h} style={{ fontSize: 9, color: '#71717A', textAlign: 'center' }}>{h}</div>)}
+                {Array.from({ length: 24 }, (_, h) => <div key={h} style={{ fontSize: 9, color: 'var(--text-muted-tok)', textAlign: 'center' }}>{h}</div>)}
                 {DAYS.map((d, di) => (
                   <React.Fragment key={d}>
-                    <div style={{ fontSize: 11, color: '#71717A', display: 'flex', alignItems: 'center' }}>{d}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted-tok)', display: 'flex', alignItems: 'center' }}>{d}</div>
                     {data.heatmap[di].map((v, hi) => (
-                      <div key={hi} title={`${v}`} style={{ height: 16, borderRadius: 2, background: v ? `rgba(20,184,166,${Math.min(1, v / maxHeat)})` : '#1F1F1F' }} />
+                      <div key={hi} title={`${v}`} style={{ height: 16, borderRadius: 2, background: v ? `rgba(61,182,142,${Math.min(1, v / maxHeat)})` : 'var(--bg-subtle)' }} />
                     ))}
                   </React.Fragment>
                 ))}
@@ -109,8 +109,8 @@ export default function AdminStats() {
 function BarRow({ label, value, max, suffix = '' }) {
   return (
     <div style={{ marginBottom: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}><span>{label}</span><span style={{ color: '#71717A' }}>{value}{suffix}</span></div>
-      <div style={{ height: 8, background: '#232323', borderRadius: 4 }}><div style={{ height: '100%', width: `${max ? (value / max) * 100 : 0}%`, background: '#14B8A6', borderRadius: 4 }} /></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}><span>{label}</span><span style={{ color: 'var(--text-muted-tok)' }}>{value}{suffix}</span></div>
+      <div style={{ height: 8, background: 'var(--bg-subtle)', borderRadius: 4 }}><div style={{ height: '100%', width: `${max ? (value / max) * 100 : 0}%`, background: 'var(--accent)', borderRadius: 4 }} /></div>
     </div>
   )
 }

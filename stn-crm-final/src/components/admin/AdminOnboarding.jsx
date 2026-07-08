@@ -10,8 +10,8 @@ export default function AdminOnboarding() {
 
   useEffect(() => { db.adminGetOnboardingStats().then(setData).catch(e => setError(e.message)) }, [])
 
-  if (error) return <div style={{ color: '#fca5a5', fontSize: 13 }}>{error}</div>
-  if (!data) return <div style={{ color: '#71717A', fontSize: 13 }}>Laden…</div>
+  if (error) return <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>
+  if (!data) return <div style={{ color: 'var(--text-muted-tok)', fontSize: 13 }}>Laden…</div>
 
   const maxViewed = data.steps[0]?.viewed || 1
   const worstDropoffIdx = data.steps.reduce((worst, s, i) => (i > 0 && s.dropoffPct > (data.steps[worst]?.dropoffPct || 0)) ? i : worst, -1)
@@ -35,12 +35,12 @@ export default function AdminOnboarding() {
               <div key={s.step} style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5 }}>
                   <span>Stap {i + 1} — {STEP_LABELS[s.step] || s.step}</span>
-                  <span>{pct}% ({s.viewed} gebruikers){i === worstDropoffIdx ? <span style={{ color: '#f59e0b' }}> ⚠️</span> : ''}</span>
+                  <span>{pct}% ({s.viewed} gebruikers){i === worstDropoffIdx ? <span style={{ color: 'var(--warning)' }}> ⚠️</span> : ''}</span>
                 </div>
-                <div style={{ height: 20, background: '#232323', borderRadius: 6 }}>
-                  <div style={{ height: '100%', width: `${pct}%`, background: '#14B8A6', borderRadius: 6, transition: 'width .3s' }} />
+                <div style={{ height: 20, background: 'var(--bg-subtle)', borderRadius: 6 }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 6, transition: 'width .3s' }} />
                 </div>
-                {i > 0 && s.dropoffPct > 0 && <div style={{ fontSize: 11, color: '#f87171', marginTop: 3 }}>-{s.dropoffPct}%</div>}
+                {i > 0 && s.dropoffPct > 0 && <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 3 }}>-{s.dropoffPct}%</div>}
               </div>
             )
           })}
@@ -63,7 +63,7 @@ export default function AdminOnboarding() {
                 <td>{i + 1}. {STEP_LABELS[s.step] || s.step}</td>
                 <td>{s.viewed}</td><td>{s.completed}</td><td>{s.skipped}</td>
                 <td>{s.avgDurationSeconds != null ? `${Math.round(s.avgDurationSeconds)}s` : '—'}</td>
-                <td style={{ color: s.dropoffPct > 10 ? '#f87171' : 'inherit' }}>{s.dropoffPct}%</td>
+                <td style={{ color: s.dropoffPct > 10 ? 'var(--danger)' : 'inherit' }}>{s.dropoffPct}%</td>
               </tr>
             ))}
           </tbody>
@@ -75,11 +75,11 @@ export default function AdminOnboarding() {
         <div style={{ height: 200 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
-              <CartesianGrid stroke="#2A2A2A" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#71717A' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: '#71717A' }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
-              <Tooltip contentStyle={{ background: '#1A1A1A', border: '1px solid #2A2A2A', fontSize: 12, color: '#F4F4F5' }} />
-              <Line type="monotone" dataKey="completions" stroke="#14B8A6" strokeWidth={2} dot={false} />
+              <CartesianGrid stroke="var(--border-default)" strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'var(--text-muted-tok)' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted-tok)' }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
+              <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border-default)', fontSize: 12, color: 'var(--text-primary)' }} />
+              <Line type="monotone" dataKey="completions" stroke="var(--accent)" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
