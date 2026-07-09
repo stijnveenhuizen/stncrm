@@ -356,7 +356,7 @@ export async function outreachDeleteFlow(organizationId, id) {
 export async function outreachStartFlow(organizationId, prospectId, emailId, flowId) {
   return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'start-flow', organizationId, prospectId, emailId, flowId }) })
 }
-export async function outreachGetFlowQueue(organizationId) { return authedFetch(`/api/outreach?resource=flow-queue&organizationId=${organizationId}`) }
+export async function outreachGetFlowQueue(organizationId, filter = 'due') { return authedFetch(`/api/outreach?resource=flow-queue&organizationId=${organizationId}&filter=${filter}`) }
 export async function outreachApproveFlowStep(organizationId, flowStateId) {
   return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'approve-flow-step', organizationId, flowStateId }) })
 }

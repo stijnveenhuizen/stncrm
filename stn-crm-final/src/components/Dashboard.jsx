@@ -2077,15 +2077,21 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
   )
 }
 
+const FLOW_QUEUE_TABS = [['due', 'Due'], ['upcoming', 'Upcoming'], ['done', 'Done']]
+const FLOW_DONE_LABEL = { completed: 'Afgerond', stopped: 'Gestopt' }
+
 function OutreachFlowQueue({ activeOrgId }) {
+  const [tab, setTab] = useState('due')
   const [queue, setQueue] = useState([])
   const [loading, setLoading] = useState(true)
+  const [everUsed, setEverUsed] = useState(false)
   const [busyId, setBusyId] = useState(null)
 
   const refresh = useCallback(() => {
     if (!activeOrgId) return
-    db.outreachGetFlowQueue(activeOrgId).then(d => setQueue(d.queue)).catch(() => {}).finally(() => setLoading(false))
-  }, [activeOrgId])
+    setLoading(true)
+    db.outreachGetFlowQueue(activeOrgId, tab).then(d => { setQueue(d.queue); if (d.queue.length) setEverUsed(true) }).catch(() => {}).finally(() => setLoading(false))
+  }, [activeOrgId, tab])
   useEffect(() => { refresh() }, [refresh])
 
   async function approve(flowStateId) {
@@ -2111,36 +2117,58 @@ function OutreachFlowQueue({ activeOrgId }) {
     finally { setBusyId(null) }
   }
 
-  if (loading || !queue.length) return null
+  if (!everUsed && !queue.length && tab === 'due' && !loading) return null
 
   return (
     <div className="sc" style={{ marginBottom: 20 }}>
-      <div className="sc-head"><span className="sc-title">📨 Outreach — wacht op jouw goedkeuring ({queue.length})</span></div>
-      <div className="sc-body">
-        {queue.map(fs => {
-          const busy = busyId === fs.id
-          return (
-            <div key={fs.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{fs.outreach_prospects.name} <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>· {fs.outreach_flows.name} · stap {fs.current_step}{fs.stepPreview?.isLastStep ? ' (laatste)' : ''}</span></div>
-                  {fs.status === 'queued' && <div style={{ fontSize: 11, color: 'var(--amber-text)', marginTop: 2 }}>Goedgekeurd — wacht op dagelijkse verzendruimte</div>}
-                  {fs.stepPreview && (
-                    <div style={{ marginTop: 6, fontSize: 12, background: 'var(--bg2)', borderRadius: 6, padding: '8px 10px' }}>
-                      <div style={{ fontWeight: 600, marginBottom: 4 }}>{fs.stepPreview.subject}</div>
-                      <div style={{ color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>{fs.stepPreview.body}</div>
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                  {fs.status !== 'queued' && <button className="btn btn-primary btn-xs" disabled={busy} onClick={() => approve(fs.id)}>Goedkeuren</button>}
-                  {fs.status !== 'queued' && <button className="btn btn-ghost btn-xs" disabled={busy} onClick={() => skip(fs.id)}>Overslaan</button>}
-                  <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={busy} onClick={() => stop(fs.id)}>Flow stoppen</button>
-                </div>
-              </div>
-            </div>
-          )
-        })}
+      <div className="sc-head">
+        <span className="sc-title">📨 Outreach — goedkeuringen</span>
+        <div className="tabs" style={{ marginBottom: -14 }}>
+          {FLOW_QUEUE_TABS.map(([k, label]) => (
+            <button key={k} className={`tab${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>{label}</button>
+          ))}
+        </div>
+      </div>
+      <div className="sc-body" style={{ padding: 0 }}>
+        {loading ? <div style={{ padding: 16, fontSize: 13, color: 'var(--text-muted)' }}>Laden…</div> : !queue.length ? (
+          <div style={{ padding: 16, fontSize: 13, color: 'var(--text-faint)' }}>
+            {tab === 'due' ? 'Niets klaar om goed te keuren.' : tab === 'upcoming' ? 'Niets gepland.' : 'Nog niets afgerond.'}
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
+                {['Prospect', 'Flow', 'Stap', 'Voorbeeld', 'Due date', ''].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {queue.map(fs => {
+                const busy = busyId === fs.id
+                return (
+                  <tr key={fs.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '12px 14px', fontWeight: 500 }}>{fs.outreach_prospects.name}</td>
+                    <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{fs.outreach_flows.name}</td>
+                    <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{fs.current_step}{fs.stepPreview?.isLastStep ? ' (laatste)' : ''}</td>
+                    <td style={{ padding: '12px 14px', color: 'var(--text-muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {tab === 'done' ? (FLOW_DONE_LABEL[fs.status] || fs.status) : (fs.stepPreview?.subject || '—')}
+                    </td>
+                    <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{fdate(fs.scheduled_send_at?.slice(0, 10))}</td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        {tab === 'due' && fs.status !== 'queued' && <button className="btn btn-primary btn-xs" disabled={busy} onClick={() => approve(fs.id)}>Goedkeuren</button>}
+                        {tab === 'due' && fs.status !== 'queued' && <button className="btn btn-ghost btn-xs" disabled={busy} onClick={() => skip(fs.id)}>Overslaan</button>}
+                        {tab === 'due' && fs.status === 'queued' && <span style={{ fontSize: 11, color: 'var(--amber-text)' }}>Wacht op verzendruimte</span>}
+                        {tab !== 'done' && <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={busy} onClick={() => stop(fs.id)}>Flow stoppen</button>}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   )
@@ -2826,6 +2854,8 @@ function TeamView({ members, onRefresh, myProfile, activeOrgId }) {
   const ownerCount = members.filter(m => m.role === 'owner').length
   const [gmailStatus, setGmailStatus] = useState(null)
   const [gmailBusy, setGmailBusy] = useState(false)
+  const [sendSettings, setSendSettings] = useState({ outreach_daily_send_limit: 30, outreach_throttle_seconds: 60 })
+  const [sendSettingsSaving, setSendSettingsSaving] = useState(false)
 
   const refreshGmailStatus = useCallback(() => {
     if (!activeOrgId) return
@@ -2833,6 +2863,21 @@ function TeamView({ members, onRefresh, myProfile, activeOrgId }) {
   }, [activeOrgId])
 
   useEffect(() => { refreshGmailStatus() }, [refreshGmailStatus])
+  useEffect(() => {
+    if (!activeOrgId) return
+    db.getCompanySettings(activeOrgId).then(s => {
+      if (s) setSendSettings({ outreach_daily_send_limit: s.outreach_daily_send_limit ?? 30, outreach_throttle_seconds: s.outreach_throttle_seconds ?? 60 })
+    }).catch(() => {})
+  }, [activeOrgId])
+
+  async function saveSendSettings(patch) {
+    const next = { ...sendSettings, ...patch }
+    setSendSettings(next)
+    setSendSettingsSaving(true)
+    try { await db.upsertCompanySettings(activeOrgId, patch) }
+    catch (e) { showToast('Fout bij opslaan: ' + e.message, 'error') }
+    finally { setSendSettingsSaving(false) }
+  }
 
   // Google stuurt na de OAuth-toestemming terug naar deze pagina met ?code=...
   // in de URL — dat ruilen we hier in voor tokens, éénmalig bij het laden.
@@ -2926,6 +2971,34 @@ function TeamView({ members, onRefresh, myProfile, activeOrgId }) {
             ) : (
               <button className="btn btn-primary btn-sm" disabled={gmailBusy} onClick={connectGmail}>{gmailBusy ? 'Bezig…' : 'Gmail koppelen'}</button>
             )}
+          </div>
+        </div>
+        <div className="sc">
+          <div className="sc-head"><span className="sc-title">Verzendinstellingen</span></div>
+          <div className="sc-body">
+            <div className="form-row">
+              <div className="form-group">
+                <label>Dagelijks maximum aantal mails</label>
+                <input type="number" min="1" value={sendSettings.outreach_daily_send_limit}
+                  onChange={e => setSendSettings(s => ({ ...s, outreach_daily_send_limit: Number(e.target.value) }))}
+                  onBlur={e => saveSendSettings({ outreach_daily_send_limit: Number(e.target.value) })} />
+              </div>
+              <div className="form-group">
+                <label>Tijd tussen verzendingen</label>
+                <select value={sendSettings.outreach_throttle_seconds} onChange={e => saveSendSettings({ outreach_throttle_seconds: Number(e.target.value) })}>
+                  <option value={0}>Direct</option>
+                  <option value={60}>1 minuut</option>
+                  <option value={300}>5 minuten</option>
+                  <option value={900}>15 minuten</option>
+                </select>
+              </div>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+              Deze instelling staat klaar, maar heeft nu nog geen zichtbaar effect: onze automatische verzending draait op een dagelijkse cron-taak
+              (Vercel Hobby-plan draait taken hoogstens 1x per dag). Pas bij een upgrade naar Vercel Pro (die vaker per dag kan draaien) gaat verzending
+              ook echt gespreid over de dag plaatsvinden. Het dagelijkse maximum hierboven werkt wel al.
+            </p>
+            {sendSettingsSaving && <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 6 }}>Opslaan…</div>}
           </div>
         </div>
         <div className="sc">

@@ -558,12 +558,35 @@ async function saveFlow(service, body) {
     flowId = data.id
   }
 
+  // Condities verwijzen naar een ANDERE stap in dezelfde flow via een 0-based
+  // index in de "steps"-array van de client — die stap heeft nog geen echte
+  // id totdat we 'm hebben ge-insert. Vandaar twee fases: eerst alle stappen
+  // zonder condities wegschrijven, dan de condities alsnog invullen nu de
+  // echte id's bekend zijn.
   const stepRows = steps.map((s, i) => ({
     flow_id: flowId, step_order: i + 1, subject: s.subject, body: s.body,
     wait_days_after_previous: i === 0 ? 0 : (s.wait_days_after_previous || 0),
   }))
-  const { error: stepErr } = await service.from('outreach_flow_steps').insert(stepRows)
+  const { data: inserted, error: stepErr } = await service.from('outreach_flow_steps').insert(stepRows).select()
   if (stepErr) throw stepErr
+
+  const idByOrder = Object.fromEntries(inserted.map(r => [r.step_order, r.id]))
+  const updates = steps.map((s, i) => {
+    const onReply = s.on_reply || {}
+    const onNoReply = s.on_no_reply || {}
+    return {
+      id: idByOrder[i + 1],
+      on_reply_next_step_id: Number.isInteger(onReply.targetIndex) ? idByOrder[onReply.targetIndex + 1] || null : null,
+      on_reply_stop: !!onReply.stop,
+      on_no_reply_next_step_id: Number.isInteger(onNoReply.targetIndex) ? idByOrder[onNoReply.targetIndex + 1] || null : null,
+      on_no_reply_stop: !!onNoReply.stop,
+    }
+  }).filter(u => u.on_reply_next_step_id || u.on_reply_stop || u.on_no_reply_next_step_id || u.on_no_reply_stop)
+
+  for (const u of updates) {
+    const { id: rowId, ...patch } = u
+    await service.from('outreach_flow_steps').update(patch).eq('id', rowId)
+  }
   return { ok: true, flowId }
 }
 
@@ -593,10 +616,22 @@ async function startFlow(service, body) {
 async function listFlowQueue(service, q) {
   const organizationId = q.organizationId
   if (!organizationId) { const e = new Error('organizationId ontbreekt.'); e.status = 400; throw e }
-  const { data, error } = await service.from('outreach_flow_state')
+  const filter = q.filter || 'due' // 'due' | 'upcoming' | 'done'
+  const nowIso = new Date().toISOString()
+
+  let query = service.from('outreach_flow_state')
     .select('*, outreach_prospects(id, name, sector, address), outreach_emails(email), outreach_flows(name, outreach_flow_steps(*))')
-    .eq('organization_id', organizationId).in('status', ['scheduled', 'queued'])
-    .lte('scheduled_send_at', new Date().toISOString()).order('scheduled_send_at')
+    .eq('organization_id', organizationId)
+
+  if (filter === 'done') {
+    query = query.in('status', ['completed', 'stopped']).order('updated_at', { ascending: false })
+  } else if (filter === 'upcoming') {
+    query = query.eq('status', 'scheduled').gt('scheduled_send_at', nowIso).order('scheduled_send_at')
+  } else {
+    query = query.in('status', ['scheduled', 'queued']).lte('scheduled_send_at', nowIso).order('scheduled_send_at')
+  }
+
+  const { data, error } = await query
   if (error) throw error
 
   const withPreview = data.map(fs => {
@@ -622,11 +657,31 @@ async function getDailyLimit(service, organizationId) {
   return data?.outreach_daily_send_limit || 30
 }
 
-async function advanceOrCompleteFlow(service, flowState, steps, { sent }) {
-  const nextStep = steps.find(s => s.step_order === flowState.current_step + 1)
+// viaReply=false (na goedkeuren/overslaan): volgt on_no_reply_* — niet
+// geconfigureerd (NULL/false) = default = gewoon naar de eerstvolgende stap,
+// exact het oude lineaire gedrag.
+// viaReply=true (na een gedetecteerde reply): volgt on_reply_* — niet
+// geconfigureerd = default = flow stopt, exact het oude (niet-instelbare) gedrag.
+async function advanceOrCompleteFlow(service, flowState, steps, { sent, viaReply }) {
+  const currentStepRow = steps.find(s => s.step_order === flowState.current_step)
   const patch = { updated_at: new Date().toISOString() }
   if (sent) patch.last_sent_at = new Date().toISOString()
-  if (nextStep) {
+
+  let nextStep = null
+  let stop = false
+  if (currentStepRow) {
+    if (viaReply) {
+      if (currentStepRow.on_reply_stop) stop = true
+      else if (currentStepRow.on_reply_next_step_id) nextStep = steps.find(s => s.id === currentStepRow.on_reply_next_step_id)
+      else stop = true
+    } else {
+      if (currentStepRow.on_no_reply_stop) stop = true
+      else if (currentStepRow.on_no_reply_next_step_id) nextStep = steps.find(s => s.id === currentStepRow.on_no_reply_next_step_id)
+      else nextStep = steps.find(s => s.step_order === flowState.current_step + 1)
+    }
+  }
+
+  if (!stop && nextStep) {
     patch.current_step = nextStep.step_order
     patch.status = 'scheduled'
     patch.scheduled_send_at = new Date(Date.now() + nextStep.wait_days_after_previous * 86400000).toISOString()
@@ -663,7 +718,7 @@ async function approveFlowStep(service, body) {
   const { gmailThreadId } = await sendViaGmail(service, organizationId, { to: fs.outreach_emails.email, subject, body: body_, gmailThreadId: fs.gmail_thread_id })
   if (!fs.gmail_thread_id) await service.from('outreach_flow_state').update({ gmail_thread_id: gmailThreadId }).eq('id', flowStateId)
 
-  await advanceOrCompleteFlow(service, fs, steps, { sent: true })
+  await advanceOrCompleteFlow(service, fs, steps, { sent: true, viaReply: false })
   return { ok: true }
 }
 
@@ -674,7 +729,7 @@ async function skipFlowStep(service, body) {
   const { data: fs, error } = await service.from('outreach_flow_state')
     .select('*, outreach_flows(outreach_flow_steps(*))').eq('id', flowStateId).eq('organization_id', organizationId).single()
   if (error || !fs) { const e = new Error('Flow-stap niet gevonden.'); e.status = 404; throw e }
-  await advanceOrCompleteFlow(service, fs, fs.outreach_flows.outreach_flow_steps, { sent: false })
+  await advanceOrCompleteFlow(service, fs, fs.outreach_flows.outreach_flow_steps, { sent: false, viaReply: false })
   return { ok: true }
 }
 
@@ -719,7 +774,7 @@ async function processFlowQueueAndWatch(service) {
         const body_ = renderTemplate(step.body, ctx)
         const { gmailThreadId } = await sendViaGmail(service, organizationId, { to: fs.outreach_emails.email, subject, body: body_, gmailThreadId: fs.gmail_thread_id })
         if (!fs.gmail_thread_id) await service.from('outreach_flow_state').update({ gmail_thread_id: gmailThreadId }).eq('id', fs.id)
-        await advanceOrCompleteFlow(service, fs, steps, { sent: true })
+        await advanceOrCompleteFlow(service, fs, steps, { sent: true, viaReply: false })
         dailyCount++; sent++
       } catch (e) { stillQueued++ }
     }
@@ -757,10 +812,13 @@ async function handleGmailPubSub(service, payload) {
   if (!threadIds.size) return { matched: false }
 
   const { data: matches } = await service.from('outreach_flow_state')
-    .select('id').eq('organization_id', tokenRow.organization_id).in('gmail_thread_id', [...threadIds])
-    .not('status', 'in', '(replied,stopped,completed)')
-  for (const m of matches || []) {
-    await service.from('outreach_flow_state').update({ status: 'replied', updated_at: new Date().toISOString() }).eq('id', m.id)
+    .select('*, outreach_flows(outreach_flow_steps(*))').eq('organization_id', tokenRow.organization_id)
+    .in('gmail_thread_id', [...threadIds]).not('status', 'in', '(stopped,completed)')
+  for (const fs of matches || []) {
+    await service.from('outreach_flow_state').update({ replied_at: new Date().toISOString() }).eq('id', fs.id)
+    // Volgt de on_reply_*-conditie van de huidige stap (default: flow stopt,
+    // zelfde gedrag als voorheen) — zie advanceOrCompleteFlow.
+    await advanceOrCompleteFlow(service, fs, fs.outreach_flows.outreach_flow_steps, { sent: false, viaReply: true })
   }
   return { matched: (matches || []).length > 0, count: (matches || []).length }
 }
