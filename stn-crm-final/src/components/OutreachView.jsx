@@ -6,14 +6,14 @@ import ProspectsTab from './outreach/ProspectsTab.jsx'
 import EmailsTab from './outreach/EmailsTab.jsx'
 import TemplatesTab from './outreach/TemplatesTab.jsx'
 import FlowsTab from './outreach/FlowsTab.jsx'
-import SendsTab from './outreach/SendsTab.jsx'
+import InsightsTab from './outreach/InsightsTab.jsx'
 
 const TABS = [
   ['prospects', 'Prospects'],
   ['emails', 'E-mails'],
   ['templates', 'Sjablonen'],
   ['flows', 'Flows'],
-  ['sends', 'Verzonden'],
+  ['insights', 'Insights'],
 ]
 
 export default function OutreachView({ organizationId }) {
@@ -22,7 +22,6 @@ export default function OutreachView({ organizationId }) {
   const [emails, setEmails] = useState([])
   const [templates, setTemplates] = useState([])
   const [flows, setFlows] = useState([])
-  const [sends, setSends] = useState([])
   const [loading, setLoading] = useState(true)
   // Blijft zichtbaar over sub-tab-wissels heen (niet over een paginaverversing —
   // dat vereist server-side scheduling met seconde-precisie, buiten scope voor nu).
@@ -32,11 +31,11 @@ export default function OutreachView({ organizationId }) {
   const refreshAll = useCallback(async () => {
     if (!organizationId) return
     try {
-      const [p, e, t, fl, s] = await Promise.all([
+      const [p, e, t, fl] = await Promise.all([
         db.outreachGetProspects(organizationId), db.outreachGetEmails(organizationId),
-        db.outreachGetTemplates(organizationId), db.outreachGetFlows(organizationId), db.outreachGetSends(organizationId),
+        db.outreachGetTemplates(organizationId), db.outreachGetFlows(organizationId),
       ])
-      setProspects(p.prospects); setEmails(e.emails); setTemplates(t.templates); setFlows(fl.flows); setSends(s.sends)
+      setProspects(p.prospects); setEmails(e.emails); setTemplates(t.templates); setFlows(fl.flows)
     } catch (e) { showToast('Fout bij laden: ' + e.message, 'error') }
     finally { setLoading(false) }
   }, [organizationId])
@@ -135,8 +134,8 @@ export default function OutreachView({ organizationId }) {
             {tab === 'flows' && (
               <FlowsTab organizationId={organizationId} flows={flows} templates={templates} onRefresh={refreshAll} />
             )}
-            {tab === 'sends' && (
-              <SendsTab organizationId={organizationId} sends={sends} pendingSendId={pendingSend?.send.id} onRefresh={refreshAll} />
+            {tab === 'insights' && (
+              <InsightsTab organizationId={organizationId} />
             )}
           </motion.div>
         </AnimatePresence>

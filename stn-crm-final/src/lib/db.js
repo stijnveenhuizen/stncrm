@@ -334,7 +334,7 @@ export async function outreachCancelSend(organizationId, sendId) {
 export async function outreachConfirmSend(organizationId, sendId) {
   return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'confirm-send', organizationId, sendId }) })
 }
-export async function outreachGetSends(organizationId) { return authedFetch(`/api/outreach?resource=sends&organizationId=${organizationId}`) }
+export async function outreachGetInsights(organizationId, period = '30') { return authedFetch(`/api/outreach?resource=insights&organizationId=${organizationId}&period=${period}`) }
 
 // ── Outreach: Gmail-koppeling ────────────────────────────────────────────────
 export async function outreachGmailStatus(organizationId) { return authedFetch(`/api/outreach?resource=gmail-status&organizationId=${organizationId}`) }

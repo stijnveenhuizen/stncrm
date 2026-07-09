@@ -5,6 +5,7 @@
 //  - Vercel Cron (Bearer CRON_SECRET, verstuurt vervallen follow-ups)
 //  - Postmark's inbound-webhook (geen sessie mogelijk — geverifieerd via een
 //    geheime query-param, zie POSTMARK_WEBHOOK_SECRET)
+const crypto = require('crypto')
 const { getServiceClient, requireUser } = require('./_shared')
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -354,14 +355,74 @@ async function confirmSend(service, body) {
   return { ok: true }
 }
 
-async function listSends(service, q) {
+// ─── Insights: funnel + breakdown + gecombineerde verzendlijst ─────────────
+// Alleen flow-verzendingen (outreach_flow_sends) tellen mee in de funnel en
+// de per-flow/per-sector-breakdown — dat is de enige plek met tracking. De
+// oudere sjabloon-verzendingen (outreach_sends, Postmark) blijven zichtbaar
+// in de gecombineerde lijst maar tonen "—" bij Geopend/Geklikt: ze zijn nooit
+// gemeten, dus meetellen in de funnel zou de percentages vertekenen.
+async function listInsights(service, q) {
   const organizationId = q.organizationId
   if (!organizationId) { const e = new Error('organizationId ontbreekt.'); e.status = 400; throw e }
-  const { data, error } = await service.from('outreach_sends')
-    .select('*, outreach_prospects(id, name), outreach_emails(email)')
-    .eq('organization_id', organizationId).order('created_at', { ascending: false })
-  if (error) throw error
-  return { sends: data }
+  const period = q.period || '30'
+  const sinceIso = period === '30' ? new Date(Date.now() - 30 * 86400000).toISOString()
+    : period === '90' ? new Date(Date.now() - 90 * 86400000).toISOString() : null
+
+  let flowQuery = service.from('outreach_flow_sends')
+    .select('*, outreach_flows(name), outreach_prospects(name, sector)')
+    .eq('organization_id', organizationId).order('sent_at', { ascending: false })
+  if (sinceIso) flowQuery = flowQuery.gte('sent_at', sinceIso)
+  const { data: flowSends, error: fsErr } = await flowQuery
+  if (fsErr) throw fsErr
+
+  let oldQuery = service.from('outreach_sends')
+    .select('*, outreach_prospects(name)')
+    .eq('organization_id', organizationId).not('sent_at', 'is', null).order('sent_at', { ascending: false })
+  if (sinceIso) oldQuery = oldQuery.gte('sent_at', sinceIso)
+  const { data: oldSends, error: osErr } = await oldQuery
+  if (osErr) throw osErr
+
+  const totals = { sent: flowSends.length, opened: 0, clicked: 0, replied: 0 }
+  const byFlowMap = {}, bySectorMap = {}
+  for (const r of flowSends) {
+    const opened = !!r.opened_at, clicked = !!r.clicked_at, replied = !!r.replied_at
+    if (opened) totals.opened++
+    if (clicked) totals.clicked++
+    if (replied) totals.replied++
+
+    const flowKey = r.flow_id
+    byFlowMap[flowKey] ||= { flow_id: flowKey, name: r.outreach_flows?.name || '—', sent: 0, opened: 0, clicked: 0, replied: 0 }
+    byFlowMap[flowKey].sent++
+    if (opened) byFlowMap[flowKey].opened++
+    if (clicked) byFlowMap[flowKey].clicked++
+    if (replied) byFlowMap[flowKey].replied++
+
+    const sectorKey = r.outreach_prospects?.sector || 'Onbekend'
+    bySectorMap[sectorKey] ||= { sector: sectorKey, sent: 0, opened: 0, clicked: 0, replied: 0 }
+    bySectorMap[sectorKey].sent++
+    if (opened) bySectorMap[sectorKey].opened++
+    if (clicked) bySectorMap[sectorKey].clicked++
+    if (replied) bySectorMap[sectorKey].replied++
+  }
+
+  const list = [
+    ...flowSends.map(r => ({
+      id: r.id, source: 'flow', prospect_name: r.outreach_prospects?.name || '—', subject: r.subject,
+      sent_at: r.sent_at, opened_at: r.opened_at, clicked_at: r.clicked_at, replied_at: r.replied_at,
+      flow_name: r.outreach_flows?.name || null, step_order: r.step_order,
+    })),
+    ...oldSends.map(r => ({
+      id: r.id, source: 'template', prospect_name: r.outreach_prospects?.name || '—', subject: r.subject,
+      sent_at: r.sent_at, opened_at: null, clicked_at: null, replied_at: r.replied_at, flow_name: null, step_order: null,
+    })),
+  ].sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at))
+
+  return {
+    period, totals,
+    byFlow: Object.values(byFlowMap).sort((a, b) => b.sent - a.sent),
+    bySector: Object.values(bySectorMap).sort((a, b) => b.sent - a.sent),
+    list,
+  }
 }
 
 // ─── Cron: vervallen follow-ups versturen ──────────────────────────────────
@@ -488,18 +549,33 @@ async function getGmailAccessToken(service, organizationId) {
   return { ...row, ...patch }
 }
 
-function buildRawEmail({ from, to, subject, body, threadSubjectPrefix }) {
+function buildRawEmail({ from, to, subject, body, htmlBody, threadSubjectPrefix }) {
   const finalSubject = threadSubjectPrefix && !/^re:/i.test(subject) ? `Re: ${subject}` : subject
+  if (!htmlBody) {
+    const lines = [
+      `From: ${from}`, `To: ${to}`, `Subject: ${finalSubject}`,
+      'Content-Type: text/plain; charset="UTF-8"', 'MIME-Version: 1.0', '', body,
+    ]
+    return base64url(lines.join('\r\n'))
+  }
+  // multipart/alternative: de plain-text-versie bevat de originele, ongewijzigde
+  // links (schoon voor spamfilters en voor clients die geen HTML tonen); alleen
+  // de HTML-versie krijgt de tracking-pixel en herschreven klik-links, want
+  // vrijwel elke mailclient rendert bij multipart/alternative de HTML-versie.
+  const boundary = `bnd_${crypto.randomBytes(12).toString('hex')}`
   const lines = [
     `From: ${from}`, `To: ${to}`, `Subject: ${finalSubject}`,
-    'Content-Type: text/plain; charset="UTF-8"', 'MIME-Version: 1.0', '', body,
+    'MIME-Version: 1.0', `Content-Type: multipart/alternative; boundary="${boundary}"`, '',
+    `--${boundary}`, 'Content-Type: text/plain; charset="UTF-8"', '', body, '',
+    `--${boundary}`, 'Content-Type: text/html; charset="UTF-8"', '', htmlBody, '',
+    `--${boundary}--`,
   ]
   return base64url(lines.join('\r\n'))
 }
 
-async function sendViaGmail(service, organizationId, { to, subject, body, gmailThreadId }) {
+async function sendViaGmail(service, organizationId, { to, subject, body, htmlBody, gmailThreadId }) {
   const token = await getGmailAccessToken(service, organizationId)
-  const raw = buildRawEmail({ from: token.gmail_email, to, subject, body, threadSubjectPrefix: !!gmailThreadId })
+  const raw = buildRawEmail({ from: token.gmail_email, to, subject, body, htmlBody, threadSubjectPrefix: !!gmailThreadId })
   const payload = { raw }
   if (gmailThreadId) payload.threadId = gmailThreadId
 
@@ -510,6 +586,43 @@ async function sendViaGmail(service, organizationId, { to, subject, body, gmailT
   const data = await r.json().catch(() => ({}))
   if (!r.ok) { const e = new Error(`Gmail gaf een fout: ${data.error?.message || r.status}`); e.status = 502; throw e }
   return { gmailMessageId: data.id, gmailThreadId: data.threadId }
+}
+
+// ─── Open-/klik-tracking voor flow-verzendingen ────────────────────────────
+
+function appBaseUrl() {
+  const url = process.env.APP_BASE_URL
+  if (!url) { const e = new Error('APP_BASE_URL is niet ingesteld — nodig om tracking-links in verzonden mails op te bouwen.'); e.status = 500; throw e }
+  return url.replace(/\/+$/, '')
+}
+
+function makeTrackingToken() {
+  return crypto.randomBytes(20).toString('hex')
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// Bouwt de HTML-versie van de mail: originele tekst met regeleinden -> <br>,
+// elke http(s)-link herschreven naar een klik-redirect, plus een onzichtbare
+// 1x1-pixel aan het eind. Alleen links worden herschreven als de tekst er
+// daadwerkelijk een bevat — geen kunstmatige links toevoegen.
+function buildTrackedHtmlBody(bodyText, token) {
+  const base = `${appBaseUrl()}/api/outreach`
+  const urlRegex = /https?:\/\/[^\s<]+/g
+  let html = '', lastIndex = 0, m
+  while ((m = urlRegex.exec(bodyText))) {
+    html += escapeHtml(bodyText.slice(lastIndex, m.index))
+    const original = m[0]
+    const redirect = `${base}?track_click=1&id=${token}&url=${encodeURIComponent(original)}`
+    html += `<a href="${redirect}">${escapeHtml(original)}</a>`
+    lastIndex = m.index + original.length
+  }
+  html += escapeHtml(bodyText.slice(lastIndex))
+  html = html.replace(/\r\n|\n/g, '<br>')
+  html += `<img src="${base}?track_open=1&id=${token}" width="1" height="1" alt="" style="display:none">`
+  return html
 }
 
 async function ensureGmailWatch(service, organizationId) {
@@ -715,8 +828,14 @@ async function approveFlowStep(service, body) {
   const ctx = { name: fs.outreach_prospects.name, city: guessCity(fs.outreach_prospects.address), sector: fs.outreach_prospects.sector }
   const subject = renderTemplate(step.subject, ctx)
   const body_ = renderTemplate(step.body, ctx)
-  const { gmailThreadId } = await sendViaGmail(service, organizationId, { to: fs.outreach_emails.email, subject, body: body_, gmailThreadId: fs.gmail_thread_id })
+  const trackingToken = makeTrackingToken()
+  const htmlBody = buildTrackedHtmlBody(body_, trackingToken)
+  const { gmailMessageId, gmailThreadId } = await sendViaGmail(service, organizationId, { to: fs.outreach_emails.email, subject, body: body_, htmlBody, gmailThreadId: fs.gmail_thread_id })
   if (!fs.gmail_thread_id) await service.from('outreach_flow_state').update({ gmail_thread_id: gmailThreadId }).eq('id', flowStateId)
+  await service.from('outreach_flow_sends').insert([{
+    organization_id: organizationId, flow_state_id: fs.id, flow_id: fs.flow_id, prospect_id: fs.prospect_id,
+    step_order: fs.current_step, subject, gmail_message_id: gmailMessageId, tracking_token: trackingToken,
+  }])
 
   await advanceOrCompleteFlow(service, fs, steps, { sent: true, viaReply: false })
   return { ok: true }
@@ -772,8 +891,14 @@ async function processFlowQueueAndWatch(service) {
         const ctx = { name: fs.outreach_prospects.name, city: guessCity(fs.outreach_prospects.address), sector: fs.outreach_prospects.sector }
         const subject = renderTemplate(step.subject, ctx)
         const body_ = renderTemplate(step.body, ctx)
-        const { gmailThreadId } = await sendViaGmail(service, organizationId, { to: fs.outreach_emails.email, subject, body: body_, gmailThreadId: fs.gmail_thread_id })
+        const trackingToken = makeTrackingToken()
+        const htmlBody = buildTrackedHtmlBody(body_, trackingToken)
+        const { gmailMessageId, gmailThreadId } = await sendViaGmail(service, organizationId, { to: fs.outreach_emails.email, subject, body: body_, htmlBody, gmailThreadId: fs.gmail_thread_id })
         if (!fs.gmail_thread_id) await service.from('outreach_flow_state').update({ gmail_thread_id: gmailThreadId }).eq('id', fs.id)
+        await service.from('outreach_flow_sends').insert([{
+          organization_id: organizationId, flow_state_id: fs.id, flow_id: fs.flow_id, prospect_id: fs.prospect_id,
+          step_order: fs.current_step, subject, gmail_message_id: gmailMessageId, tracking_token: trackingToken,
+        }])
         await advanceOrCompleteFlow(service, fs, steps, { sent: true, viaReply: false })
         dailyCount++; sent++
       } catch (e) { stillQueued++ }
@@ -815,7 +940,11 @@ async function handleGmailPubSub(service, payload) {
     .select('*, outreach_flows(outreach_flow_steps(*))').eq('organization_id', tokenRow.organization_id)
     .in('gmail_thread_id', [...threadIds]).not('status', 'in', '(stopped,completed)')
   for (const fs of matches || []) {
-    await service.from('outreach_flow_state').update({ replied_at: new Date().toISOString() }).eq('id', fs.id)
+    const repliedAt = new Date().toISOString()
+    await service.from('outreach_flow_state').update({ replied_at: repliedAt }).eq('id', fs.id)
+    // Zet ook replied_at op de outreach_flow_sends-rij van de stap die de reply
+    // ving, voor de Insights-funnel — hergebruikt de bestaande match, geen nieuwe bouw.
+    await service.from('outreach_flow_sends').update({ replied_at: repliedAt }).eq('flow_state_id', fs.id).eq('step_order', fs.current_step)
     // Volgt de on_reply_*-conditie van de huidige stap (default: flow stopt,
     // zelfde gedrag als voorheen) — zie advanceOrCompleteFlow.
     await advanceOrCompleteFlow(service, fs, fs.outreach_flows.outreach_flow_steps, { sent: false, viaReply: true })
@@ -826,8 +955,8 @@ async function handleGmailPubSub(service, payload) {
 // ─── Dispatch ───────────────────────────────────────────────────────────────
 
 const RESOURCES = {
-  prospects: listProspects, emails: listEmails, templates: listTemplates, sends: listSends,
-  flows: listFlows, 'flow-queue': listFlowQueue, 'gmail-status': gmailStatus,
+  prospects: listProspects, emails: listEmails, templates: listTemplates,
+  flows: listFlows, 'flow-queue': listFlowQueue, 'gmail-status': gmailStatus, insights: listInsights,
 }
 const ACTIONS = {
   'search-places': searchPlaces,
@@ -850,8 +979,51 @@ const ACTIONS = {
   'stop-flow': stopFlow,
 }
 
+// Transparante 1x1 GIF voor de open-tracking-pixel.
+const TRACKING_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
+
 module.exports = async (req, res) => {
   try {
+    // Open-/klik-tracking: aangeroepen door mailclients (img-src / link-klik),
+    // dus geen sessie en geen apart secret — de token zelf is niet-raadbaar
+    // en is de enige "auth". Faalt altijd stil door naar de gebruiker toe
+    // (pixel/redirect moeten nooit een zichtbare fout tonen in de mail).
+    if (req.method === 'GET' && req.query?.track_open === '1') {
+      const token = req.query.id
+      if (token) {
+        const service = getServiceClient()
+        service.from('outreach_flow_sends').select('id, opened_at, open_count').eq('tracking_token', token).maybeSingle()
+          .then(({ data }) => {
+            if (!data) return
+            const patch = { open_count: (data.open_count || 0) + 1 }
+            if (!data.opened_at) patch.opened_at = new Date().toISOString()
+            return service.from('outreach_flow_sends').update(patch).eq('id', data.id)
+          }).catch(() => {})
+      }
+      res.setHeader('Content-Type', 'image/gif')
+      res.setHeader('Cache-Control', 'no-store')
+      return res.status(200).send(TRACKING_GIF)
+    }
+
+    if (req.method === 'GET' && req.query?.track_click === '1') {
+      const token = req.query.id
+      const targetUrl = req.query.url
+      if (token) {
+        try {
+          const service = getServiceClient()
+          const { data } = await service.from('outreach_flow_sends').select('id, clicked_at, click_count').eq('tracking_token', token).maybeSingle()
+          if (data) {
+            const patch = { click_count: (data.click_count || 0) + 1 }
+            if (!data.clicked_at) patch.clicked_at = new Date().toISOString()
+            await service.from('outreach_flow_sends').update(patch).eq('id', data.id)
+          }
+        } catch (e) { /* redirect gaat altijd door, ook als loggen mislukt */ }
+      }
+      if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) return res.status(400).send('Ongeldige url')
+      res.writeHead(302, { Location: targetUrl })
+      return res.end()
+    }
+
     // Postmark's inbound-webhook heeft geen sessie — geverifieerd via een
     // geheim query-param dat alleen in de bij Postmark geregistreerde URL staat.
     if (req.method === 'POST' && req.query?.postmark === '1') {
