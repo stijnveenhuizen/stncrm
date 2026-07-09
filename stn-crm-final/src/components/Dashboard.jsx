@@ -204,7 +204,10 @@ function SkeletonScreen() {
 }
 
 export default function Dashboard({ session, isPlatformAdmin, onOpenAdmin }) {
-  const [view, setView] = useState('overview')
+  // Google's OAuth-redirect (Gmail-koppeling) landt op '/', met ?code=... in
+  // de URL — forceer dan de Team-pagina zodat TeamView kan mounten en de
+  // callback kan afhandelen, in plaats van standaard op Overzicht te landen.
+  const [view, setView] = useState(() => new URLSearchParams(window.location.search).get('gmail_oauth') === 'callback' ? 'team' : 'overview')
   const [profile, setProfile] = useState(null)
   const [myOrganizations, setMyOrganizations] = useState([])
   const [activeOrgId, setActiveOrgId] = useState(null)
@@ -984,7 +987,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdmin }) {
             {view==='client-detail' && curClient && <ClientDetailView client={curClient} projects={projects} allTasks={allTasks} allHosting={allHosting} allMeetings={allMeetings} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} currentUserName={profile?.full_name || session.user.email} allReviews={allReviews} />}
             {view==='projects' && <ProjectsView projects={projects} clients={clients} clientName={clientName} allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
             {view==='project-detail' && curProject && <ProjectDetailView project={curProject} clients={clients} clientName={clientName} showView={showView} onRefresh={loadAll} orgMembers={orgMembers} myRole={myRole} currentUserId={session.user.id} currentUserName={profile?.full_name || session.user.email} />}
-            {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} />}
+            {view==='tasks' && <TasksView allTasks={allTasks} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
             {view==='time' && <TimeTrackingView projects={projects} clients={clients} allTimeEntries={allTimeEntries} activeOrgId={activeOrgId} currentUserId={session.user.id} currentUserName={profile?.full_name || session.user.email} companySettings={companySettings} onRefresh={loadAll} runningTimer={runningTimer} onRunningTimerChange={setRunningTimer} />}
             {view==='finance' && <FinanceView allInvoices={allInvoices} allRecurring={allRecurring} totalPaid={totalPaid} totalOpen={totalOpen} totalMRR={totalMRR} showView={showView} clients={clients} onRefresh={loadAll} activeOrgId={activeOrgId} companySettings={companySettings} allHosting={allHosting} />}
             {view==='quote-editor' && <QuoteEditorView quoteId={curQuoteId === 'new' ? null : curQuoteId} clients={clients} activeOrgId={activeOrgId} companySettings={companySettings} showView={showView} />}
@@ -2074,7 +2077,76 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
   )
 }
 
-function TasksView({ allTasks, showView }) {
+function OutreachFlowQueue({ activeOrgId }) {
+  const [queue, setQueue] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [busyId, setBusyId] = useState(null)
+
+  const refresh = useCallback(() => {
+    if (!activeOrgId) return
+    db.outreachGetFlowQueue(activeOrgId).then(d => setQueue(d.queue)).catch(() => {}).finally(() => setLoading(false))
+  }, [activeOrgId])
+  useEffect(() => { refresh() }, [refresh])
+
+  async function approve(flowStateId) {
+    setBusyId(flowStateId)
+    try {
+      const res = await db.outreachApproveFlowStep(activeOrgId, flowStateId)
+      showToast(res.queued ? res.reason : 'Mail verstuurd')
+      refresh()
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setBusyId(null) }
+  }
+  async function skip(flowStateId) {
+    setBusyId(flowStateId)
+    try { await db.outreachSkipFlowStep(activeOrgId, flowStateId); showToast('Stap overgeslagen'); refresh() }
+    catch (e) { showToast(e.message, 'error') }
+    finally { setBusyId(null) }
+  }
+  async function stop(flowStateId) {
+    if (!confirm('Deze flow stopzetten voor deze prospect?')) return
+    setBusyId(flowStateId)
+    try { await db.outreachStopFlow(activeOrgId, flowStateId); showToast('Flow gestopt'); refresh() }
+    catch (e) { showToast(e.message, 'error') }
+    finally { setBusyId(null) }
+  }
+
+  if (loading || !queue.length) return null
+
+  return (
+    <div className="sc" style={{ marginBottom: 20 }}>
+      <div className="sc-head"><span className="sc-title">📨 Outreach — wacht op jouw goedkeuring ({queue.length})</span></div>
+      <div className="sc-body">
+        {queue.map(fs => {
+          const busy = busyId === fs.id
+          return (
+            <div key={fs.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{fs.outreach_prospects.name} <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>· {fs.outreach_flows.name} · stap {fs.current_step}{fs.stepPreview?.isLastStep ? ' (laatste)' : ''}</span></div>
+                  {fs.status === 'queued' && <div style={{ fontSize: 11, color: 'var(--amber-text)', marginTop: 2 }}>Goedgekeurd — wacht op dagelijkse verzendruimte</div>}
+                  {fs.stepPreview && (
+                    <div style={{ marginTop: 6, fontSize: 12, background: 'var(--bg2)', borderRadius: 6, padding: '8px 10px' }}>
+                      <div style={{ fontWeight: 600, marginBottom: 4 }}>{fs.stepPreview.subject}</div>
+                      <div style={{ color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>{fs.stepPreview.body}</div>
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  {fs.status !== 'queued' && <button className="btn btn-primary btn-xs" disabled={busy} onClick={() => approve(fs.id)}>Goedkeuren</button>}
+                  {fs.status !== 'queued' && <button className="btn btn-ghost btn-xs" disabled={busy} onClick={() => skip(fs.id)}>Overslaan</button>}
+                  <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={busy} onClick={() => stop(fs.id)}>Flow stoppen</button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function TasksView({ allTasks, showView, activeOrgId }) {
   const [filter, setFilter] = useState('open')
   const [priorityFilter, setPriorityFilter] = useState('all')
   const [dueFilter, setDueFilter] = useState('all')
@@ -2108,6 +2180,7 @@ function TasksView({ allTasks, showView }) {
         </select>
       </div>
       <div className="content">
+        <OutreachFlowQueue activeOrgId={activeOrgId} />
         <div className="sc"><div className="sc-body">
           {!filtered.length ? (
             <EmptyState icon={EmptyIcons.tasks} title="Geen open taken" sub="Alle taken zijn afgerond, of er zijn er nog geen. Taken voeg je toe vanuit een project."
@@ -2751,6 +2824,49 @@ function TeamView({ members, onRefresh, myProfile, activeOrgId }) {
   const [email, setEmail] = useState('')
   const [inviting, setInviting] = useState(false)
   const ownerCount = members.filter(m => m.role === 'owner').length
+  const [gmailStatus, setGmailStatus] = useState(null)
+  const [gmailBusy, setGmailBusy] = useState(false)
+
+  const refreshGmailStatus = useCallback(() => {
+    if (!activeOrgId) return
+    db.outreachGmailStatus(activeOrgId).then(setGmailStatus).catch(() => {})
+  }, [activeOrgId])
+
+  useEffect(() => { refreshGmailStatus() }, [refreshGmailStatus])
+
+  // Google stuurt na de OAuth-toestemming terug naar deze pagina met ?code=...
+  // in de URL — dat ruilen we hier in voor tokens, éénmalig bij het laden.
+  // redirectUri moet EXACT gelijk zijn aan wat in connectGmail() naar Google
+  // is gestuurd, anders weigert Google's tokendienst de uitwisseling.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('gmail_oauth') !== 'callback' || !activeOrgId) return
+    const code = params.get('code')
+    window.history.replaceState({}, '', window.location.pathname)
+    if (!code) return
+    setGmailBusy(true)
+    db.outreachGmailOAuthExchange(activeOrgId, code, `${window.location.origin}/?gmail_oauth=callback`)
+      .then(() => { showToast('Gmail gekoppeld'); refreshGmailStatus() })
+      .catch(e => showToast('Koppelen mislukt: ' + e.message, 'error'))
+      .finally(() => setGmailBusy(false))
+  }, [activeOrgId, refreshGmailStatus])
+
+  function connectGmail() {
+    const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID
+    if (!clientId) return showToast('VITE_GOOGLE_OAUTH_CLIENT_ID is niet ingesteld.', 'error')
+    const redirectUri = `${window.location.origin}/?gmail_oauth=callback`
+    const scope = 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly'
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`
+    window.location.href = url
+  }
+
+  async function disconnectGmail() {
+    if (!confirm('Gmail-koppeling verwijderen? Outreach-flows kunnen dan niet meer versturen.')) return
+    setGmailBusy(true)
+    try { await db.outreachGmailDisconnect(activeOrgId); refreshGmailStatus() }
+    catch (e) { showToast(e.message, 'error') }
+    finally { setGmailBusy(false) }
+  }
 
   async function invite() {
     if (!email.trim()) return
@@ -2794,6 +2910,22 @@ function TeamView({ members, onRefresh, myProfile, activeOrgId }) {
               <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="collega@bedrijf.nl" onKeyDown={e=>e.key==='Enter'&&invite()} />
               <button className="btn btn-primary btn-sm" onClick={invite} disabled={inviting}>{inviting ? 'Versturen…' : 'Uitnodigen'}</button>
             </div>
+          </div>
+        </div>
+        <div className="sc">
+          <div className="sc-head"><span className="sc-title">Gmail-koppeling voor Outreach</span></div>
+          <div className="sc-body">
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+              Outreach-flows versturen mails namens dit gekoppelde Gmail/Google Workspace-account. Eén koppeling voor de hele werkruimte.
+            </p>
+            {gmailStatus?.connected ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13 }}>✅ Gekoppeld als <strong>{gmailStatus.gmailEmail}</strong></span>
+                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red-text)' }} disabled={gmailBusy} onClick={disconnectGmail}>Loskoppelen</button>
+              </div>
+            ) : (
+              <button className="btn btn-primary btn-sm" disabled={gmailBusy} onClick={connectGmail}>{gmailBusy ? 'Bezig…' : 'Gmail koppelen'}</button>
+            )}
           </div>
         </div>
         <div className="sc">

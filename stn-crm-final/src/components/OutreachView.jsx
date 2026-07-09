@@ -5,12 +5,14 @@ import { showToast } from './Dashboard.jsx'
 import ProspectsTab from './outreach/ProspectsTab.jsx'
 import EmailsTab from './outreach/EmailsTab.jsx'
 import TemplatesTab from './outreach/TemplatesTab.jsx'
+import FlowsTab from './outreach/FlowsTab.jsx'
 import SendsTab from './outreach/SendsTab.jsx'
 
 const TABS = [
   ['prospects', 'Prospects'],
   ['emails', 'E-mails'],
   ['templates', 'Sjablonen'],
+  ['flows', 'Flows'],
   ['sends', 'Verzonden'],
 ]
 
@@ -19,6 +21,7 @@ export default function OutreachView({ organizationId }) {
   const [prospects, setProspects] = useState([])
   const [emails, setEmails] = useState([])
   const [templates, setTemplates] = useState([])
+  const [flows, setFlows] = useState([])
   const [sends, setSends] = useState([])
   const [loading, setLoading] = useState(true)
   // Blijft zichtbaar over sub-tab-wissels heen (niet over een paginaverversing —
@@ -29,11 +32,11 @@ export default function OutreachView({ organizationId }) {
   const refreshAll = useCallback(async () => {
     if (!organizationId) return
     try {
-      const [p, e, t, s] = await Promise.all([
+      const [p, e, t, fl, s] = await Promise.all([
         db.outreachGetProspects(organizationId), db.outreachGetEmails(organizationId),
-        db.outreachGetTemplates(organizationId), db.outreachGetSends(organizationId),
+        db.outreachGetTemplates(organizationId), db.outreachGetFlows(organizationId), db.outreachGetSends(organizationId),
       ])
-      setProspects(p.prospects); setEmails(e.emails); setTemplates(t.templates); setSends(s.sends)
+      setProspects(p.prospects); setEmails(e.emails); setTemplates(t.templates); setFlows(fl.flows); setSends(s.sends)
     } catch (e) { showToast('Fout bij laden: ' + e.message, 'error') }
     finally { setLoading(false) }
   }, [organizationId])
@@ -76,6 +79,14 @@ export default function OutreachView({ organizationId }) {
     finally { setPendingSend(null); refreshAll() }
   }
 
+  async function startFlow(prospectId, emailId, flowId) {
+    try {
+      await db.outreachStartFlow(organizationId, prospectId, emailId, flowId)
+      showToast('Flow gestart — stap 1 staat klaar bij Taken om goed te keuren')
+      refreshAll()
+    } catch (e) { showToast(e.message, 'error') }
+  }
+
   const emailsByProspect = {}
   emails.forEach(e => { (emailsByProspect[e.prospect_id] ||= []).push(e) })
   const prospectById = Object.fromEntries(prospects.map(p => [p.id, p]))
@@ -116,10 +127,13 @@ export default function OutreachView({ organizationId }) {
               <ProspectsTab organizationId={organizationId} prospects={prospects} emailsByProspect={emailsByProspect} onRefresh={refreshAll} />
             )}
             {tab === 'emails' && (
-              <EmailsTab organizationId={organizationId} emails={emails} prospectById={prospectById} pendingSendId={pendingSend?.send.id} onSchedule={startSend} onRefresh={refreshAll} />
+              <EmailsTab organizationId={organizationId} emails={emails} prospectById={prospectById} flows={flows} pendingSendId={pendingSend?.send.id} onSchedule={startSend} onStartFlow={startFlow} onRefresh={refreshAll} />
             )}
             {tab === 'templates' && (
               <TemplatesTab organizationId={organizationId} templates={templates} onRefresh={refreshAll} />
+            )}
+            {tab === 'flows' && (
+              <FlowsTab organizationId={organizationId} flows={flows} templates={templates} onRefresh={refreshAll} />
             )}
             {tab === 'sends' && (
               <SendsTab organizationId={organizationId} sends={sends} pendingSendId={pendingSend?.send.id} onRefresh={refreshAll} />

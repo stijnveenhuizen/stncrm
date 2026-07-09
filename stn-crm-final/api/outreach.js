@@ -404,9 +404,373 @@ async function handlePostmarkInbound(service, payload) {
   return { matched: true, sendId: send.id }
 }
 
+// ─── Gmail OAuth + verzenden ────────────────────────────────────────────────
+// outreach_gmail_tokens heeft BEWUST geen RLS-policies (zie migratie) — deze
+// functies zijn de ENIGE plek die de tabel mag aanraken, altijd via de
+// service-role client. Nooit rechtstreeks vanuit db.js/de browser benaderen.
+
+function base64url(str) {
+  return Buffer.from(str, 'utf-8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+async function gmailOAuthExchange(service, body) {
+  const organizationId = requireOrgId(body)
+  const { code, redirectUri } = body
+  if (!code || !redirectUri) { const e = new Error('code en redirectUri zijn verplicht.'); e.status = 400; throw e }
+  if (!process.env.GOOGLE_OAUTH_CLIENT_ID || !process.env.GOOGLE_OAUTH_CLIENT_SECRET) {
+    const e = new Error('GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET zijn niet ingesteld.')
+    e.status = 400; throw e
+  }
+
+  const tokenRes = await fetchWithTimeout('https://oauth2.googleapis.com/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code, redirect_uri: redirectUri, grant_type: 'authorization_code',
+      client_id: process.env.GOOGLE_OAUTH_CLIENT_ID, client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+    }),
+  }, 15000)
+  const tokens = await tokenRes.json().catch(() => ({}))
+  if (!tokenRes.ok) { const e = new Error(`Google gaf een fout bij het koppelen: ${tokens.error_description || tokens.error || tokenRes.status}`); e.status = 400; throw e }
+  if (!tokens.refresh_token) {
+    const e = new Error('Geen refresh-token ontvangen — Google geeft die alleen bij de eerste koppeling. Trek de toegang in bij myaccount.google.com/permissions en probeer opnieuw.')
+    e.status = 400; throw e
+  }
+
+  const profileRes = await fetchWithTimeout('https://www.googleapis.com/gmail/v1/users/me/profile', {
+    headers: { Authorization: `Bearer ${tokens.access_token}` },
+  }, 10000)
+  const profile = await profileRes.json().catch(() => ({}))
+
+  const { error } = await service.from('outreach_gmail_tokens').upsert([{
+    organization_id: organizationId, gmail_email: profile.emailAddress || 'onbekend',
+    access_token: tokens.access_token, refresh_token: tokens.refresh_token,
+    expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+  }])
+  if (error) throw error
+  return { ok: true, gmailEmail: profile.emailAddress }
+}
+
+async function gmailDisconnect(service, body) {
+  const organizationId = requireOrgId(body)
+  const { error } = await service.from('outreach_gmail_tokens').delete().eq('organization_id', organizationId)
+  if (error) throw error
+  return { ok: true }
+}
+
+async function gmailStatus(service, q) {
+  const organizationId = q.organizationId
+  if (!organizationId) { const e = new Error('organizationId ontbreekt.'); e.status = 400; throw e }
+  const { data } = await service.from('outreach_gmail_tokens').select('gmail_email, watch_expires_at').eq('organization_id', organizationId).maybeSingle()
+  return { connected: !!data, gmailEmail: data?.gmail_email || null }
+}
+
+// Geeft een geldig access token terug, ververst 'm eerst als hij bijna verloopt.
+async function getGmailAccessToken(service, organizationId) {
+  const { data: row, error } = await service.from('outreach_gmail_tokens').select('*').eq('organization_id', organizationId).maybeSingle()
+  if (error) throw error
+  if (!row) { const e = new Error('Gmail is nog niet gekoppeld — regel dit bij Team.'); e.status = 400; throw e }
+
+  if (new Date(row.expires_at).getTime() > Date.now() + 60000) return row
+
+  const r = await fetchWithTimeout('https://oauth2.googleapis.com/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      refresh_token: row.refresh_token, grant_type: 'refresh_token',
+      client_id: process.env.GOOGLE_OAUTH_CLIENT_ID, client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+    }),
+  }, 15000)
+  const tokens = await r.json().catch(() => ({}))
+  if (!r.ok) { const e = new Error(`Gmail-token vernieuwen mislukt: ${tokens.error_description || tokens.error}`); e.status = 502; throw e }
+
+  const patch = { access_token: tokens.access_token, expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(), updated_at: new Date().toISOString() }
+  await service.from('outreach_gmail_tokens').update(patch).eq('organization_id', organizationId)
+  return { ...row, ...patch }
+}
+
+function buildRawEmail({ from, to, subject, body, threadSubjectPrefix }) {
+  const finalSubject = threadSubjectPrefix && !/^re:/i.test(subject) ? `Re: ${subject}` : subject
+  const lines = [
+    `From: ${from}`, `To: ${to}`, `Subject: ${finalSubject}`,
+    'Content-Type: text/plain; charset="UTF-8"', 'MIME-Version: 1.0', '', body,
+  ]
+  return base64url(lines.join('\r\n'))
+}
+
+async function sendViaGmail(service, organizationId, { to, subject, body, gmailThreadId }) {
+  const token = await getGmailAccessToken(service, organizationId)
+  const raw = buildRawEmail({ from: token.gmail_email, to, subject, body, threadSubjectPrefix: !!gmailThreadId })
+  const payload = { raw }
+  if (gmailThreadId) payload.threadId = gmailThreadId
+
+  const r = await fetchWithTimeout('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST', headers: { Authorization: `Bearer ${token.access_token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }, 15000)
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) { const e = new Error(`Gmail gaf een fout: ${data.error?.message || r.status}`); e.status = 502; throw e }
+  return { gmailMessageId: data.id, gmailThreadId: data.threadId }
+}
+
+async function ensureGmailWatch(service, organizationId) {
+  if (!process.env.GMAIL_PUBSUB_TOPIC) return
+  const { data: row } = await service.from('outreach_gmail_tokens').select('watch_expires_at').eq('organization_id', organizationId).maybeSingle()
+  if (row?.watch_expires_at && new Date(row.watch_expires_at).getTime() > Date.now() + 2 * 86400000) return // nog >2 dagen geldig
+
+  const token = await getGmailAccessToken(service, organizationId)
+  const r = await fetchWithTimeout('https://gmail.googleapis.com/gmail/v1/users/me/watch', {
+    method: 'POST', headers: { Authorization: `Bearer ${token.access_token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topicName: process.env.GMAIL_PUBSUB_TOPIC, labelIds: ['INBOX'] }),
+  }, 15000)
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok || !data.expiration) return // best-effort — volgende cron-run probeert het opnieuw
+  await service.from('outreach_gmail_tokens').update({
+    watch_expires_at: new Date(Number(data.expiration)).toISOString(),
+    last_history_id: row?.last_history_id || String(data.historyId || ''),
+  }).eq('organization_id', organizationId)
+}
+
+// ─── Flows: sector-onafhankelijke stappenreeksen ───────────────────────────
+
+async function listFlows(service, q) {
+  const organizationId = q.organizationId
+  if (!organizationId) { const e = new Error('organizationId ontbreekt.'); e.status = 400; throw e }
+  const { data: flows, error } = await service.from('outreach_flows').select('*, outreach_flow_steps(*)').eq('organization_id', organizationId).order('created_at')
+  if (error) throw error
+  flows.forEach(f => f.outreach_flow_steps.sort((a, b) => a.step_order - b.step_order))
+  return { flows }
+}
+
+async function saveFlow(service, body) {
+  const organizationId = requireOrgId(body)
+  const { id, name, is_active, steps } = body
+  if (!name || !Array.isArray(steps) || !steps.length) { const e = new Error('Naam en minstens 1 stap zijn verplicht.'); e.status = 400; throw e }
+  if (steps.length > 5) { const e = new Error('Maximaal 5 stappen per flow.'); e.status = 400; throw e }
+
+  let flowId = id
+  if (flowId) {
+    const { error } = await service.from('outreach_flows').update({ name, is_active }).eq('id', flowId).eq('organization_id', organizationId)
+    if (error) throw error
+    await service.from('outreach_flow_steps').delete().eq('flow_id', flowId)
+  } else {
+    const { data, error } = await service.from('outreach_flows').insert([{ organization_id: organizationId, name, is_active: is_active !== false }]).select().single()
+    if (error) throw error
+    flowId = data.id
+  }
+
+  const stepRows = steps.map((s, i) => ({
+    flow_id: flowId, step_order: i + 1, subject: s.subject, body: s.body,
+    wait_days_after_previous: i === 0 ? 0 : (s.wait_days_after_previous || 0),
+  }))
+  const { error: stepErr } = await service.from('outreach_flow_steps').insert(stepRows)
+  if (stepErr) throw stepErr
+  return { ok: true, flowId }
+}
+
+async function deleteFlow(service, body) {
+  const organizationId = requireOrgId(body)
+  const { id } = body
+  if (!id) { const e = new Error('id ontbreekt.'); e.status = 400; throw e }
+  const { error } = await service.from('outreach_flows').delete().eq('id', id).eq('organization_id', organizationId)
+  if (error) throw error
+  return { ok: true }
+}
+
+// ─── Flow-toewijzing + goedkeuringswachtrij ────────────────────────────────
+
+async function startFlow(service, body) {
+  const organizationId = requireOrgId(body)
+  const { prospectId, emailId, flowId } = body
+  if (!prospectId || !emailId || !flowId) { const e = new Error('prospectId, emailId en flowId zijn verplicht.'); e.status = 400; throw e }
+  const { data, error } = await service.from('outreach_flow_state').insert([{
+    organization_id: organizationId, prospect_id: prospectId, email_id: emailId, flow_id: flowId,
+    current_step: 1, status: 'scheduled', scheduled_send_at: new Date().toISOString(),
+  }]).select().single()
+  if (error) throw error
+  return { flowState: data }
+}
+
+async function listFlowQueue(service, q) {
+  const organizationId = q.organizationId
+  if (!organizationId) { const e = new Error('organizationId ontbreekt.'); e.status = 400; throw e }
+  const { data, error } = await service.from('outreach_flow_state')
+    .select('*, outreach_prospects(id, name, sector, address), outreach_emails(email), outreach_flows(name, outreach_flow_steps(*))')
+    .eq('organization_id', organizationId).in('status', ['scheduled', 'queued'])
+    .lte('scheduled_send_at', new Date().toISOString()).order('scheduled_send_at')
+  if (error) throw error
+
+  const withPreview = data.map(fs => {
+    const step = fs.outreach_flows.outreach_flow_steps.find(s => s.step_order === fs.current_step)
+    const ctx = { name: fs.outreach_prospects.name, city: guessCity(fs.outreach_prospects.address), sector: fs.outreach_prospects.sector }
+    return {
+      ...fs,
+      stepPreview: step ? { subject: renderTemplate(step.subject, ctx), body: renderTemplate(step.body, ctx), isLastStep: !fs.outreach_flows.outreach_flow_steps.some(s => s.step_order === fs.current_step + 1) } : null,
+    }
+  })
+  return { queue: withPreview }
+}
+
+async function getDailySendCount(service, organizationId) {
+  const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0)
+  const { count } = await service.from('outreach_flow_state').select('id', { count: 'exact', head: true })
+    .eq('organization_id', organizationId).gte('last_sent_at', startOfDay.toISOString())
+  return count || 0
+}
+
+async function getDailyLimit(service, organizationId) {
+  const { data } = await service.from('company_settings').select('outreach_daily_send_limit').eq('organization_id', organizationId).maybeSingle()
+  return data?.outreach_daily_send_limit || 30
+}
+
+async function advanceOrCompleteFlow(service, flowState, steps, { sent }) {
+  const nextStep = steps.find(s => s.step_order === flowState.current_step + 1)
+  const patch = { updated_at: new Date().toISOString() }
+  if (sent) patch.last_sent_at = new Date().toISOString()
+  if (nextStep) {
+    patch.current_step = nextStep.step_order
+    patch.status = 'scheduled'
+    patch.scheduled_send_at = new Date(Date.now() + nextStep.wait_days_after_previous * 86400000).toISOString()
+  } else {
+    patch.status = 'completed'
+  }
+  const { error } = await service.from('outreach_flow_state').update(patch).eq('id', flowState.id)
+  if (error) throw error
+}
+
+async function approveFlowStep(service, body) {
+  const organizationId = requireOrgId(body)
+  const { flowStateId } = body
+  if (!flowStateId) { const e = new Error('flowStateId ontbreekt.'); e.status = 400; throw e }
+
+  const { data: fs, error } = await service.from('outreach_flow_state')
+    .select('*, outreach_prospects(name, address, sector), outreach_emails(email), outreach_flows(outreach_flow_steps(*))')
+    .eq('id', flowStateId).eq('organization_id', organizationId).single()
+  if (error || !fs) { const e = new Error('Flow-stap niet gevonden.'); e.status = 404; throw e }
+  const steps = fs.outreach_flows.outreach_flow_steps
+  const step = steps.find(s => s.step_order === fs.current_step)
+  if (!step) { const e = new Error('Stap niet gevonden in flow.'); e.status = 400; throw e }
+
+  const dailyCount = await getDailySendCount(service, organizationId)
+  const dailyLimit = await getDailyLimit(service, organizationId)
+  if (dailyCount >= dailyLimit) {
+    await service.from('outreach_flow_state').update({ status: 'queued', updated_at: new Date().toISOString() }).eq('id', flowStateId)
+    return { queued: true, reason: `Dagelijkse limiet van ${dailyLimit} verzonden mails is bereikt — wordt automatisch verstuurd zodra er weer ruimte is.` }
+  }
+
+  const ctx = { name: fs.outreach_prospects.name, city: guessCity(fs.outreach_prospects.address), sector: fs.outreach_prospects.sector }
+  const subject = renderTemplate(step.subject, ctx)
+  const body_ = renderTemplate(step.body, ctx)
+  const { gmailThreadId } = await sendViaGmail(service, organizationId, { to: fs.outreach_emails.email, subject, body: body_, gmailThreadId: fs.gmail_thread_id })
+  if (!fs.gmail_thread_id) await service.from('outreach_flow_state').update({ gmail_thread_id: gmailThreadId }).eq('id', flowStateId)
+
+  await advanceOrCompleteFlow(service, fs, steps, { sent: true })
+  return { ok: true }
+}
+
+async function skipFlowStep(service, body) {
+  const organizationId = requireOrgId(body)
+  const { flowStateId } = body
+  if (!flowStateId) { const e = new Error('flowStateId ontbreekt.'); e.status = 400; throw e }
+  const { data: fs, error } = await service.from('outreach_flow_state')
+    .select('*, outreach_flows(outreach_flow_steps(*))').eq('id', flowStateId).eq('organization_id', organizationId).single()
+  if (error || !fs) { const e = new Error('Flow-stap niet gevonden.'); e.status = 404; throw e }
+  await advanceOrCompleteFlow(service, fs, fs.outreach_flows.outreach_flow_steps, { sent: false })
+  return { ok: true }
+}
+
+async function stopFlow(service, body) {
+  const organizationId = requireOrgId(body)
+  const { flowStateId, reason } = body
+  if (!flowStateId) { const e = new Error('flowStateId ontbreekt.'); e.status = 400; throw e }
+  const { error } = await service.from('outreach_flow_state')
+    .update({ status: 'stopped', stopped_reason: reason || null, updated_at: new Date().toISOString() })
+    .eq('id', flowStateId).eq('organization_id', organizationId)
+  if (error) throw error
+  return { ok: true }
+}
+
+// Cron: verwerkt 'queued' stappen (goedgekeurd, wachtte op dagelijkse ruimte)
+// en vernieuwt Gmail's watch() voor elke gekoppelde organisatie.
+async function processFlowQueueAndWatch(service) {
+  const { data: tokens } = await service.from('outreach_gmail_tokens').select('organization_id')
+  for (const t of tokens || []) {
+    await ensureGmailWatch(service, t.organization_id).catch(() => {})
+  }
+
+  const { data: queued, error } = await service.from('outreach_flow_state')
+    .select('*, outreach_prospects(name, address, sector), outreach_emails(email), outreach_flows(outreach_flow_steps(*))')
+    .eq('status', 'queued').order('updated_at')
+  if (error) throw error
+
+  let sent = 0, stillQueued = 0
+  const byOrg = {}
+  for (const fs of queued) (byOrg[fs.organization_id] ||= []).push(fs)
+
+  for (const [organizationId, items] of Object.entries(byOrg)) {
+    let dailyCount = await getDailySendCount(service, organizationId)
+    const dailyLimit = await getDailyLimit(service, organizationId)
+    for (const fs of items) {
+      if (dailyCount >= dailyLimit) { stillQueued++; continue }
+      try {
+        const steps = fs.outreach_flows.outreach_flow_steps
+        const step = steps.find(s => s.step_order === fs.current_step)
+        const ctx = { name: fs.outreach_prospects.name, city: guessCity(fs.outreach_prospects.address), sector: fs.outreach_prospects.sector }
+        const subject = renderTemplate(step.subject, ctx)
+        const body_ = renderTemplate(step.body, ctx)
+        const { gmailThreadId } = await sendViaGmail(service, organizationId, { to: fs.outreach_emails.email, subject, body: body_, gmailThreadId: fs.gmail_thread_id })
+        if (!fs.gmail_thread_id) await service.from('outreach_flow_state').update({ gmail_thread_id: gmailThreadId }).eq('id', fs.id)
+        await advanceOrCompleteFlow(service, fs, steps, { sent: true })
+        dailyCount++; sent++
+      } catch (e) { stillQueued++ }
+    }
+  }
+  return { sent, stillQueued }
+}
+
+// ─── Gmail Pub/Sub inbound webhook: reply-detectie ─────────────────────────
+
+async function handleGmailPubSub(service, payload) {
+  const dataB64 = payload?.message?.data
+  if (!dataB64) return { matched: false }
+  const decoded = JSON.parse(Buffer.from(dataB64, 'base64').toString('utf-8'))
+  const { emailAddress, historyId } = decoded
+  if (!emailAddress) return { matched: false }
+
+  const { data: tokenRow } = await service.from('outreach_gmail_tokens').select('*').eq('gmail_email', emailAddress).maybeSingle()
+  if (!tokenRow) return { matched: false }
+
+  const token = await getGmailAccessToken(service, tokenRow.organization_id)
+  const startId = tokenRow.last_history_id || historyId
+  const r = await fetchWithTimeout(`https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId=${startId}&historyTypes=messageAdded`, {
+    headers: { Authorization: `Bearer ${token.access_token}` },
+  }, 15000)
+  const data = await r.json().catch(() => ({}))
+  await service.from('outreach_gmail_tokens').update({ last_history_id: String(historyId) }).eq('organization_id', tokenRow.organization_id)
+  if (!r.ok) return { matched: false }
+
+  const threadIds = new Set()
+  for (const h of data.history || []) {
+    for (const m of h.messagesAdded || []) {
+      if ((m.message.labelIds || []).includes('INBOX')) threadIds.add(m.message.threadId)
+    }
+  }
+  if (!threadIds.size) return { matched: false }
+
+  const { data: matches } = await service.from('outreach_flow_state')
+    .select('id').eq('organization_id', tokenRow.organization_id).in('gmail_thread_id', [...threadIds])
+    .not('status', 'in', '(replied,stopped,completed)')
+  for (const m of matches || []) {
+    await service.from('outreach_flow_state').update({ status: 'replied', updated_at: new Date().toISOString() }).eq('id', m.id)
+  }
+  return { matched: (matches || []).length > 0, count: (matches || []).length }
+}
+
 // ─── Dispatch ───────────────────────────────────────────────────────────────
 
-const RESOURCES = { prospects: listProspects, emails: listEmails, templates: listTemplates, sends: listSends }
+const RESOURCES = {
+  prospects: listProspects, emails: listEmails, templates: listTemplates, sends: listSends,
+  flows: listFlows, 'flow-queue': listFlowQueue, 'gmail-status': gmailStatus,
+}
 const ACTIONS = {
   'search-places': searchPlaces,
   'approve-prospect': updateProspectStatus,
@@ -418,6 +782,14 @@ const ACTIONS = {
   'schedule-send': scheduleSend,
   'cancel-send': cancelSend,
   'confirm-send': confirmSend,
+  'gmail-oauth-exchange': gmailOAuthExchange,
+  'gmail-disconnect': gmailDisconnect,
+  'save-flow': saveFlow,
+  'delete-flow': deleteFlow,
+  'start-flow': startFlow,
+  'approve-flow-step': approveFlowStep,
+  'skip-flow-step': skipFlowStep,
+  'stop-flow': stopFlow,
 }
 
 module.exports = async (req, res) => {
@@ -432,10 +804,21 @@ module.exports = async (req, res) => {
       return res.status(200).json(result)
     }
 
-    // Vercel Cron: dagelijkse follow-up verzending.
-    if (req.headers.authorization === `Bearer ${process.env.CRON_SECRET}`) {
-      const result = await sendFollowups(getServiceClient())
+    // Gmail Pub/Sub push-subscription — zelfde aanpak: geheim in de query-string
+    // i.p.v. Postmark-stijl auth, want ook hier is geen gebruikerssessie mogelijk.
+    if (req.method === 'POST' && req.query?.gmail_pubsub === '1') {
+      if (!process.env.GMAIL_PUBSUB_SECRET || req.query.secret !== process.env.GMAIL_PUBSUB_SECRET) {
+        return res.status(403).json({ error: 'Ongeldig webhook secret.' })
+      }
+      const result = await handleGmailPubSub(getServiceClient(), req.body || {})
       return res.status(200).json(result)
+    }
+
+    // Vercel Cron: dagelijkse follow-up verzending + flow-wachtrij + Gmail watch()-vernieuwing.
+    if (req.headers.authorization === `Bearer ${process.env.CRON_SECRET}`) {
+      const service = getServiceClient()
+      const [followups, flowQueue] = await Promise.all([sendFollowups(service), processFlowQueueAndWatch(service)])
+      return res.status(200).json({ followups, flowQueue })
     }
 
     const { service } = await requireUser(req)

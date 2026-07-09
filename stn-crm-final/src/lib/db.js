@@ -336,6 +336,37 @@ export async function outreachConfirmSend(organizationId, sendId) {
 }
 export async function outreachGetSends(organizationId) { return authedFetch(`/api/outreach?resource=sends&organizationId=${organizationId}`) }
 
+// ── Outreach: Gmail-koppeling ────────────────────────────────────────────────
+export async function outreachGmailStatus(organizationId) { return authedFetch(`/api/outreach?resource=gmail-status&organizationId=${organizationId}`) }
+export async function outreachGmailOAuthExchange(organizationId, code, redirectUri) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'gmail-oauth-exchange', organizationId, code, redirectUri }) })
+}
+export async function outreachGmailDisconnect(organizationId) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'gmail-disconnect', organizationId }) })
+}
+
+// ── Outreach: Flows ──────────────────────────────────────────────────────────
+export async function outreachGetFlows(organizationId) { return authedFetch(`/api/outreach?resource=flows&organizationId=${organizationId}`) }
+export async function outreachSaveFlow(organizationId, flow) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'save-flow', organizationId, ...flow }) })
+}
+export async function outreachDeleteFlow(organizationId, id) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'delete-flow', organizationId, id }) })
+}
+export async function outreachStartFlow(organizationId, prospectId, emailId, flowId) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'start-flow', organizationId, prospectId, emailId, flowId }) })
+}
+export async function outreachGetFlowQueue(organizationId) { return authedFetch(`/api/outreach?resource=flow-queue&organizationId=${organizationId}`) }
+export async function outreachApproveFlowStep(organizationId, flowStateId) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'approve-flow-step', organizationId, flowStateId }) })
+}
+export async function outreachSkipFlowStep(organizationId, flowStateId) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'skip-flow-step', organizationId, flowStateId }) })
+}
+export async function outreachStopFlow(organizationId, flowStateId, reason) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'stop-flow', organizationId, flowStateId, reason }) })
+}
+
 // ── Projects ───────────────────────────────────────────────────────────────────
 // Projects hebben zelf geen organization_id (die hangt af van hun klant) — gescoped
 // via een inner join op clients. Projecten zonder klant horen hierdoor bij geen

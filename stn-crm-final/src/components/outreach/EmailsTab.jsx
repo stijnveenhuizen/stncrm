@@ -8,7 +8,7 @@ const CONFIDENCE_STYLE = {
   missing: { bg: 'var(--bg2)', color: 'var(--text-muted)', label: 'niet gevonden' },
 }
 
-export default function EmailsTab({ organizationId, emails, prospectById, pendingSendId, onSchedule, onRefresh }) {
+export default function EmailsTab({ organizationId, emails, prospectById, flows = [], pendingSendId, onSchedule, onStartFlow, onRefresh }) {
   const [editingId, setEditingId] = useState(null)
   const [editValue, setEditValue] = useState('')
   const [busyId, setBusyId] = useState(null)
@@ -72,8 +72,14 @@ export default function EmailsTab({ organizationId, emails, prospectById, pendin
                     </>}
                     {e.status === 'approved' && (
                       <button className="btn btn-primary btn-xs" disabled={alreadySending} onClick={() => onSchedule(e.prospect_id, e.id)}>
-                        Verstuur
+                        Verstuur (sjabloon)
                       </button>
+                    )}
+                    {e.status === 'approved' && flows.length > 0 && (
+                      <select style={{ width: 'auto', height: 22, fontSize: 11 }} value="" onChange={ev => { ev.target.value && onStartFlow(e.prospect_id, e.id, ev.target.value); ev.target.value = '' }}>
+                        <option value="">Start flow…</option>
+                        {flows.filter(f => f.is_active).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                      </select>
                     )}
                   </div>
                 </td>
