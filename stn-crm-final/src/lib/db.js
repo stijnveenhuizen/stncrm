@@ -300,6 +300,42 @@ export function logClientError(message, stack, route) {
   }).catch(() => {})
 }
 
+// ── Outreach ─────────────────────────────────────────────────────────────────────
+export async function outreachGetProspects(organizationId) { return authedFetch(`/api/outreach?resource=prospects&organizationId=${organizationId}`) }
+export async function outreachSearchPlaces(organizationId, query, region) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'search-places', organizationId, query, region }) })
+}
+export async function outreachApproveProspect(organizationId, id, status) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'approve-prospect', organizationId, id, status }) })
+}
+export async function outreachGetEmails(organizationId) { return authedFetch(`/api/outreach?resource=emails&organizationId=${organizationId}`) }
+export async function outreachFindEmail(organizationId, prospectId) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'find-email', organizationId, prospectId }) })
+}
+export async function outreachFindEmailsBatch(organizationId) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'find-emails-batch', organizationId }) })
+}
+export async function outreachUpdateEmail(organizationId, id, patch) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'update-email', organizationId, id, ...patch }) })
+}
+export async function outreachGetTemplates(organizationId) { return authedFetch(`/api/outreach?resource=templates&organizationId=${organizationId}`) }
+export async function outreachSaveTemplate(organizationId, template) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'save-template', organizationId, ...template }) })
+}
+export async function outreachDeleteTemplate(organizationId, id) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'delete-template', organizationId, id }) })
+}
+export async function outreachScheduleSend(organizationId, prospectId, emailId) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'schedule-send', organizationId, prospectId, emailId }) })
+}
+export async function outreachCancelSend(organizationId, sendId) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'cancel-send', organizationId, sendId }) })
+}
+export async function outreachConfirmSend(organizationId, sendId) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'confirm-send', organizationId, sendId }) })
+}
+export async function outreachGetSends(organizationId) { return authedFetch(`/api/outreach?resource=sends&organizationId=${organizationId}`) }
+
 // ── Projects ───────────────────────────────────────────────────────────────────
 // Projects hebben zelf geen organization_id (die hangt af van hun klant) — gescoped
 // via een inner join op clients. Projecten zonder klant horen hierdoor bij geen

@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import * as db from '../lib/db'
 import ProfileView from './ProfileView.jsx'
 import PipelineView from './PipelineView.jsx'
+import OutreachView from './OutreachView.jsx'
 import OnboardingWizard, { ONBOARDING_STEPS } from './OnboardingWizard.jsx'
 import MonitorTab from './websites/MonitorTab.jsx'
 import LicensesTab from './websites/LicensesTab.jsx'
@@ -941,6 +942,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdmin }) {
         <div className="sidebar2-section">
           <div className="sidebar2-section-label">Beheer</div>
           {navItem('pipeline', 'Pipeline', view==='pipeline')}
+          {navItem('outreach', 'Outreach', view==='outreach')}
           {navItem('finance', 'Financiën', view==='finance')}
           {navItem('hosting', 'Websites', view==='hosting')}
         </div>
@@ -989,6 +991,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdmin }) {
             {view==='hosting' && <WebsitesView allHosting={allHosting} clients={clients} projects={projects} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
             {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} myRole={myRole} onRestartOnboarding={restartOnboardingWizard} />}
             {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} organizationId={activeOrgId} />}
+            {view==='outreach' && <OutreachView organizationId={activeOrgId} />}
             {view==='team' && myRole === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} myProfile={profile} activeOrgId={activeOrgId} />}
             {view==='company-settings' && myRole === 'owner' && <CompanySettingsView activeOrgId={activeOrgId} orgName={orgName} settings={companySettings} onRefresh={() => { loadCompanySettings(); loadOrganizations() }} onAddWorkspace={() => setShowNewWorkspace(true)} />}
           </motion.div>
