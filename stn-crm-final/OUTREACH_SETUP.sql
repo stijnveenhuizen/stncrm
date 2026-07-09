@@ -24,8 +24,12 @@ create table if not exists outreach_prospects (
   created_at timestamptz not null default now()
 );
 create index if not exists outreach_prospects_org_idx on outreach_prospects(organization_id);
+-- Bewust GEEN "where place_id is not null" — Postgres kan een partial unique
+-- index niet als ON CONFLICT-doelwit gebruiken via Supabase's upsert(), wat
+-- de foutmelding "no unique or exclusion constraint..." veroorzaakte. Een
+-- gewone unique index werkt hier identiek: NULL telt nooit als duplicaat.
 create unique index if not exists outreach_prospects_org_place_idx
-  on outreach_prospects(organization_id, place_id) where place_id is not null;
+  on outreach_prospects(organization_id, place_id);
 alter table outreach_prospects enable row level security;
 drop policy if exists "org members access outreach_prospects" on outreach_prospects;
 create policy "org members access outreach_prospects" on outreach_prospects
