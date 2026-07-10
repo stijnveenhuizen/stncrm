@@ -916,6 +916,28 @@ async function advanceOrCompleteFlow(service, flowState, steps, { sent, viaReply
   }
   const { error } = await service.from('outreach_flow_state').update(patch).eq('id', flowState.id)
   if (error) throw error
+  return { stopped: !(!stop && nextStep) }
+}
+
+// Reply → flow stopt (standaard- of expliciet ingesteld gedrag) = de
+// prospect heeft zelf gereageerd en verdient nu persoonlijke opvolging.
+// Maakt daarom automatisch een lead aan in de standaard-pipeline (eerste
+// fase). converted_pipeline_id voorkomt dubbele leads bij een tweede flow
+// of een dubbel binnengekomen reply-webhook.
+async function convertProspectToPipelineLead(service, organizationId, prospect, email) {
+  if (!prospect || prospect.converted_pipeline_id) return
+  const { data: pipelines } = await service.from('pipelines')
+    .select('id, is_default, pipeline_stages(id, sort_order, win_probability)').eq('workspace_id', organizationId).order('created_at')
+  const pipeline = pipelines?.find(p => p.is_default) || pipelines?.[0]
+  const stage = pipeline?.pipeline_stages?.slice().sort((a, b) => a.sort_order - b.sort_order)[0]
+  if (!pipeline || !stage) return // geen pipeline ingericht — niets aan te koppelen
+
+  const { data: lead, error } = await service.from('pipeline').insert([{
+    organization_id: organizationId, pipeline_id: pipeline.id, stage_id: stage.id, win_probability: stage.win_probability,
+    fname: '—', lname: '—', company: prospect.name, email: email || null, phone: prospect.phone || null, source: 'Outreach',
+  }]).select().single()
+  if (error) throw error
+  await service.from('outreach_prospects').update({ converted_pipeline_id: lead.id }).eq('id', prospect.id)
 }
 
 async function approveFlowStep(service, body) {
@@ -1050,7 +1072,7 @@ async function handleGmailPubSub(service, payload) {
   if (!threadIds.size) return { matched: false }
 
   const { data: matches } = await service.from('outreach_flow_state')
-    .select('*, outreach_flows(outreach_flow_steps(*))').eq('organization_id', tokenRow.organization_id)
+    .select('*, outreach_flows(outreach_flow_steps(*)), outreach_prospects(*), outreach_emails(email)').eq('organization_id', tokenRow.organization_id)
     .in('gmail_thread_id', [...threadIds]).not('status', 'in', '(stopped,completed)')
   for (const fs of matches || []) {
     const repliedAt = new Date().toISOString()
@@ -1060,7 +1082,10 @@ async function handleGmailPubSub(service, payload) {
     await service.from('outreach_flow_sends').update({ replied_at: repliedAt }).eq('flow_state_id', fs.id).eq('step_order', fs.current_step)
     // Volgt de on_reply_*-conditie van de huidige stap (default: flow stopt,
     // zelfde gedrag als voorheen) — zie advanceOrCompleteFlow.
-    await advanceOrCompleteFlow(service, fs, fs.outreach_flows.outreach_flow_steps, { sent: false, viaReply: true })
+    const { stopped } = await advanceOrCompleteFlow(service, fs, fs.outreach_flows.outreach_flow_steps, { sent: false, viaReply: true })
+    // Stopt de flow door een reply? Dan verdient de prospect persoonlijke
+    // opvolging — automatisch naar de pipeline, niet pas bij een volgende stap.
+    if (stopped) await convertProspectToPipelineLead(service, tokenRow.organization_id, fs.outreach_prospects, fs.outreach_emails?.email)
   }
   return { matched: (matches || []).length > 0, count: (matches || []).length }
 }

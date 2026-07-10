@@ -267,6 +267,11 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
                             ⚠️ Al bekend {p.duplicate_pipeline?.company || p.duplicate_pipeline?.fname ? `in Pipeline (${p.duplicate_pipeline.company || `${p.duplicate_pipeline.fname} ${p.duplicate_pipeline.lname}`})` : p.duplicate_prospect ? `als Outreach-prospect (${p.duplicate_prospect.name})` : ''}
                         </div>
                       )}
+                      {p.converted_pipeline_id && (
+                        <div style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--green-soft)', color: 'var(--green-text)', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 500 }}>
+                          ✅ Heeft gereageerd — staat in Pipeline
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{p.sector || '—'}</td>
                     <td style={{ padding: '12px 14px' }}>{p.website ? <a href={p.website} target="_blank" rel="noreferrer" style={{ color: 'var(--blue-text)', fontSize: 12 }}>{p.website_domain}</a> : '—'}</td>
