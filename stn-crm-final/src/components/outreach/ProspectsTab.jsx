@@ -17,6 +17,8 @@ async function runBatched(items, worker, batchSize = 3) {
 
 export default function ProspectsTab({ organizationId, prospects, emailsByProspect, flows = [], onRefresh }) {
   const [busyId, setBusyId] = useState(null)
+  const [editingEmailId, setEditingEmailId] = useState(null)
+  const [editingEmailValue, setEditingEmailValue] = useState('')
   const [selected, setSelected] = useState(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkSector, setBulkSector] = useState('')
@@ -51,9 +53,14 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
 
   async function findEmail(id) {
     setBusyId(id)
-    try { await db.outreachFindEmail(organizationId, id); showToast('E-mail gezocht — bekijk resultaat bij "E-mails"'); onRefresh() }
+    try { await db.outreachFindEmail(organizationId, id); showToast('E-mail gezocht'); onRefresh() }
     catch (e) { showToast(e.message, 'error') }
     finally { setBusyId(null) }
+  }
+
+  async function saveEmailEdit(id) {
+    try { await db.outreachUpdateEmail(organizationId, id, { email: editingEmailValue.trim() }); setEditingEmailId(null); onRefresh() }
+    catch (e) { showToast(e.message, 'error') }
   }
 
   function toggleOne(id) {
@@ -278,7 +285,16 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
                     <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{p.phone || '—'}</td>
                     <td style={{ padding: '12px 14px' }}><Badge s={p.status === 'approved' ? 'actief' : p.status === 'rejected' ? 'gestopt' : 'concept'} /></td>
                     <td style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-muted)' }}>
-                      {emailRows.length ? emailRows.map(e => e.email || 'niet gevonden').join(', ') : '—'}
+                      {!emailRows.length ? '—' : editingEmailId === emailRows[0].id ? (
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <input value={editingEmailValue} onChange={e => setEditingEmailValue(e.target.value)} style={{ height: 26, fontSize: 12 }} autoFocus />
+                          <button className="btn btn-ghost btn-xs" onClick={() => saveEmailEdit(emailRows[0].id)}>Opslaan</button>
+                        </div>
+                      ) : (
+                        <span onClick={() => { setEditingEmailId(emailRows[0].id); setEditingEmailValue(emailRows[0].email || '') }} style={{ cursor: 'pointer' }} title="Klik om te bewerken">
+                          {emailRows.map(e => e.email || 'niet gevonden').join(', ')}
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: '12px 14px' }}>
                       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>

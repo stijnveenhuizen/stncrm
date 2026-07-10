@@ -327,22 +327,6 @@ export async function outreachDeleteProspects(organizationId, ids) {
 export async function outreachUpdateEmail(organizationId, id, patch) {
   return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'update-email', organizationId, id, ...patch }) })
 }
-export async function outreachGetTemplates(organizationId) { return authedFetch(`/api/outreach?resource=templates&organizationId=${organizationId}`) }
-export async function outreachSaveTemplate(organizationId, template) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'save-template', organizationId, ...template }) })
-}
-export async function outreachDeleteTemplate(organizationId, id) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'delete-template', organizationId, id }) })
-}
-export async function outreachScheduleSend(organizationId, prospectId, emailId) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'schedule-send', organizationId, prospectId, emailId }) })
-}
-export async function outreachCancelSend(organizationId, sendId) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'cancel-send', organizationId, sendId }) })
-}
-export async function outreachConfirmSend(organizationId, sendId) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'confirm-send', organizationId, sendId }) })
-}
 export async function outreachGetInsights(organizationId, period = '30') { return authedFetch(`/api/outreach?resource=insights&organizationId=${organizationId}&period=${period}`) }
 
 // ── Outreach: Gmail-koppeling ────────────────────────────────────────────────

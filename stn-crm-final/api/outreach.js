@@ -342,91 +342,12 @@ async function updateEmail(service, body) {
   return { ok: true }
 }
 
-// ─── Sector-sjablonen ───────────────────────────────────────────────────────
-
-async function listTemplates(service, q) {
-  const organizationId = q.organizationId
-  if (!organizationId) { const e = new Error('organizationId ontbreekt.'); e.status = 400; throw e }
-  const { data, error } = await service.from('outreach_templates').select('*').eq('organization_id', organizationId).order('sector')
-  if (error) throw error
-  return { templates: data }
-}
-
-async function saveTemplate(service, body) {
-  const organizationId = requireOrgId(body)
-  const { id, sector, subject, template_body, follow_up_subject, follow_up_body, follow_up_wait_days } = body
-  if (!sector || !subject || !template_body) { const e = new Error('Sector, onderwerp en tekst zijn verplicht.'); e.status = 400; throw e }
-  const payload = {
-    organization_id: organizationId, sector, subject, body: template_body,
-    follow_up_subject: follow_up_subject || null, follow_up_body: follow_up_body || null,
-    follow_up_wait_days: follow_up_wait_days || 5, updated_at: new Date().toISOString(),
-  }
-  if (id) {
-    const { error } = await service.from('outreach_templates').update(payload).eq('id', id).eq('organization_id', organizationId)
-    if (error) throw error
-    return { ok: true }
-  }
-  const { data, error } = await service.from('outreach_templates').insert([payload]).select().single()
-  if (error) throw error
-  return { template: data }
-}
-
-async function deleteTemplate(service, body) {
-  const organizationId = requireOrgId(body)
-  const { id } = body
-  if (!id) { const e = new Error('id ontbreekt.'); e.status = 400; throw e }
-  const { error } = await service.from('outreach_templates').delete().eq('id', id).eq('organization_id', organizationId)
-  if (error) throw error
-  return { ok: true }
-}
-
-// ─── Goedkeuring + verzending ───────────────────────────────────────────────
-
-const UNDO_WINDOW_SECONDS = 60
-
-async function scheduleSend(service, body) {
-  const organizationId = requireOrgId(body)
-  const { prospectId, emailId } = body
-  if (!prospectId || !emailId) { const e = new Error('prospectId en emailId zijn verplicht.'); e.status = 400; throw e }
-
-  const { data: prospect, error: pErr } = await service.from('outreach_prospects').select('*').eq('id', prospectId).eq('organization_id', organizationId).single()
-  if (pErr || !prospect) { const e = new Error('Prospect niet gevonden.'); e.status = 404; throw e }
-  const { data: emailRow, error: eErr } = await service.from('outreach_emails').select('*').eq('id', emailId).eq('prospect_id', prospectId).single()
-  if (eErr || !emailRow || !emailRow.email) { const e = new Error('Geen geldig e-mailadres voor deze prospect.'); e.status = 400; throw e }
-
-  const { data: template, error: tErr } = await service.from('outreach_templates')
-    .select('*').eq('organization_id', organizationId).ilike('sector', prospect.sector || '').maybeSingle()
-  if (tErr) throw tErr
-  if (!template) {
-    const e = new Error(`Geen sjabloon voor sector "${prospect.sector || 'onbekend'}" — maak er eerst een aan bij Sjablonen.`)
-    e.status = 400; throw e
-  }
-
-  const ctx = { name: prospect.name, city: guessCity(prospect.address), sector: prospect.sector }
-  const subject = renderTemplate(template.subject, ctx)
-  const emailBody = renderTemplate(template.body, ctx)
-  const followUpSubject = renderTemplate(template.follow_up_subject, ctx)
-  const followUpBody = renderTemplate(template.follow_up_body, ctx)
-
-  const sendAt = new Date(Date.now() + UNDO_WINDOW_SECONDS * 1000).toISOString()
-  const { data: row, error } = await service.from('outreach_sends').insert([{
-    organization_id: organizationId, prospect_id: prospectId, email_id: emailId, template_id: template.id,
-    subject, body: emailBody, follow_up_subject: followUpSubject, follow_up_body: followUpBody,
-    follow_up_wait_days: template.follow_up_wait_days, status: 'scheduled', send_at: sendAt,
-  }]).select().single()
-  if (error) throw error
-  return { send: row, undoWindowSeconds: UNDO_WINDOW_SECONDS }
-}
-
-async function cancelSend(service, body) {
-  const organizationId = requireOrgId(body)
-  const { sendId } = body
-  if (!sendId) { const e = new Error('sendId ontbreekt.'); e.status = 400; throw e }
-  const { error } = await service.from('outreach_sends').update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
-    .eq('id', sendId).eq('organization_id', organizationId).eq('status', 'scheduled')
-  if (error) throw error
-  return { ok: true }
-}
+// ─── Verzenden (historisch) ─────────────────────────────────────────────────
+// Sjablonen en het handmatig plannen/verzenden van losse mails (scheduleSend/
+// confirmSend/cancelSend) zijn uit de UI gehaald — alles gaat nu via Flows.
+// sendViaPostmark blijft bestaan omdat sendFollowups (cron) nog openstaande
+// follow-ups van vóór deze wijziging afhandelt; er kunnen alleen geen nieuwe
+// outreach_sends-rijen meer bijkomen.
 
 async function sendViaPostmark(to, subject, textBody, replyTo) {
   if (!process.env.POSTMARK_SERVER_TOKEN || !process.env.POSTMARK_FROM_EMAIL) {
@@ -441,26 +362,6 @@ async function sendViaPostmark(to, subject, textBody, replyTo) {
   const data = await r.json().catch(() => ({}))
   if (!r.ok) { const e = new Error(`Postmark gaf een fout: ${data.Message || r.status}`); e.status = 502; throw e }
   return data.MessageID
-}
-
-async function confirmSend(service, body) {
-  const organizationId = requireOrgId(body)
-  const { sendId } = body
-  if (!sendId) { const e = new Error('sendId ontbreekt.'); e.status = 400; throw e }
-  const { data: send, error: sErr } = await service.from('outreach_sends')
-    .select('*, outreach_emails(email)').eq('id', sendId).eq('organization_id', organizationId).single()
-  if (sErr || !send) { const e = new Error('Verzending niet gevonden.'); e.status = 404; throw e }
-  if (send.status !== 'scheduled') { const e = new Error('Deze verzending is al verstuurd of geannuleerd.'); e.status = 400; throw e }
-
-  const messageId = await sendViaPostmark(send.outreach_emails.email, send.subject, send.body, process.env.POSTMARK_INBOUND_ADDRESS)
-  const sentAt = new Date()
-  const followUpScheduledAt = new Date(sentAt.getTime() + send.follow_up_wait_days * 86400000)
-  const { error } = await service.from('outreach_sends').update({
-    status: 'sent', sent_at: sentAt.toISOString(), postmark_message_id: messageId,
-    follow_up_scheduled_at: send.follow_up_subject ? followUpScheduledAt.toISOString() : null,
-  }).eq('id', sendId)
-  if (error) throw error
-  return { ok: true }
 }
 
 // ─── Insights: funnel + breakdown + gecombineerde verzendlijst ─────────────
@@ -1093,7 +994,7 @@ async function handleGmailPubSub(service, payload) {
 // ─── Dispatch ───────────────────────────────────────────────────────────────
 
 const RESOURCES = {
-  prospects: listProspects, emails: listEmails, templates: listTemplates,
+  prospects: listProspects, emails: listEmails,
   flows: listFlows, 'flow-queue': listFlowQueue, 'gmail-status': gmailStatus, insights: listInsights,
 }
 const ACTIONS = {
@@ -1105,11 +1006,6 @@ const ACTIONS = {
   'find-email': findEmail,
   'find-emails-batch': findEmailsBatch,
   'update-email': updateEmail,
-  'save-template': saveTemplate,
-  'delete-template': deleteTemplate,
-  'schedule-send': scheduleSend,
-  'cancel-send': cancelSend,
-  'confirm-send': confirmSend,
   'gmail-oauth-exchange': gmailOAuthExchange,
   'gmail-disconnect': gmailDisconnect,
   'save-flow': saveFlow,

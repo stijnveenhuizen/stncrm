@@ -5,7 +5,7 @@ import FlowCanvasEditor from './FlowCanvasEditor.jsx'
 
 const BLANK_STEP = { subject: '', body: '', wait_days_after_previous: 3, on_reply: {}, on_no_reply: {} }
 
-export default function FlowsTab({ organizationId, flows, templates, onRefresh }) {
+export default function FlowsTab({ organizationId, flows, onRefresh }) {
   const [form, setForm] = useState(null)
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState(null)
@@ -93,7 +93,7 @@ export default function FlowsTab({ organizationId, flows, templates, onRefresh }
                 <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="bijv. Standaard 3-staps opvolging" required />
               </div>
 
-              <FlowCanvasEditor organizationId={organizationId} steps={form.steps} templates={templates} onChange={steps => setForm(f => ({ ...f, steps }))} />
+              <FlowCanvasEditor organizationId={organizationId} steps={form.steps} onChange={steps => setForm(f => ({ ...f, steps }))} />
 
               <div className="modal-actions">
                 <button type="button" className="btn btn-ghost" onClick={() => setForm(null)}>Annuleren</button>

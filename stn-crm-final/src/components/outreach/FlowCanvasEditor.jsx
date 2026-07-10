@@ -55,17 +55,12 @@ function defaultPosition(i) { return { x: 260, y: 40 + i * 180 } }
 // stippellijn naar hun standaardpad (zie OUTREACH_FLOW_CONDITIONS_SETUP.sql):
 // geen reply → volgende stap, wel reply → Einde. Slepen vanaf een bolletje
 // naar een andere stap (of naar "Einde") overschrijft dat expliciet.
-export default function FlowCanvasEditor({ organizationId, steps, onChange, templates = [] }) {
+export default function FlowCanvasEditor({ organizationId, steps, onChange }) {
   const [editingIndex, setEditingIndex] = useState(null)
 
   const updateStep = useCallback((i, patch) => {
     onChange(steps.map((s, idx) => idx === i ? { ...s, ...patch } : s))
   }, [steps, onChange])
-
-  function loadTemplateIntoStep(i, templateId) {
-    const t = templates.find(t => t.id === templateId)
-    if (t) updateStep(i, { subject: t.subject, body: t.body })
-  }
 
   function addStep() {
     if (steps.length >= 5) return
@@ -171,15 +166,7 @@ export default function FlowCanvasEditor({ organizationId, steps, onChange, temp
       {editingIndex !== null && steps[editingIndex] && (
         <div className="modal-bg open" onClick={() => setEditingIndex(null)}>
           <div className="modal" style={{ width: 580 }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-              <h3 style={{ margin: 0 }}>Stap {editingIndex + 1} bewerken</h3>
-              {templates.length > 0 && (
-                <select style={{ width: 'auto', height: 28, fontSize: 12 }} value="" onChange={e => e.target.value && loadTemplateIntoStep(editingIndex, e.target.value)}>
-                  <option value="">Laad sjabloon in…</option>
-                  {templates.map(t => <option key={t.id} value={t.id}>{t.sector} — {t.subject.slice(0, 30)}</option>)}
-                </select>
-              )}
-            </div>
+            <h3>Stap {editingIndex + 1} bewerken</h3>
             {editingIndex > 0 && (
               <div className="form-group">
                 <label>Wachttijd voordat deze stap verstuurd wordt (dagen)</label>
