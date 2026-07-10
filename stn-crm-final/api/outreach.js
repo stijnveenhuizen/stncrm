@@ -132,11 +132,16 @@ async function setProspectsSector(service, body) {
 
 // Cascadeert in de database naar outreach_emails/outreach_flow_state/
 // outreach_sends (allemaal "on delete cascade" op prospect_id) — geen
-// aparte opruimcode nodig.
+// aparte opruimcode nodig. duplicate_prospect_id is wél zelfverwijzend
+// zonder cascade-regel: als prospect A hier verwijderd wordt terwijl een
+// andere rij B naar A wijst als "mogelijk duplicaat", blokkeert de FK de
+// delete. Die verwijzing is na verwijdering toch zinloos, dus eerst
+// ontkoppelen i.p.v. een schema-migratie nodig te hebben.
 async function deleteProspects(service, body) {
   const organizationId = requireOrgId(body)
   const { ids } = body
   if (!Array.isArray(ids) || !ids.length) { const e = new Error('ids ontbreekt.'); e.status = 400; throw e }
+  await service.from('outreach_prospects').update({ duplicate_prospect_id: null }).eq('organization_id', organizationId).in('duplicate_prospect_id', ids)
   const { error } = await service.from('outreach_prospects').delete().eq('organization_id', organizationId).in('id', ids)
   if (error) throw error
   return { ok: true, deleted: ids.length }
