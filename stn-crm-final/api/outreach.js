@@ -460,8 +460,12 @@ async function gmailOAuthExchange(service, body) {
   if (error) throw error
   // Meteen de watch() instellen i.p.v. te wachten op de volgende dagelijkse
   // cron-run — anders worden replies pas tot 24 uur na het koppelen gezien.
-  await ensureGmailWatch(service, organizationId).catch(() => {})
-  return { ok: true, gmailEmail: profile.emailAddress }
+  // Faalt dit, dan mag het koppelen zelf wel slagen (verzenden werkt sowieso),
+  // maar geven we de echte foutmelding terug zodat je 'm in de UI ziet i.p.v.
+  // een silent failure die alleen in de database zichtbaar is.
+  let watchWarning = null
+  try { await ensureGmailWatch(service, organizationId) } catch (e) { watchWarning = e.message }
+  return { ok: true, gmailEmail: profile.emailAddress, watchWarning }
 }
 
 async function gmailDisconnect(service, body) {
@@ -592,7 +596,10 @@ async function ensureGmailWatch(service, organizationId) {
     body: JSON.stringify({ topicName: process.env.GMAIL_PUBSUB_TOPIC, labelIds: ['INBOX'] }),
   }, 15000)
   const data = await r.json().catch(() => ({}))
-  if (!r.ok || !data.expiration) return // best-effort — volgende cron-run probeert het opnieuw
+  if (!r.ok || !data.expiration) {
+    const e = new Error(`Gmail watch()-aanvraag mislukt: ${data.error?.message || `HTTP ${r.status}`}`)
+    e.status = 502; throw e
+  }
   await service.from('outreach_gmail_tokens').update({
     watch_expires_at: new Date(Number(data.expiration)).toISOString(),
     last_history_id: row?.last_history_id || String(data.historyId || ''),

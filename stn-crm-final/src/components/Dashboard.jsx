@@ -2891,7 +2891,11 @@ function TeamView({ members, onRefresh, myProfile, activeOrgId }) {
     if (!code) return
     setGmailBusy(true)
     db.outreachGmailOAuthExchange(activeOrgId, code, `${window.location.origin}/?gmail_oauth=callback`)
-      .then(() => { showToast('Gmail gekoppeld'); refreshGmailStatus() })
+      .then(res => {
+        if (res.watchWarning) showToast(`Gmail gekoppeld, maar reply-tracking nog niet actief: ${res.watchWarning}`, 'error')
+        else showToast('Gmail gekoppeld')
+        refreshGmailStatus()
+      })
       .catch(e => showToast('Koppelen mislukt: ' + e.message, 'error'))
       .finally(() => setGmailBusy(false))
   }, [activeOrgId, refreshGmailStatus])
