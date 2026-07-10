@@ -120,6 +120,28 @@ async function searchPlaces(service, body) {
   }
 }
 
+async function setProspectsSector(service, body) {
+  const organizationId = requireOrgId(body)
+  const { ids, sector } = body
+  if (!Array.isArray(ids) || !ids.length) { const e = new Error('ids ontbreekt.'); e.status = 400; throw e }
+  if (!sector || !sector.trim()) { const e = new Error('sector ontbreekt.'); e.status = 400; throw e }
+  const { error } = await service.from('outreach_prospects').update({ sector: sector.trim() }).eq('organization_id', organizationId).in('id', ids)
+  if (error) throw error
+  return { ok: true, updated: ids.length }
+}
+
+// Cascadeert in de database naar outreach_emails/outreach_flow_state/
+// outreach_sends (allemaal "on delete cascade" op prospect_id) — geen
+// aparte opruimcode nodig.
+async function deleteProspects(service, body) {
+  const organizationId = requireOrgId(body)
+  const { ids } = body
+  if (!Array.isArray(ids) || !ids.length) { const e = new Error('ids ontbreekt.'); e.status = 400; throw e }
+  const { error } = await service.from('outreach_prospects').delete().eq('organization_id', organizationId).in('id', ids)
+  if (error) throw error
+  return { ok: true, deleted: ids.length }
+}
+
 // CSV-import (bijv. export vanuit Mailmeteor) — kolom-mapping gebeurt in de
 // UI, hier komt alleen al {name, website, phone, sector, email} per rij aan.
 // Zelfde duplicaatcheck als searchPlaces (domein-match tegen bestaande
@@ -1012,6 +1034,8 @@ const RESOURCES = {
 const ACTIONS = {
   'search-places': searchPlaces,
   'approve-prospect': updateProspectStatus,
+  'set-prospects-sector': setProspectsSector,
+  'delete-prospects': deleteProspects,
   'import-prospects-csv': importProspectsCsv,
   'find-email': findEmail,
   'find-emails-batch': findEmailsBatch,

@@ -318,6 +318,12 @@ export async function outreachFindEmailsBatch(organizationId) {
 export async function outreachImportProspectsCsv(organizationId, rows) {
   return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'import-prospects-csv', organizationId, rows }) })
 }
+export async function outreachSetProspectsSector(organizationId, ids, sector) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'set-prospects-sector', organizationId, ids, sector }) })
+}
+export async function outreachDeleteProspects(organizationId, ids) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'delete-prospects', organizationId, ids }) })
+}
 export async function outreachUpdateEmail(organizationId, id, patch) {
   return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'update-email', organizationId, id, ...patch }) })
 }

@@ -23,7 +23,31 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
   const [error, setError] = useState('')
   const [selected, setSelected] = useState(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkSector, setBulkSector] = useState('')
   const [showImport, setShowImport] = useState(false)
+  const [searchText, setSearchText] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [sectorFilter, setSectorFilter] = useState('all')
+  const [emailFilter, setEmailFilter] = useState('all')
+  const [dupFilter, setDupFilter] = useState('all')
+
+  const sectors = [...new Set(prospects.map(p => p.sector).filter(Boolean))].sort()
+  const filtered = prospects.filter(p => {
+    if (statusFilter !== 'all' && p.status !== statusFilter) return false
+    if (sectorFilter !== 'all' && p.sector !== sectorFilter) return false
+    const hasEmail = !!(emailsByProspect[p.id]?.length)
+    if (emailFilter === 'with' && !hasEmail) return false
+    if (emailFilter === 'without' && hasEmail) return false
+    if (dupFilter === 'dup' && !(p.duplicate_prospect_id || p.duplicate_pipeline_id)) return false
+    if (searchText.trim()) {
+      const q = searchText.trim().toLowerCase()
+      const hay = `${p.name} ${p.address || ''} ${p.website_domain || ''}`.toLowerCase()
+      if (!hay.includes(q)) return false
+    }
+    return true
+  })
+  const filtersActive = searchText.trim() || statusFilter !== 'all' || sectorFilter !== 'all' || emailFilter !== 'all' || dupFilter !== 'all'
+  function resetFilters() { setSearchText(''); setStatusFilter('all'); setSectorFilter('all'); setEmailFilter('all'); setDupFilter('all') }
 
   async function search(e) {
     e.preventDefault()
@@ -58,8 +82,13 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
       return next
     })
   }
+  const allFilteredSelected = filtered.length > 0 && filtered.every(p => selected.has(p.id))
   function toggleAll() {
-    setSelected(prev => prev.size === prospects.length ? new Set() : new Set(prospects.map(p => p.id)))
+    setSelected(prev => {
+      const next = new Set(prev)
+      filtered.forEach(p => allFilteredSelected ? next.delete(p.id) : next.add(p.id))
+      return next
+    })
   }
 
   async function bulkSetStatus(status) {
@@ -89,6 +118,41 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
     finally { setBulkBusy(false) }
   }
 
+  async function bulkAssignSector() {
+    const ids = [...selected]
+    if (!bulkSector.trim()) return
+    setBulkBusy(true)
+    try {
+      await db.outreachSetProspectsSector(organizationId, ids, bulkSector.trim())
+      showToast(`Sector "${bulkSector.trim()}" toegewezen aan ${ids.length} prospects`)
+      setBulkSector('')
+      setSelected(new Set())
+      onRefresh()
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setBulkBusy(false) }
+  }
+
+  async function bulkDelete() {
+    const ids = [...selected]
+    if (!confirm(`${ids.length} prospects verwijderen? Bijbehorende e-mails, flow-historie en verzendingen worden ook verwijderd. Dit kan niet ongedaan worden gemaakt.`)) return
+    setBulkBusy(true)
+    try {
+      await db.outreachDeleteProspects(organizationId, ids)
+      showToast(`${ids.length} prospects verwijderd`)
+      setSelected(new Set())
+      onRefresh()
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setBulkBusy(false) }
+  }
+
+  async function deleteOne(id) {
+    if (!confirm('Prospect verwijderen? Bijbehorende e-mails, flow-historie en verzendingen worden ook verwijderd.')) return
+    setBusyId(id)
+    try { await db.outreachDeleteProspects(organizationId, [id]); showToast('Prospect verwijderd'); onRefresh() }
+    catch (e) { showToast(e.message, 'error') }
+    finally { setBusyId(null) }
+  }
+
   return (
     <div>
       <div className="sc" style={{ marginBottom: 16 }}>
@@ -109,25 +173,74 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
         </div>
       </div>
 
+      {prospects.length > 0 && (
+        <div className="sc" style={{ marginBottom: 16 }}>
+          <div className="sc-body" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div className="form-group" style={{ marginBottom: 0, flex: '1 1 220px' }}>
+              <label>Zoeken</label>
+              <input value={searchText} onChange={e => setSearchText(e.target.value)} placeholder="Bedrijf, adres of website…" />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0, flex: '0 1 150px' }}>
+              <label>Status</label>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                <option value="all">Alle</option>
+                <option value="pending">Concept</option>
+                <option value="approved">Goedgekeurd</option>
+                <option value="rejected">Afgewezen</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0, flex: '0 1 170px' }}>
+              <label>Sector</label>
+              <select value={sectorFilter} onChange={e => setSectorFilter(e.target.value)}>
+                <option value="all">Alle sectoren</option>
+                {sectors.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0, flex: '0 1 150px' }}>
+              <label>E-mail</label>
+              <select value={emailFilter} onChange={e => setEmailFilter(e.target.value)}>
+                <option value="all">Alle</option>
+                <option value="with">Met e-mail</option>
+                <option value="without">Zonder e-mail</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0, flex: '0 1 150px' }}>
+              <label>Duplicaten</label>
+              <select value={dupFilter} onChange={e => setDupFilter(e.target.value)}>
+                <option value="all">Alle</option>
+                <option value="dup">Alleen duplicaten</option>
+              </select>
+            </div>
+            {filtersActive && <button type="button" className="btn btn-ghost btn-sm" onClick={resetFilters}>Filters wissen</button>}
+          </div>
+        </div>
+      )}
+
       {selected.size > 0 && (
         <div className="sc" style={{ marginBottom: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)' }}>
           <span style={{ fontSize: 13, fontWeight: 500 }}>{selected.size} geselecteerd</span>
           <button className="btn btn-ghost btn-xs" disabled={bulkBusy} onClick={() => bulkSetStatus('approved')}>Goedkeuren</button>
           <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={bulkBusy} onClick={() => bulkSetStatus('rejected')}>Afwijzen</button>
           <button className="btn btn-ghost btn-xs" disabled={bulkBusy} onClick={bulkFindEmail}>{bulkBusy ? 'Bezig…' : 'Vind e-mail'}</button>
+          <input value={bulkSector} onChange={e => setBulkSector(e.target.value)} placeholder="Sector…" style={{ width: 130, height: 28, fontSize: 12 }} />
+          <button className="btn btn-ghost btn-xs" disabled={bulkBusy || !bulkSector.trim()} onClick={bulkAssignSector}>Sector toewijzen</button>
+          <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={bulkBusy} onClick={bulkDelete}>Verwijderen</button>
           <button className="btn btn-ghost btn-xs" onClick={() => setSelected(new Set())} style={{ marginLeft: 'auto' }}>Deselecteren</button>
         </div>
       )}
 
       {!prospects.length ? (
         <EmptyState icon="🔍" title="Nog geen prospects" sub="Zoek hierboven op zoekterm + regio om resultaten uit Google Places op te halen, of importeer een CSV-bestand." />
+      ) : !filtered.length ? (
+        <EmptyState icon="🔍" title="Geen prospects binnen deze filters" sub="Pas de filters aan of wis ze om alle prospects te zien." cta={<button className="btn btn-ghost btn-sm" onClick={resetFilters}>Filters wissen</button>} />
       ) : (
         <div className="sc" style={{ overflow: 'hidden' }}>
+          <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>{filtered.length} van {prospects.length} prospects</div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
                 <th style={{ padding: '10px 14px', width: 32 }}>
-                  <input type="checkbox" checked={selected.size === prospects.length} onChange={toggleAll} style={{ width: 15, height: 15 }} />
+                  <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll} style={{ width: 15, height: 15 }} />
                 </th>
                 {['Bedrijf', 'Sector', 'Website', 'Telefoon', 'Status', 'E-mail', ''].map(h => (
                   <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{h}</th>
@@ -135,7 +248,7 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
               </tr>
             </thead>
             <tbody>
-              {prospects.map(p => {
+              {filtered.map(p => {
                 const busy = busyId === p.id
                 const emailRows = emailsByProspect[p.id] || []
                 const isDup = p.duplicate_prospect_id || p.duplicate_pipeline_id
@@ -169,6 +282,7 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
                         {p.status === 'approved' && !emailRows.length && (
                           <button className="btn btn-ghost btn-xs" disabled={busy} onClick={() => findEmail(p.id)}>{busy ? '…' : 'Vind e-mail'}</button>
                         )}
+                        <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={busy} onClick={() => deleteOne(p.id)}>Verwijderen</button>
                       </div>
                     </td>
                   </tr>
