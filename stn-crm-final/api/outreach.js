@@ -458,6 +458,9 @@ async function gmailOAuthExchange(service, body) {
     updated_at: new Date().toISOString(),
   }])
   if (error) throw error
+  // Meteen de watch() instellen i.p.v. te wachten op de volgende dagelijkse
+  // cron-run — anders worden replies pas tot 24 uur na het koppelen gezien.
+  await ensureGmailWatch(service, organizationId).catch(() => {})
   return { ok: true, gmailEmail: profile.emailAddress }
 }
 
