@@ -315,6 +315,9 @@ export async function outreachFindEmail(organizationId, prospectId) {
 export async function outreachFindEmailsBatch(organizationId) {
   return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'find-emails-batch', organizationId }) })
 }
+export async function outreachImportProspectsCsv(organizationId, rows) {
+  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'import-prospects-csv', organizationId, rows }) })
+}
 export async function outreachUpdateEmail(organizationId, id, patch) {
   return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'update-email', organizationId, id, ...patch }) })
 }

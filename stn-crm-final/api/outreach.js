@@ -120,6 +120,57 @@ async function searchPlaces(service, body) {
   }
 }
 
+// CSV-import (bijv. export vanuit Mailmeteor) — kolom-mapping gebeurt in de
+// UI, hier komt alleen al {name, website, phone, sector, email} per rij aan.
+// Zelfde duplicaatcheck als searchPlaces (domein-match tegen bestaande
+// prospects + pipeline), maar plain insert i.p.v. upsert: CSV-rijen hebben
+// geen place_id om op te dedupliceren, dus herhaalde import van dezelfde
+// CSV geeft (net als bij Places) alleen een duplicaat-waarschuwing, geen
+// harde blokkade.
+async function importProspectsCsv(service, body) {
+  const organizationId = requireOrgId(body)
+  const { rows } = body
+  if (!Array.isArray(rows) || !rows.length) { const e = new Error('Geen rijen om te importeren.'); e.status = 400; throw e }
+  if (rows.length > 500) { const e = new Error('Max 500 rijen per import — splits het bestand.'); e.status = 400; throw e }
+
+  const [{ data: existingProspects }, { data: pipelineRows }] = await Promise.all([
+    service.from('outreach_prospects').select('id, website_domain').eq('organization_id', organizationId),
+    service.from('pipeline').select('id, website').eq('organization_id', organizationId),
+  ])
+  const existingByDomain = new Map((existingProspects || []).filter(p => p.website_domain).map(p => [p.website_domain, p.id]))
+  const pipelineByDomain = new Map((pipelineRows || []).filter(p => p.website).map(p => [normalizeDomain(p.website), p.id]))
+
+  let inserted = 0, duplicates = 0, emailsAdded = 0, failed = 0
+  const batchSize = 5
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize)
+    await Promise.allSettled(batch.map(async row => {
+      const name = (row.name || '').trim()
+      if (!name) { failed++; return }
+      const website = row.website?.trim() || null
+      const domain = normalizeDomain(website)
+      const dupProspect = domain ? existingByDomain.get(domain) : null
+      const dupPipeline = domain ? pipelineByDomain.get(domain) : null
+      const { data: p, error } = await service.from('outreach_prospects').insert([{
+        organization_id: organizationId, name, website, website_domain: domain,
+        phone: row.phone?.trim() || null, sector: row.sector?.trim() || null,
+        duplicate_prospect_id: dupProspect || null, duplicate_pipeline_id: dupPipeline || null,
+      }]).select().single()
+      if (error) { failed++; return }
+      inserted++
+      if (dupProspect || dupPipeline) duplicates++
+      // Zodat een tweede rij in dezelfde CSV met hetzelfde domein ook als duplicaat wordt gezien.
+      if (domain) existingByDomain.set(domain, p.id)
+      const email = row.email?.trim()
+      if (email) {
+        const { error: eErr } = await service.from('outreach_emails').insert([{ prospect_id: p.id, email, confidence: 'found', source: 'CSV-import' }])
+        if (!eErr) emailsAdded++
+      }
+    }))
+  }
+  return { inserted, duplicates, emailsAdded, failed }
+}
+
 async function listProspects(service, q) {
   const organizationId = q.organizationId
   if (!organizationId) { const e = new Error('organizationId ontbreekt.'); e.status = 400; throw e }
@@ -961,6 +1012,7 @@ const RESOURCES = {
 const ACTIONS = {
   'search-places': searchPlaces,
   'approve-prospect': updateProspectStatus,
+  'import-prospects-csv': importProspectsCsv,
   'find-email': findEmail,
   'find-emails-batch': findEmailsBatch,
   'update-email': updateEmail,
