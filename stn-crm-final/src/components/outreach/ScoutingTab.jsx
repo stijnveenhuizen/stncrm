@@ -37,9 +37,19 @@ export default function ScoutingTab({ organizationId, prospects, onRefresh }) {
     finally { setSearching(false) }
   }
 
-  async function setStatus(id, status) {
+  async function approve(id) {
     setBusyId(id)
-    try { await db.outreachApproveProspect(organizationId, id, status); onRefresh() }
+    try { await db.outreachApproveProspect(organizationId, id, 'approved'); onRefresh() }
+    catch (e) { showToast(e.message, 'error') }
+    finally { setBusyId(null) }
+  }
+
+  // Afwijzen = direct verwijderen: een afgewezen scout heeft nog geen
+  // e-mails/flows en hoeft dus niet als 'rejected' te blijven hangen.
+  async function reject(id) {
+    if (!confirm('Prospect afwijzen? Wordt direct verwijderd, dit kan niet ongedaan worden gemaakt.')) return
+    setBusyId(id)
+    try { await db.outreachDeleteProspects(organizationId, [id]); showToast('Prospect verwijderd'); onRefresh() }
     catch (e) { showToast(e.message, 'error') }
     finally { setBusyId(null) }
   }
@@ -60,12 +70,25 @@ export default function ScoutingTab({ organizationId, prospects, onRefresh }) {
     })
   }
 
-  async function bulkSetStatus(status) {
+  async function bulkApprove() {
     const ids = [...selected]
     setBulkBusy(true)
     try {
-      await runBatched(ids, id => db.outreachApproveProspect(organizationId, id, status))
-      showToast(`${ids.length} prospects bijgewerkt`)
+      await runBatched(ids, id => db.outreachApproveProspect(organizationId, id, 'approved'))
+      showToast(`${ids.length} prospects goedgekeurd`)
+      setSelected(new Set())
+      onRefresh()
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setBulkBusy(false) }
+  }
+
+  async function bulkReject() {
+    const ids = [...selected]
+    if (!confirm(`${ids.length} prospects afwijzen? Worden direct verwijderd, dit kan niet ongedaan worden gemaakt.`)) return
+    setBulkBusy(true)
+    try {
+      await db.outreachDeleteProspects(organizationId, ids)
+      showToast(`${ids.length} prospects verwijderd`)
       setSelected(new Set())
       onRefresh()
     } catch (e) { showToast(e.message, 'error') }
@@ -94,8 +117,8 @@ export default function ScoutingTab({ organizationId, prospects, onRefresh }) {
       {selected.size > 0 && (
         <div className="sc" style={{ marginBottom: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)' }}>
           <span style={{ fontSize: 13, fontWeight: 500 }}>{selected.size} geselecteerd</span>
-          <button className="btn btn-ghost btn-xs" disabled={bulkBusy} onClick={() => bulkSetStatus('approved')}>Goedkeuren</button>
-          <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={bulkBusy} onClick={() => bulkSetStatus('rejected')}>Afwijzen</button>
+          <button className="btn btn-ghost btn-xs" disabled={bulkBusy} onClick={bulkApprove}>Goedkeuren</button>
+          <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={bulkBusy} onClick={bulkReject}>Afwijzen</button>
           <button className="btn btn-ghost btn-xs" onClick={() => setSelected(new Set())} style={{ marginLeft: 'auto' }}>Deselecteren</button>
         </div>
       )}
@@ -138,8 +161,8 @@ export default function ScoutingTab({ organizationId, prospects, onRefresh }) {
                     <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{p.phone || '—'}</td>
                     <td style={{ padding: '12px 14px' }}>
                       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                        <button className="btn btn-ghost btn-xs" disabled={busy} onClick={() => setStatus(p.id, 'approved')}>Goedkeuren</button>
-                        <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={busy} onClick={() => setStatus(p.id, 'rejected')}>Afwijzen</button>
+                        <button className="btn btn-ghost btn-xs" disabled={busy} onClick={() => approve(p.id)}>Goedkeuren</button>
+                        <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={busy} onClick={() => reject(p.id)}>Afwijzen</button>
                       </div>
                     </td>
                   </tr>
