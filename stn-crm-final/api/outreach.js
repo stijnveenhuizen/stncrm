@@ -1,10 +1,12 @@
 // Eén verzamel-endpoint voor de hele Outreach-module (Vercel Hobby-limiet: max
 // 12 functions per deployment — zie api/admin.js/api/admin-write.js voor
-// hetzelfde patroon). Drie soorten aanroepers delen dit bestand:
+// hetzelfde patroon). Verzenden gaat volledig via Gmail (OAuth, geen externe
+// mailprovider meer). Drie soorten aanroepers delen dit bestand:
 //  - de app zelf (Bearer-sessie, GET ?resource=... / POST { action })
-//  - Vercel Cron (Bearer CRON_SECRET, verstuurt vervallen follow-ups)
-//  - Postmark's inbound-webhook (geen sessie mogelijk — geverifieerd via een
-//    geheime query-param, zie POSTMARK_WEBHOOK_SECRET)
+//  - Vercel Cron (Bearer CRON_SECRET, verwerkt de flow-wachtrij + Gmail watch())
+//  - Gmail Pub/Sub (geen sessie mogelijk — geverifieerd via een geheime
+//    query-param, zie GMAIL_PUBSUB_SECRET) en de open-/klik-tracking-links
+//    (auth = de niet-raadbare token zelf)
 const crypto = require('crypto')
 const { getServiceClient, requireUser } = require('./_shared')
 
@@ -342,28 +344,6 @@ async function updateEmail(service, body) {
   return { ok: true }
 }
 
-// ─── Verzenden (historisch) ─────────────────────────────────────────────────
-// Sjablonen en het handmatig plannen/verzenden van losse mails (scheduleSend/
-// confirmSend/cancelSend) zijn uit de UI gehaald — alles gaat nu via Flows.
-// sendViaPostmark blijft bestaan omdat sendFollowups (cron) nog openstaande
-// follow-ups van vóór deze wijziging afhandelt; er kunnen alleen geen nieuwe
-// outreach_sends-rijen meer bijkomen.
-
-async function sendViaPostmark(to, subject, textBody, replyTo) {
-  if (!process.env.POSTMARK_SERVER_TOKEN || !process.env.POSTMARK_FROM_EMAIL) {
-    const e = new Error('POSTMARK_SERVER_TOKEN / POSTMARK_FROM_EMAIL zijn niet ingesteld — voeg deze toe in Vercel voordat je kunt versturen.')
-    e.status = 400; throw e
-  }
-  const r = await fetchWithTimeout('https://api.postmarkapp.com/email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Postmark-Server-Token': process.env.POSTMARK_SERVER_TOKEN },
-    body: JSON.stringify({ From: process.env.POSTMARK_FROM_EMAIL, To: to, Subject: subject, TextBody: textBody, ReplyTo: replyTo || undefined, MessageStream: 'outbound' }),
-  }, 15000)
-  const data = await r.json().catch(() => ({}))
-  if (!r.ok) { const e = new Error(`Postmark gaf een fout: ${data.Message || r.status}`); e.status = 502; throw e }
-  return data.MessageID
-}
-
 // ─── Insights: funnel + breakdown + gecombineerde verzendlijst ─────────────
 // Alleen flow-verzendingen (outreach_flow_sends) tellen mee in de funnel en
 // de per-flow/per-sector-breakdown — dat is de enige plek met tracking. De
@@ -432,46 +412,6 @@ async function listInsights(service, q) {
     bySector: Object.values(bySectorMap).sort((a, b) => b.sent - a.sent),
     list,
   }
-}
-
-// ─── Cron: vervallen follow-ups versturen ──────────────────────────────────
-
-async function sendFollowups(service) {
-  const { data: due, error } = await service.from('outreach_sends')
-    .select('*, outreach_emails(email)').eq('status', 'sent').lte('follow_up_scheduled_at', new Date().toISOString())
-  if (error) throw error
-
-  let sent = 0, failed = 0
-  const batchSize = 3
-  for (let i = 0; i < due.length; i += batchSize) {
-    const batch = due.slice(i, i + batchSize)
-    await Promise.allSettled(batch.map(async send => {
-      try {
-        const messageId = await sendViaPostmark(send.outreach_emails.email, send.follow_up_subject, send.follow_up_body, process.env.POSTMARK_INBOUND_ADDRESS)
-        await service.from('outreach_sends').update({ status: 'followed_up', follow_up_sent_at: new Date().toISOString(), follow_up_postmark_message_id: messageId }).eq('id', send.id)
-        sent++
-      } catch (e) { failed++ }
-    }))
-  }
-  return { checked: due.length, sent, failed }
-}
-
-// ─── Postmark inbound webhook: reply-detectie ──────────────────────────────
-
-async function handlePostmarkInbound(service, payload) {
-  const fromEmail = (payload.FromFull?.Email || payload.From || '').toLowerCase().trim()
-  const strippedReply = (payload.StrippedTextReply || '').trim()
-  if (!fromEmail || !strippedReply) return { matched: false }
-
-  const { data: candidates, error } = await service.from('outreach_sends')
-    .select('*, outreach_emails!inner(email)').in('status', ['sent', 'followed_up'])
-    .ilike('outreach_emails.email', fromEmail).order('sent_at', { ascending: false }).limit(1)
-  if (error) throw error
-  if (!candidates?.length) return { matched: false }
-
-  const send = candidates[0]
-  await service.from('outreach_sends').update({ status: 'replied', replied_at: new Date().toISOString() }).eq('id', send.id)
-  return { matched: true, sendId: send.id }
 }
 
 // ─── Gmail OAuth + verzenden ────────────────────────────────────────────────
@@ -772,6 +712,20 @@ async function listFlowQueue(service, q) {
   return { queue: withPreview }
 }
 
+// Overzicht per flow: welke prospects zitten waar, ongeacht status/datum —
+// i.t.t. listFlowQueue (die is voor Taken en filtert op due/upcoming/done).
+async function listFlowProgress(service, q) {
+  const organizationId = q.organizationId
+  const flowId = q.flowId
+  if (!organizationId || !flowId) { const e = new Error('organizationId en flowId zijn verplicht.'); e.status = 400; throw e }
+  const { data, error } = await service.from('outreach_flow_state')
+    .select('*, outreach_prospects(id, name, sector), outreach_emails(email)')
+    .eq('organization_id', organizationId).eq('flow_id', flowId)
+    .order('current_step').order('scheduled_send_at')
+  if (error) throw error
+  return { progress: data }
+}
+
 async function getDailySendCount(service, organizationId) {
   const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0)
   const { count } = await service.from('outreach_flow_state').select('id', { count: 'exact', head: true })
@@ -995,7 +949,7 @@ async function handleGmailPubSub(service, payload) {
 
 const RESOURCES = {
   prospects: listProspects, emails: listEmails,
-  flows: listFlows, 'flow-queue': listFlowQueue, 'gmail-status': gmailStatus, insights: listInsights,
+  flows: listFlows, 'flow-queue': listFlowQueue, 'flow-progress': listFlowProgress, 'gmail-status': gmailStatus, insights: listInsights,
 }
 const ACTIONS = {
   'search-places': searchPlaces,
@@ -1061,16 +1015,6 @@ module.exports = async (req, res) => {
       return res.end()
     }
 
-    // Postmark's inbound-webhook heeft geen sessie — geverifieerd via een
-    // geheim query-param dat alleen in de bij Postmark geregistreerde URL staat.
-    if (req.method === 'POST' && req.query?.postmark === '1') {
-      if (!process.env.POSTMARK_WEBHOOK_SECRET || req.query.secret !== process.env.POSTMARK_WEBHOOK_SECRET) {
-        return res.status(403).json({ error: 'Ongeldig webhook secret.' })
-      }
-      const result = await handlePostmarkInbound(getServiceClient(), req.body || {})
-      return res.status(200).json(result)
-    }
-
     // Gmail Pub/Sub push-subscription — zelfde aanpak: geheim in de query-string
     // i.p.v. Postmark-stijl auth, want ook hier is geen gebruikerssessie mogelijk.
     if (req.method === 'POST' && req.query?.gmail_pubsub === '1') {
@@ -1081,11 +1025,11 @@ module.exports = async (req, res) => {
       return res.status(200).json(result)
     }
 
-    // Vercel Cron: dagelijkse follow-up verzending + flow-wachtrij + Gmail watch()-vernieuwing.
+    // Vercel Cron: dagelijkse flow-wachtrij + Gmail watch()-vernieuwing.
     if (req.headers.authorization === `Bearer ${process.env.CRON_SECRET}`) {
       const service = getServiceClient()
-      const [followups, flowQueue] = await Promise.all([sendFollowups(service), processFlowQueueAndWatch(service)])
-      return res.status(200).json({ followups, flowQueue })
+      const flowQueue = await processFlowQueueAndWatch(service)
+      return res.status(200).json({ flowQueue })
     }
 
     const { service } = await requireUser(req)

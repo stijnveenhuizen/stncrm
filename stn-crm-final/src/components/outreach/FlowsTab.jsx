@@ -1,14 +1,18 @@
 import React, { useState } from 'react'
 import * as db from '../../lib/db'
-import { showToast, EmptyState } from '../Dashboard.jsx'
+import { showToast, EmptyState, fdate } from '../Dashboard.jsx'
 import FlowCanvasEditor from './FlowCanvasEditor.jsx'
 
 const BLANK_STEP = { subject: '', body: '', wait_days_after_previous: 3, on_reply: {}, on_no_reply: {} }
+const STATUS_LABEL = { scheduled: 'Gepland', queued: 'Wacht op verzendruimte', completed: 'Afgerond', stopped: 'Gestopt' }
 
 export default function FlowsTab({ organizationId, flows, onRefresh }) {
   const [form, setForm] = useState(null)
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState(null)
+  const [progressFlow, setProgressFlow] = useState(null)
+  const [progressData, setProgressData] = useState([])
+  const [progressLoading, setProgressLoading] = useState(false)
 
   function openNew() { setForm({ id: null, name: '', is_active: true, steps: [{ ...BLANK_STEP, wait_days_after_previous: 0, canvas_x: 260, canvas_y: 40 }] }) }
   function openEdit(f) {
@@ -46,6 +50,14 @@ export default function FlowsTab({ organizationId, flows, onRefresh }) {
     finally { setBusyId(null) }
   }
 
+  async function openProgress(f) {
+    setProgressFlow(f)
+    setProgressLoading(true)
+    try { const r = await db.outreachGetFlowProgress(organizationId, f.id); setProgressData(r.progress) }
+    catch (e) { showToast(e.message, 'error') }
+    finally { setProgressLoading(false) }
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
@@ -72,6 +84,7 @@ export default function FlowsTab({ organizationId, flows, onRefresh }) {
                   <td style={{ padding: '12px 14px' }}>{f.is_active ? 'Ja' : 'Nee'}</td>
                   <td style={{ padding: '12px 14px' }}>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <button className="btn btn-ghost btn-xs" onClick={() => openProgress(f)}>Voortgang</button>
                       <button className="btn btn-ghost btn-xs" onClick={() => openEdit(f)}>Bewerken</button>
                       <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={busyId === f.id} onClick={() => remove(f.id)}>Verwijderen</button>
                     </div>
@@ -100,6 +113,54 @@ export default function FlowsTab({ organizationId, flows, onRefresh }) {
                 <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Opslaan…' : 'Opslaan'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {progressFlow && (
+        <div className="modal-bg open" onClick={() => setProgressFlow(null)}>
+          <div className="modal" style={{ width: 680 }} onClick={e => e.stopPropagation()}>
+            <h3>Voortgang — {progressFlow.name}</h3>
+            {progressLoading ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Laden…</div>
+            ) : !progressData.length ? (
+              <EmptyState icon="📭" title="Nog geen prospects in deze flow" sub="Start de flow vanuit een geselecteerde prospect bij Prospects." />
+            ) : (
+              <div className="sc" style={{ overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
+                      {['Prospect', 'Stap', 'Status', 'Eerstvolgende actie', 'Reply'].map(h => (
+                        <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {progressData.map(fs => (
+                      <tr key={fs.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '10px 12px' }}>
+                          <div style={{ fontWeight: 500 }}>{fs.outreach_prospects?.name || '—'}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>{fs.outreach_emails?.email || '—'}</div>
+                        </td>
+                        <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{fs.current_step}/{progressFlow.outreach_flow_steps.length}</td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <span className="badge">{STATUS_LABEL[fs.status] || fs.status}</span>
+                        </td>
+                        <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>
+                          {fs.status === 'scheduled' || fs.status === 'queued' ? fdate(fs.scheduled_send_at?.slice(0, 10)) : '—'}
+                        </td>
+                        <td style={{ padding: '10px 12px', color: fs.replied_at ? 'var(--green-text)' : 'var(--text-faint)' }}>
+                          {fs.replied_at ? `✅ ${fdate(fs.replied_at.slice(0, 10))}` : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="modal-actions">
+              <button type="button" className="btn btn-primary" onClick={() => setProgressFlow(null)}>Sluiten</button>
+            </div>
           </div>
         </div>
       )}

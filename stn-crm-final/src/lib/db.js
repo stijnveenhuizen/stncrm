@@ -350,6 +350,7 @@ export async function outreachStartFlow(organizationId, prospectId, emailId, flo
   return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'start-flow', organizationId, prospectId, emailId, flowId }) })
 }
 export async function outreachGetFlowQueue(organizationId, filter = 'due') { return authedFetch(`/api/outreach?resource=flow-queue&organizationId=${organizationId}&filter=${filter}`) }
+export async function outreachGetFlowProgress(organizationId, flowId) { return authedFetch(`/api/outreach?resource=flow-progress&organizationId=${organizationId}&flowId=${flowId}`) }
 export async function outreachApproveFlowStep(organizationId, flowStateId) {
   return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'approve-flow-step', organizationId, flowStateId }) })
 }
