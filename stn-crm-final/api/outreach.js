@@ -149,23 +149,26 @@ async function deleteProspects(service, body) {
 
 // CSV-import (bijv. export vanuit Mailmeteor) — kolom-mapping gebeurt in de
 // UI, hier komt alleen al {name, website, phone, sector, email} per rij aan.
-// Zelfde duplicaatcheck als searchPlaces (domein-match tegen bestaande
-// prospects + pipeline), maar plain insert i.p.v. upsert: CSV-rijen hebben
-// geen place_id om op te dedupliceren, dus herhaalde import van dezelfde
-// CSV geeft (net als bij Places) alleen een duplicaat-waarschuwing, geen
-// harde blokkade.
+// Landt direct als 'approved' (dit is je eigen, al bekende lijst — geen
+// scouting-beoordeling nodig) en verschijnt meteen in Prospects. Duplicaatcheck
+// op zowel domein als e-mailadres tegen bestaande prospects + pipeline; plain
+// insert i.p.v. upsert (CSV-rijen hebben geen place_id om op te dedupliceren),
+// dus net als bij Places alleen een waarschuwing, geen harde blokkade.
 async function importProspectsCsv(service, body) {
   const organizationId = requireOrgId(body)
   const { rows } = body
   if (!Array.isArray(rows) || !rows.length) { const e = new Error('Geen rijen om te importeren.'); e.status = 400; throw e }
   if (rows.length > 500) { const e = new Error('Max 500 rijen per import — splits het bestand.'); e.status = 400; throw e }
 
-  const [{ data: existingProspects }, { data: pipelineRows }] = await Promise.all([
+  const [{ data: existingProspects }, { data: pipelineRows }, { data: existingEmails }] = await Promise.all([
     service.from('outreach_prospects').select('id, website_domain').eq('organization_id', organizationId),
-    service.from('pipeline').select('id, website').eq('organization_id', organizationId),
+    service.from('pipeline').select('id, website, email').eq('organization_id', organizationId),
+    service.from('outreach_emails').select('email, prospect_id, outreach_prospects!inner(organization_id)').eq('outreach_prospects.organization_id', organizationId),
   ])
   const existingByDomain = new Map((existingProspects || []).filter(p => p.website_domain).map(p => [p.website_domain, p.id]))
   const pipelineByDomain = new Map((pipelineRows || []).filter(p => p.website).map(p => [normalizeDomain(p.website), p.id]))
+  const pipelineByEmail = new Map((pipelineRows || []).filter(p => p.email).map(p => [p.email.toLowerCase(), p.id]))
+  const prospectByEmail = new Map((existingEmails || []).filter(e => e.email).map(e => [e.email.toLowerCase(), e.prospect_id]))
 
   let inserted = 0, duplicates = 0, emailsAdded = 0, failed = 0
   const batchSize = 5
@@ -176,22 +179,23 @@ async function importProspectsCsv(service, body) {
       if (!name) { failed++; return }
       const website = row.website?.trim() || null
       const domain = normalizeDomain(website)
-      const dupProspect = domain ? existingByDomain.get(domain) : null
-      const dupPipeline = domain ? pipelineByDomain.get(domain) : null
+      const email = row.email?.trim() || null
+      const emailLower = email?.toLowerCase()
+      const dupProspect = (domain ? existingByDomain.get(domain) : null) || (emailLower ? prospectByEmail.get(emailLower) : null)
+      const dupPipeline = (domain ? pipelineByDomain.get(domain) : null) || (emailLower ? pipelineByEmail.get(emailLower) : null)
       const { data: p, error } = await service.from('outreach_prospects').insert([{
-        organization_id: organizationId, name, website, website_domain: domain,
+        organization_id: organizationId, name, website, website_domain: domain, status: 'approved',
         phone: row.phone?.trim() || null, sector: row.sector?.trim() || null,
         duplicate_prospect_id: dupProspect || null, duplicate_pipeline_id: dupPipeline || null,
       }]).select().single()
       if (error) { failed++; return }
       inserted++
       if (dupProspect || dupPipeline) duplicates++
-      // Zodat een tweede rij in dezelfde CSV met hetzelfde domein ook als duplicaat wordt gezien.
+      // Zodat een volgende rij in dezelfde CSV met hetzelfde domein/e-mailadres ook als duplicaat wordt gezien.
       if (domain) existingByDomain.set(domain, p.id)
-      const email = row.email?.trim()
       if (email) {
         const { error: eErr } = await service.from('outreach_emails').insert([{ prospect_id: p.id, email, confidence: 'found', source: 'CSV-import' }])
-        if (!eErr) emailsAdded++
+        if (!eErr) { emailsAdded++; prospectByEmail.set(emailLower, p.id) }
       }
     }))
   }
@@ -234,6 +238,31 @@ async function scanPageForEmail(url) {
   }
 }
 
+// Wordt aangeroepen zodra een e-mailadres bekend wordt voor een prospect (via
+// findEmail) — checkt of dat adres al bij een andere prospect/pipeline-lead
+// hoort. Overschrijft geen bestaande domein-gebaseerde markering.
+async function flagEmailDuplicate(service, organizationId, prospectId, email) {
+  if (!email) return
+  const { data: prospect } = await service.from('outreach_prospects')
+    .select('duplicate_prospect_id, duplicate_pipeline_id').eq('id', prospectId).single()
+  if (prospect?.duplicate_prospect_id || prospect?.duplicate_pipeline_id) return
+
+  const lower = email.toLowerCase()
+  const { data: emailMatch } = await service.from('outreach_emails')
+    .select('prospect_id, outreach_prospects!inner(organization_id)')
+    .ilike('email', lower).neq('prospect_id', prospectId)
+    .eq('outreach_prospects.organization_id', organizationId).limit(1).maybeSingle()
+  if (emailMatch) {
+    await service.from('outreach_prospects').update({ duplicate_prospect_id: emailMatch.prospect_id }).eq('id', prospectId)
+    return
+  }
+  const { data: pipelineMatch } = await service.from('pipeline')
+    .select('id').eq('organization_id', organizationId).ilike('email', lower).limit(1).maybeSingle()
+  if (pipelineMatch) {
+    await service.from('outreach_prospects').update({ duplicate_pipeline_id: pipelineMatch.id }).eq('id', prospectId)
+  }
+}
+
 async function findEmail(service, body) {
   const organizationId = requireOrgId(body)
   const { prospectId } = body
@@ -266,6 +295,7 @@ async function findEmail(service, body) {
   const { data: row, error } = await service.from('outreach_emails')
     .insert([{ prospect_id: prospectId, email, confidence, source }]).select().single()
   if (error) throw error
+  if (email) await flagEmailDuplicate(service, organizationId, prospectId, email)
   return { email: row }
 }
 

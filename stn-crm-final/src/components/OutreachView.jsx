@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as db from '../lib/db'
 import { showToast } from './Dashboard.jsx'
+import ScoutingTab from './outreach/ScoutingTab.jsx'
 import ProspectsTab from './outreach/ProspectsTab.jsx'
 import EmailsTab from './outreach/EmailsTab.jsx'
 import TemplatesTab from './outreach/TemplatesTab.jsx'
@@ -9,6 +10,7 @@ import FlowsTab from './outreach/FlowsTab.jsx'
 import InsightsTab from './outreach/InsightsTab.jsx'
 
 const TABS = [
+  ['scouting', 'Scouten'],
   ['prospects', 'Prospects'],
   ['emails', 'E-mails'],
   ['templates', 'Sjablonen'],
@@ -17,7 +19,7 @@ const TABS = [
 ]
 
 export default function OutreachView({ organizationId }) {
-  const [tab, setTab] = useState('prospects')
+  const [tab, setTab] = useState('scouting')
   const [prospects, setProspects] = useState([])
   const [emails, setEmails] = useState([])
   const [templates, setTemplates] = useState([])
@@ -122,6 +124,9 @@ export default function OutreachView({ organizationId }) {
       {loading ? <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Laden…</div> : (
         <AnimatePresence mode="wait">
           <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
+            {tab === 'scouting' && (
+              <ScoutingTab organizationId={organizationId} prospects={prospects} onRefresh={refreshAll} />
+            )}
             {tab === 'prospects' && (
               <ProspectsTab organizationId={organizationId} prospects={prospects} emailsByProspect={emailsByProspect} flows={flows} onRefresh={refreshAll} />
             )}

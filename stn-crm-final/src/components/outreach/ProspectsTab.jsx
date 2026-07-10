@@ -16,11 +16,7 @@ async function runBatched(items, worker, batchSize = 3) {
 }
 
 export default function ProspectsTab({ organizationId, prospects, emailsByProspect, flows = [], onRefresh }) {
-  const [query, setQuery] = useState('')
-  const [region, setRegion] = useState('')
-  const [searching, setSearching] = useState(false)
   const [busyId, setBusyId] = useState(null)
-  const [error, setError] = useState('')
   const [selected, setSelected] = useState(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkSector, setBulkSector] = useState('')
@@ -32,8 +28,11 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
   const [emailFilter, setEmailFilter] = useState('all')
   const [dupFilter, setDupFilter] = useState('all')
 
-  const sectors = [...new Set(prospects.map(p => p.sector).filter(Boolean))].sort()
-  const filtered = prospects.filter(p => {
+  // Prospects toont uitsluitend beoordeelde resultaten — nieuwe/onbeoordeelde
+  // (status 'pending') horen bij Scouten, niet hier.
+  const reviewed = prospects.filter(p => p.status !== 'pending')
+  const sectors = [...new Set(reviewed.map(p => p.sector).filter(Boolean))].sort()
+  const filtered = reviewed.filter(p => {
     if (statusFilter !== 'all' && p.status !== statusFilter) return false
     if (sectorFilter !== 'all' && p.sector !== sectorFilter) return false
     const hasEmail = !!(emailsByProspect[p.id]?.length)
@@ -49,25 +48,6 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
   })
   const filtersActive = searchText.trim() || statusFilter !== 'all' || sectorFilter !== 'all' || emailFilter !== 'all' || dupFilter !== 'all'
   function resetFilters() { setSearchText(''); setStatusFilter('all'); setSectorFilter('all'); setEmailFilter('all'); setDupFilter('all') }
-
-  async function search(e) {
-    e.preventDefault()
-    if (!query.trim() || !region.trim()) return
-    setSearching(true); setError('')
-    try {
-      const res = await db.outreachSearchPlaces(organizationId, query.trim(), region.trim())
-      showToast(`${res.inserted} nieuwe prospects gevonden${res.duplicates ? ` (${res.duplicates} mogelijke duplicaten gemarkeerd)` : ''}`)
-      onRefresh()
-    } catch (e) { setError(e.message) }
-    finally { setSearching(false) }
-  }
-
-  async function setStatus(id, status) {
-    setBusyId(id)
-    try { await db.outreachApproveProspect(organizationId, id, status); onRefresh() }
-    catch (e) { showToast(e.message, 'error') }
-    finally { setBusyId(null) }
-  }
 
   async function findEmail(id) {
     setBusyId(id)
@@ -183,24 +163,13 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
   return (
     <div>
       <div className="sc" style={{ marginBottom: 16 }}>
-        <div className="sc-body">
-          <form onSubmit={search} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div className="form-group" style={{ marginBottom: 0, flex: '1 1 200px' }}>
-              <label>Zoekterm</label>
-              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="bijv. installatiebedrijf" />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0, flex: '1 1 160px' }}>
-              <label>Regio</label>
-              <input value={region} onChange={e => setRegion(e.target.value)} placeholder="bijv. Twente" />
-            </div>
-            <button type="submit" className="btn btn-primary" disabled={searching}>{searching ? 'Zoeken…' : 'Zoek prospects'}</button>
-            <button type="button" className="btn btn-ghost" onClick={() => setShowImport(true)}>Importeer CSV</button>
-          </form>
-          {error && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 10 }}>{error}</div>}
+        <div className="sc-body" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>Nieuwe prospects werf je bij <strong>Scouten</strong> — hier staan alleen al beoordeelde (goedgekeurde/afgewezen) prospects.</p>
+          <button type="button" className="btn btn-ghost" onClick={() => setShowImport(true)}>Importeer CSV</button>
         </div>
       </div>
 
-      {prospects.length > 0 && (
+      {reviewed.length > 0 && (
         <div className="sc" style={{ marginBottom: 16 }}>
           <div className="sc-body" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div className="form-group" style={{ marginBottom: 0, flex: '1 1 220px' }}>
@@ -211,7 +180,6 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
               <label>Status</label>
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
                 <option value="all">Alle</option>
-                <option value="pending">Concept</option>
                 <option value="approved">Goedgekeurd</option>
                 <option value="rejected">Afgewezen</option>
               </select>
@@ -263,13 +231,13 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
         </div>
       )}
 
-      {!prospects.length ? (
-        <EmptyState icon="🔍" title="Nog geen prospects" sub="Zoek hierboven op zoekterm + regio om resultaten uit Google Places op te halen, of importeer een CSV-bestand." />
+      {!reviewed.length ? (
+        <EmptyState icon="🔍" title="Nog geen beoordeelde prospects" sub="Keur prospects goed bij Scouten, of importeer een CSV-bestand — ze verschijnen daarna hier." />
       ) : !filtered.length ? (
         <EmptyState icon="🔍" title="Geen prospects binnen deze filters" sub="Pas de filters aan of wis ze om alle prospects te zien." cta={<button className="btn btn-ghost btn-sm" onClick={resetFilters}>Filters wissen</button>} />
       ) : (
         <div className="sc" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>{filtered.length} van {prospects.length} prospects</div>
+          <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>{filtered.length} van {reviewed.length} prospects</div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
@@ -309,10 +277,6 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
                     </td>
                     <td style={{ padding: '12px 14px' }}>
                       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                        {p.status === 'pending' && <>
-                          <button className="btn btn-ghost btn-xs" disabled={busy} onClick={() => setStatus(p.id, 'approved')}>Goedkeuren</button>
-                          <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={busy} onClick={() => setStatus(p.id, 'rejected')}>Afwijzen</button>
-                        </>}
                         {p.status === 'approved' && !emailRows.length && (
                           <button className="btn btn-ghost btn-xs" disabled={busy} onClick={() => findEmail(p.id)}>{busy ? '…' : 'Vind e-mail'}</button>
                         )}
