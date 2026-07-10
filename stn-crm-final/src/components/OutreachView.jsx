@@ -123,7 +123,7 @@ export default function OutreachView({ organizationId }) {
         <AnimatePresence mode="wait">
           <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
             {tab === 'prospects' && (
-              <ProspectsTab organizationId={organizationId} prospects={prospects} emailsByProspect={emailsByProspect} onRefresh={refreshAll} />
+              <ProspectsTab organizationId={organizationId} prospects={prospects} emailsByProspect={emailsByProspect} flows={flows} onRefresh={refreshAll} />
             )}
             {tab === 'emails' && (
               <EmailsTab organizationId={organizationId} emails={emails} prospectById={prospectById} flows={flows} pendingSendId={pendingSend?.send.id} onSchedule={startSend} onStartFlow={startFlow} onRefresh={refreshAll} />

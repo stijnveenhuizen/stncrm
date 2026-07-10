@@ -15,7 +15,7 @@ async function runBatched(items, worker, batchSize = 3) {
   return results
 }
 
-export default function ProspectsTab({ organizationId, prospects, emailsByProspect, onRefresh }) {
+export default function ProspectsTab({ organizationId, prospects, emailsByProspect, flows = [], onRefresh }) {
   const [query, setQuery] = useState('')
   const [region, setRegion] = useState('')
   const [searching, setSearching] = useState(false)
@@ -24,6 +24,7 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
   const [selected, setSelected] = useState(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkSector, setBulkSector] = useState('')
+  const [bulkFlowId, setBulkFlowId] = useState('')
   const [showImport, setShowImport] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -132,6 +133,32 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
     finally { setBulkBusy(false) }
   }
 
+  async function bulkStartFlow() {
+    if (!bulkFlowId) return
+    const ids = [...selected]
+    // Per prospect het beste bruikbare adres: bij voorkeur een goedgekeurde,
+    // anders het eerst gevonden/geraden adres. Prospects zonder e-mailadres
+    // worden overgeslagen (server vereist een emailId).
+    const targets = ids.map(id => {
+      const rows = (emailsByProspect[id] || []).filter(r => r.email)
+      const best = rows.find(r => r.status === 'approved') || rows[0]
+      return best ? { prospectId: id, emailId: best.id } : null
+    })
+    const skipped = targets.filter(t => !t).length
+    const todo = targets.filter(Boolean)
+    if (!todo.length) { showToast('Geen van de geselecteerde prospects heeft een bruikbaar e-mailadres'); return }
+    setBulkBusy(true)
+    try {
+      const results = await runBatched(todo, t => db.outreachStartFlow(organizationId, t.prospectId, t.emailId, bulkFlowId))
+      const failed = results.filter(r => r.status === 'rejected').length
+      showToast(`Flow gestart voor ${todo.length - failed} prospects${skipped ? ` (${skipped} overgeslagen, geen e-mailadres)` : ''}${failed ? `, ${failed} mislukt (mogelijk al in deze flow)` : ''}`)
+      setBulkFlowId('')
+      setSelected(new Set())
+      onRefresh()
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setBulkBusy(false) }
+  }
+
   async function bulkDelete() {
     const ids = [...selected]
     if (!confirm(`${ids.length} prospects verwijderen? Bijbehorende e-mails, flow-historie en verzendingen worden ook verwijderd. Dit kan niet ongedaan worden gemaakt.`)) return
@@ -224,6 +251,13 @@ export default function ProspectsTab({ organizationId, prospects, emailsByProspe
           <button className="btn btn-ghost btn-xs" disabled={bulkBusy} onClick={bulkFindEmail}>{bulkBusy ? 'Bezig…' : 'Vind e-mail'}</button>
           <input value={bulkSector} onChange={e => setBulkSector(e.target.value)} placeholder="Sector…" style={{ width: 130, height: 28, fontSize: 12 }} />
           <button className="btn btn-ghost btn-xs" disabled={bulkBusy || !bulkSector.trim()} onClick={bulkAssignSector}>Sector toewijzen</button>
+          {flows.length > 0 && <>
+            <select value={bulkFlowId} onChange={e => setBulkFlowId(e.target.value)} style={{ width: 'auto', height: 28, fontSize: 12 }}>
+              <option value="">Kies flow…</option>
+              {flows.filter(f => f.is_active).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+            <button className="btn btn-primary btn-xs" disabled={bulkBusy || !bulkFlowId} onClick={bulkStartFlow}>Start flow</button>
+          </>}
           <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={bulkBusy} onClick={bulkDelete}>Verwijderen</button>
           <button className="btn btn-ghost btn-xs" onClick={() => setSelected(new Set())} style={{ marginLeft: 'auto' }}>Deselecteren</button>
         </div>
