@@ -712,25 +712,29 @@ function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-// Bouwt de HTML-versie van de mail: originele tekst met regeleinden -> <br>,
-// elke http(s)-link herschreven naar een klik-redirect, plus een onzichtbare
-// 1x1-pixel aan het eind. Alleen links worden herschreven als de tekst er
-// daadwerkelijk een bevat — geen kunstmatige links toevoegen.
-function buildTrackedHtmlBody(bodyText, token) {
+// step.body is sinds de rich-text-editor al echte HTML (bold/lijsten/links/
+// afbeeldingen). Hier hoeven we alleen nog: elke http(s)-link uit een
+// href-attribuut herschrijven naar een klik-redirect, plus een onzichtbare
+// 1x1-pixel aan het eind — geen escaping/br-conversie meer nodig, dat deed
+// de editor al bij het opslaan.
+function buildTrackedHtmlBody(bodyHtml, token) {
   const base = `${appBaseUrl()}/api/outreach`
-  const urlRegex = /https?:\/\/[^\s<]+/g
-  let html = '', lastIndex = 0, m
-  while ((m = urlRegex.exec(bodyText))) {
-    html += escapeHtml(bodyText.slice(lastIndex, m.index))
-    const original = m[0]
-    const redirect = `${base}?track_click=1&id=${token}&url=${encodeURIComponent(original)}`
-    html += `<a href="${redirect}">${escapeHtml(original)}</a>`
-    lastIndex = m.index + original.length
-  }
-  html += escapeHtml(bodyText.slice(lastIndex))
-  html = html.replace(/\r\n|\n/g, '<br>')
-  html += `<img src="${base}?track_open=1&id=${token}" width="1" height="1" alt="" style="display:none">`
+  const html = bodyHtml.replace(/href="(https?:[^"]+)"/g, (m, url) =>
+    `href="${base}?track_click=1&id=${token}&url=${encodeURIComponent(url)}"`)
+  return html + `<img src="${base}?track_open=1&id=${token}" width="1" height="1" alt="" style="display:none">`
+}
+
+// Platte-tekst-fallback (voor de text/plain MIME-alternative) uit de HTML
+// van de rich-text-editor — geen volwaardige HTML-parser nodig voor dit doel.
+function stripHtml(html) {
   return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 async function ensureGmailWatch(service, organizationId) {
@@ -787,6 +791,7 @@ async function saveFlow(service, body) {
   const stepRows = steps.map((s, i) => ({
     flow_id: flowId, step_order: i + 1, subject: s.subject, body: s.body,
     wait_days_after_previous: i === 0 ? 0 : (s.wait_days_after_previous || 0),
+    canvas_x: s.canvas_x ?? null, canvas_y: s.canvas_y ?? null,
   }))
   const { data: inserted, error: stepErr } = await service.from('outreach_flow_steps').insert(stepRows).select()
   if (stepErr) throw stepErr
@@ -935,10 +940,10 @@ async function approveFlowStep(service, body) {
 
   const ctx = { name: fs.outreach_prospects.name, city: guessCity(fs.outreach_prospects.address), sector: fs.outreach_prospects.sector }
   const subject = renderTemplate(step.subject, ctx)
-  const body_ = renderTemplate(step.body, ctx)
+  const bodyHtml = renderTemplate(step.body, ctx)
   const trackingToken = makeTrackingToken()
-  const htmlBody = buildTrackedHtmlBody(body_, trackingToken)
-  const { gmailMessageId, gmailThreadId } = await sendViaGmail(service, organizationId, { to: fs.outreach_emails.email, subject, body: body_, htmlBody, gmailThreadId: fs.gmail_thread_id })
+  const htmlBody = buildTrackedHtmlBody(bodyHtml, trackingToken)
+  const { gmailMessageId, gmailThreadId } = await sendViaGmail(service, organizationId, { to: fs.outreach_emails.email, subject, body: stripHtml(bodyHtml), htmlBody, gmailThreadId: fs.gmail_thread_id })
   if (!fs.gmail_thread_id) await service.from('outreach_flow_state').update({ gmail_thread_id: gmailThreadId }).eq('id', flowStateId)
   await service.from('outreach_flow_sends').insert([{
     organization_id: organizationId, flow_state_id: fs.id, flow_id: fs.flow_id, prospect_id: fs.prospect_id,
@@ -998,10 +1003,10 @@ async function processFlowQueueAndWatch(service) {
         const step = steps.find(s => s.step_order === fs.current_step)
         const ctx = { name: fs.outreach_prospects.name, city: guessCity(fs.outreach_prospects.address), sector: fs.outreach_prospects.sector }
         const subject = renderTemplate(step.subject, ctx)
-        const body_ = renderTemplate(step.body, ctx)
+        const bodyHtml = renderTemplate(step.body, ctx)
         const trackingToken = makeTrackingToken()
-        const htmlBody = buildTrackedHtmlBody(body_, trackingToken)
-        const { gmailMessageId, gmailThreadId } = await sendViaGmail(service, organizationId, { to: fs.outreach_emails.email, subject, body: body_, htmlBody, gmailThreadId: fs.gmail_thread_id })
+        const htmlBody = buildTrackedHtmlBody(bodyHtml, trackingToken)
+        const { gmailMessageId, gmailThreadId } = await sendViaGmail(service, organizationId, { to: fs.outreach_emails.email, subject, body: stripHtml(bodyHtml), htmlBody, gmailThreadId: fs.gmail_thread_id })
         if (!fs.gmail_thread_id) await service.from('outreach_flow_state').update({ gmail_thread_id: gmailThreadId }).eq('id', fs.id)
         await service.from('outreach_flow_sends').insert([{
           organization_id: organizationId, flow_state_id: fs.id, flow_id: fs.flow_id, prospect_id: fs.prospect_id,

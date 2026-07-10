@@ -188,3 +188,24 @@ input:focus-visible,textarea:focus-visible,select:focus-visible { outline: none;
     font-size: 12px;
   }
 }
+
+/* Rich-text editor (Outreach-flows) — TipTap levert alleen kale content, geen
+   eigen chrome, dus typografie hier zetten i.p.v. per-component inline. */
+.rte-content .ProseMirror {
+  min-height: 130px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  outline: none;
+}
+.rte-content .ProseMirror p { margin: 0 0 8px; }
+.rte-content .ProseMirror ul { margin: 0 0 8px; padding-left: 20px; }
+.rte-content .ProseMirror img { max-width: 100%; border-radius: var(--rsm); }
+.rte-content .ProseMirror a { color: var(--accent); }
+
+/* React Flow (Outreach-flows canvas) — overschrijft het library-eigen
+   blauw/grijze thema met de bestaande CRM-kleuren, geen Overloop-stijl. */
+.react-flow__attribution { display: none; }
+.react-flow__controls-button { background: var(--bg); border-color: var(--border); color: var(--text-muted); }
+.react-flow__controls-button:hover { background: var(--bg2); }
+
