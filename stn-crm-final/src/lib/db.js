@@ -300,65 +300,139 @@ export function logClientError(message, stack, route) {
   }).catch(() => {})
 }
 
-// ── Outreach ─────────────────────────────────────────────────────────────────────
-export async function outreachGetProspects(organizationId) { return authedFetch(`/api/outreach?resource=prospects&organizationId=${organizationId}`) }
-export async function outreachSearchPlaces(organizationId, query, region) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'search-places', organizationId, query, region }) })
+// ── Contacts ─────────────────────────────────────────────────────────────────────
+export async function getContacts(organizationId) {
+  const { data, error } = await supabase.from('contacts').select('*').eq('organization_id', organizationId).order('last_activity_at', { ascending: false })
+  if (error) throw error
+  return data
 }
-export async function outreachApproveProspect(organizationId, id, status) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'approve-prospect', organizationId, id, status }) })
+export async function getContact(id) {
+  const { data, error } = await supabase.from('contacts').select('*, pipeline(*, pipeline_stages(*))').eq('id', id).single()
+  if (error) throw error
+  return data
 }
-export async function outreachGetEmails(organizationId) { return authedFetch(`/api/outreach?resource=emails&organizationId=${organizationId}`) }
-export async function outreachFindEmail(organizationId, prospectId) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'find-email', organizationId, prospectId }) })
+export async function createContact(contact) {
+  const { data, error } = await supabase.from('contacts').insert([{ status: 'NEW', source: 'handmatig', ...contact }]).select().single()
+  if (error) throw error
+  await createContactActivity({ contact_id: data.id, type: 'CONTACT_CREATED', title: 'Contact aangemaakt' })
+  return data
 }
-export async function outreachFindEmailsBatch(organizationId) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'find-emails-batch', organizationId }) })
+export async function updateContact(id, updates) {
+  const { data, error } = await supabase.from('contacts').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+  if (error) throw error
+  return data
 }
-export async function outreachImportProspectsCsv(organizationId, rows) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'import-prospects-csv', organizationId, rows }) })
+export async function deleteContacts(ids) {
+  const { error } = await supabase.from('contacts').delete().in('id', ids)
+  if (error) throw error
 }
-export async function outreachSetProspectsSector(organizationId, ids, sector) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'set-prospects-sector', organizationId, ids, sector }) })
+export async function setContactsSector(ids, sector) {
+  const { error } = await supabase.from('contacts').update({ sector }).in('id', ids)
+  if (error) throw error
 }
-export async function outreachDeleteProspects(organizationId, ids) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'delete-prospects', organizationId, ids }) })
+export async function importContactsCsv(organizationId, rows) {
+  const payload = rows.filter(r => r.company?.trim()).map(r => ({
+    organization_id: organizationId, company: r.company?.trim() || null, email: r.email?.trim() || null,
+    phone: r.phone?.trim() || null, website: r.website?.trim() || null, sector: r.sector?.trim() || null,
+    status: 'NEW', source: 'csv-import',
+  }))
+  const { data, error } = await supabase.from('contacts').upsert(payload, { onConflict: 'organization_id,email', ignoreDuplicates: true }).select()
+  if (error) throw error
+  return data
 }
-export async function outreachUpdateEmail(organizationId, id, patch) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'update-email', organizationId, id, ...patch }) })
-}
-export async function outreachGetInsights(organizationId, period = '30') { return authedFetch(`/api/outreach?resource=insights&organizationId=${organizationId}&period=${period}`) }
 
-// ── Outreach: Gmail-koppeling ────────────────────────────────────────────────
-export async function outreachGmailStatus(organizationId) { return authedFetch(`/api/outreach?resource=gmail-status&organizationId=${organizationId}`) }
-export async function outreachGmailOAuthExchange(organizationId, code, redirectUri) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'gmail-oauth-exchange', organizationId, code, redirectUri }) })
+// ── Contact-tijdlijn ─────────────────────────────────────────────────────────────
+export async function getContactActivities(contactId) {
+  const { data, error } = await supabase.from('contact_activities').select('*').eq('contact_id', contactId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
 }
-export async function outreachGmailDisconnect(organizationId) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'gmail-disconnect', organizationId }) })
+export async function createContactActivity(activity) {
+  const { data, error } = await supabase.from('contact_activities').insert([activity]).select().single()
+  if (error) throw error
+  return data
 }
 
-// ── Outreach: Flows ──────────────────────────────────────────────────────────
-export async function outreachGetFlows(organizationId) { return authedFetch(`/api/outreach?resource=flows&organizationId=${organizationId}`) }
-export async function outreachSaveFlow(organizationId, flow) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'save-flow', organizationId, ...flow }) })
+// ── Contact-taken (los van het project-tasksysteem) ──────────────────────────────
+export async function getContactTasks(contactId) {
+  const { data, error } = await supabase.from('contact_tasks').select('*').eq('contact_id', contactId).order('deadline', { ascending: true, nullsFirst: false })
+  if (error) throw error
+  return data
 }
-export async function outreachDeleteFlow(organizationId, id) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'delete-flow', organizationId, id }) })
+export async function getAllContactTasks(organizationId) {
+  const { data, error } = await supabase.from('contact_tasks')
+    .select('*, contacts!inner(company, contact_name, organization_id)').eq('contacts.organization_id', organizationId)
+    .neq('status', 'done').order('deadline', { ascending: true, nullsFirst: false })
+  if (error) throw error
+  return data
 }
-export async function outreachStartFlow(organizationId, prospectId, emailId, flowId) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'start-flow', organizationId, prospectId, emailId, flowId }) })
+export async function createContactTask(task) {
+  const { data, error } = await supabase.from('contact_tasks').insert([task]).select().single()
+  if (error) throw error
+  await createContactActivity({ contact_id: task.contact_id, type: 'TASK_CREATED', title: `Taak aangemaakt: ${task.title}` })
+  return data
 }
-export async function outreachGetFlowQueue(organizationId, filter = 'due') { return authedFetch(`/api/outreach?resource=flow-queue&organizationId=${organizationId}&filter=${filter}`) }
-export async function outreachGetFlowProgress(organizationId, flowId) { return authedFetch(`/api/outreach?resource=flow-progress&organizationId=${organizationId}&flowId=${flowId}`) }
-export async function outreachApproveFlowStep(organizationId, flowStateId) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'approve-flow-step', organizationId, flowStateId }) })
+export async function updateContactTask(id, updates) {
+  const patch = { ...updates }
+  if (updates.status === 'done' && !updates.completed_at) patch.completed_at = new Date().toISOString()
+  const { data, error } = await supabase.from('contact_tasks').update(patch).eq('id', id).select().single()
+  if (error) throw error
+  if (updates.status === 'done') await createContactActivity({ contact_id: data.contact_id, type: 'TASK_COMPLETED', title: `Taak afgerond: ${data.title}` })
+  return data
 }
-export async function outreachSkipFlowStep(organizationId, flowStateId) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'skip-flow-step', organizationId, flowStateId }) })
+export async function deleteContactTask(id) {
+  const { error } = await supabase.from('contact_tasks').delete().eq('id', id)
+  if (error) throw error
 }
-export async function outreachStopFlow(organizationId, flowStateId, reason) {
-  return authedFetch('/api/outreach', { method: 'POST', body: JSON.stringify({ action: 'stop-flow', organizationId, flowStateId, reason }) })
+
+// ── Leadscore- en automatiseringsregels (instellingen) ───────────────────────────
+export async function getLeadscoreRules(organizationId) {
+  const { data, error } = await supabase.from('leadscore_rules').select('*').eq('organization_id', organizationId).order('event_type')
+  if (error) throw error
+  return data
+}
+export async function updateLeadscoreRule(id, updates) {
+  const { data, error } = await supabase.from('leadscore_rules').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function getAutomationRules(organizationId) {
+  const { data, error } = await supabase.from('automation_rules').select('*').eq('organization_id', organizationId).order('created_at')
+  if (error) throw error
+  return data
+}
+export async function saveAutomationRule(rule) {
+  if (rule.id) {
+    const { data, error } = await supabase.from('automation_rules').update(rule).eq('id', rule.id).select().single()
+    if (error) throw error
+    return data
+  }
+  const { data, error } = await supabase.from('automation_rules').insert([rule]).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteAutomationRule(id) {
+  const { error } = await supabase.from('automation_rules').delete().eq('id', id)
+  if (error) throw error
+}
+export async function getEventTypeAliases(organizationId) {
+  const { data, error } = await supabase.from('event_type_aliases').select('*').eq('organization_id', organizationId).order('external_key')
+  if (error) throw error
+  return data
+}
+export async function saveEventTypeAlias(alias) {
+  const { data, error } = await supabase.from('event_type_aliases').upsert([alias], { onConflict: 'organization_id,external_key' }).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteEventTypeAlias(id) {
+  const { error } = await supabase.from('event_type_aliases').delete().eq('id', id)
+  if (error) throw error
+}
+export async function getWebhookEndpoint(organizationId, source = 'mailmeteor') {
+  const { data, error } = await supabase.from('webhook_endpoints').select('*').eq('organization_id', organizationId).eq('source', source).maybeSingle()
+  if (error) throw error
+  return data
 }
 
 // ── Projects ───────────────────────────────────────────────────────────────────
@@ -900,7 +974,7 @@ export async function deleteMeeting(id) {
 export async function getPipeline(organizationId) {
   const { data, error } = await supabase
     .from('pipeline')
-    .select('*, pipeline_stages(*), pipelines(*), assignee:profiles!pipeline_assigned_to_fkey(full_name)')
+    .select('*, pipeline_stages(*), pipelines(*), assignee:profiles!pipeline_assigned_to_fkey(full_name), contacts(company, contact_name, leadscore, last_activity_at)')
     .eq('organization_id', organizationId).order('created_at', { ascending: false })
   if (error) throw error
   return data
@@ -929,11 +1003,16 @@ export async function convertToClient(prospect) {
     phone: prospect.phone || null,
     website: prospect.website || null,
     status: 'actief',
-    organization_id: prospect.organization_id
+    organization_id: prospect.organization_id,
+    contact_id: prospect.contact_id || null,
   }]).select().single()
   if (error) throw error
   // Mark prospect as converted
   await supabase.from('pipeline').update({ stage: 'klant', converted_client_id: client.id }).eq('id', prospect.id)
+  if (prospect.contact_id) {
+    await updateContact(prospect.contact_id, { status: 'CUSTOMER' })
+    await createContactActivity({ contact_id: prospect.contact_id, type: 'STATUS_CHANGED', title: 'Klant geworden' })
+  }
   return client
 }
 
@@ -1080,6 +1159,7 @@ export async function moveProspectToStage(prospect, newStage, extra = {}) {
   const updated = await updateProspect(prospect.id, updates)
 
   await createProspectActivity({ prospect_id: prospect.id, type: 'fase_wisseling', title: `Fase gewijzigd naar "${newStage.name}"`, is_completed: true, completed_at: new Date().toISOString() })
+  if (prospect.contact_id) await createContactActivity({ contact_id: prospect.contact_id, type: 'STATUS_CHANGED', title: `Deal-fase gewijzigd naar "${newStage.name}"` })
 
   if (oldStageId) await runAutomationsForTransition(updated, 'left_stage', oldStageId)
   await runAutomationsForTransition(updated, 'entered_stage', newStage.id)
@@ -1167,36 +1247,13 @@ export async function createProspectQuote(quote) {
   const total = quote.total ?? quote.subtotal
   const { data, error } = await supabase.from('quotes').insert([{ ...quote, client_id: null, amount: total, status: quote.status || 'concept' }]).select().single()
   if (error) throw error
+  if (data.status === 'verzonden' && quote.prospect_id) {
+    const { data: deal } = await supabase.from('pipeline').select('contact_id').eq('id', quote.prospect_id).maybeSingle()
+    if (deal?.contact_id) await createContactActivity({ contact_id: deal.contact_id, type: 'NOTE', title: 'Offerte verstuurd' })
+  }
   return data
 }
 
-// ── Pipeline Tasks ─────────────────────────────────────────────────────────────
-export async function getPipelineTasks(prospectId) {
-  const { data, error } = await supabase
-    .from('pipeline_tasks').select('*').eq('prospect_id', prospectId).order('due_date', { ascending: true, nullsFirst: false })
-  if (error) throw error
-  return data
-}
-export async function getAllPipelineTasks() {
-  const { data, error } = await supabase
-    .from('pipeline_tasks').select('*, pipeline(fname, lname, company, stage)').eq('done', false).order('due_date', { ascending: true, nullsFirst: false })
-  if (error) throw error
-  return data
-}
-export async function createPipelineTask(task) {
-  const { data, error } = await supabase.from('pipeline_tasks').insert([task]).select().single()
-  if (error) throw error
-  return data
-}
-export async function updatePipelineTask(id, updates) {
-  const { data, error } = await supabase.from('pipeline_tasks').update(updates).eq('id', id).select().single()
-  if (error) throw error
-  return data
-}
-export async function deletePipelineTask(id) {
-  const { error } = await supabase.from('pipeline_tasks').delete().eq('id', id)
-  if (error) throw error
-}
 
 // ── Bedrijfsinstellingen ──────────────────────────────────────────────────────
 export async function getCompanySettings(organizationId) {

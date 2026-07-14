@@ -488,17 +488,39 @@ function InfoTab({ prospect, stage, activities = [], hasQuote, onRefresh }) {
   )
 }
 
+// Een Deal hoort altijd bij precies één Contact — geen Deal zonder Contact.
+// Bestaand contact kiezen, of meteen een nieuwe aanmaken als het bedrijf nog
+// niet in Contacten staat.
 function NewProspectForm({ organizationId, pipelineId, stageId, stages, onCreated, onClose }) {
-  const [form, setForm] = useState({ fname: '', lname: '', company: '', email: '', phone: '', source: SOURCES[0], deal_value: '' })
+  const [contacts, setContacts] = useState([])
+  const [contactId, setContactId] = useState('')
+  const [creatingContact, setCreatingContact] = useState(false)
+  const [newContact, setNewContact] = useState({ company: '', contact_name: '', email: '', phone: '' })
+  const [form, setForm] = useState({ source: SOURCES[0], deal_value: '' })
   const [saving, setSaving] = useState(false)
   const f = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
+  const nf = k => e => setNewContact(p => ({ ...p, [k]: e.target.value }))
   const stage = stages.find(s => s.id === stageId) || stages[0]
 
+  useEffect(() => { db.getContacts(organizationId).then(setContacts).catch(() => {}) }, [organizationId])
+
   async function save() {
-    if (!form.fname.trim()) return showToast('Vul een naam in.', 'error')
     setSaving(true)
     try {
-      const p = await db.createProspect({ organization_id: organizationId, pipeline_id: pipelineId, stage_id: stage?.id, win_probability: stage?.win_probability, fname: form.fname, lname: form.lname || '—', company: form.company || null, email: form.email || null, phone: form.phone || null, source: form.source, deal_value: form.deal_value ? parseFloat(form.deal_value) : null })
+      let cId = contactId
+      if (creatingContact) {
+        if (!newContact.company.trim()) { showToast('Vul een bedrijfsnaam in.', 'error'); setSaving(false); return }
+        const c = await db.createContact({ organization_id: organizationId, ...newContact })
+        cId = c.id
+      }
+      if (!cId) { showToast('Kies een contact, of maak er een nieuw aan.', 'error'); setSaving(false); return }
+      const contact = creatingContact ? newContact : contacts.find(c => c.id === cId)
+      const p = await db.createProspect({
+        organization_id: organizationId, contact_id: cId, pipeline_id: pipelineId, stage_id: stage?.id, win_probability: stage?.win_probability,
+        fname: contact?.contact_name || contact?.company || 'Onbekend', lname: '', company: contact?.company || null,
+        email: contact?.email || null, phone: contact?.phone || null, source: form.source, deal_value: form.deal_value ? parseFloat(form.deal_value) : null,
+      })
+      await db.createContactActivity({ contact_id: cId, type: 'DEAL_CREATED', title: 'Deal aangemaakt' })
       db.logEvent('action', 'prospect_created', {}, organizationId)
       onCreated(p.id)
     } catch (e) { showToast('Fout: ' + e.message, 'error') }
@@ -508,23 +530,36 @@ function NewProspectForm({ organizationId, pipelineId, stageId, stages, onCreate
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h3 style={{ margin: 0 }}>Nieuwe prospect</h3>
+        <h3 style={{ margin: 0 }}>Nieuwe deal</h3>
         <button onClick={onClose} aria-label="Sluiten" style={{ fontSize: 20, color: 'var(--text-faint)', cursor: 'pointer' }}>×</button>
       </div>
-      <div className="form-row">
-        <div className="form-group"><label>Voornaam</label><input value={form.fname} onChange={f('fname')} autoFocus /></div>
-        <div className="form-group"><label>Achternaam</label><input value={form.lname} onChange={f('lname')} /></div>
-      </div>
-      <div className="form-group"><label>Bedrijf</label><input value={form.company} onChange={f('company')} /></div>
-      <div className="form-row">
-        <div className="form-group"><label>E-mail</label><input value={form.email} onChange={f('email')} /></div>
-        <div className="form-group"><label>Telefoon</label><input value={form.phone} onChange={f('phone')} /></div>
-      </div>
+
+      {!creatingContact ? (
+        <div className="form-group">
+          <label>Contact</label>
+          <select value={contactId} onChange={e => setContactId(e.target.value)} autoFocus>
+            <option value="">— Kies een contact —</option>
+            {contacts.map(c => <option key={c.id} value={c.id}>{c.company}{c.contact_name ? ` — ${c.contact_name}` : ''}</option>)}
+          </select>
+          <button type="button" className="btn btn-ghost btn-xs" style={{ marginTop: 8 }} onClick={() => setCreatingContact(true)}>+ Nieuw contact aanmaken</button>
+        </div>
+      ) : (
+        <>
+          <div className="form-group"><label>Bedrijfsnaam *</label><input value={newContact.company} onChange={nf('company')} autoFocus /></div>
+          <div className="form-group"><label>Contactpersoon</label><input value={newContact.contact_name} onChange={nf('contact_name')} /></div>
+          <div className="form-row">
+            <div className="form-group"><label>E-mail</label><input value={newContact.email} onChange={nf('email')} /></div>
+            <div className="form-group"><label>Telefoon</label><input value={newContact.phone} onChange={nf('phone')} /></div>
+          </div>
+          <button type="button" className="btn btn-ghost btn-xs" style={{ marginBottom: 12 }} onClick={() => setCreatingContact(false)}>← Bestaand contact kiezen</button>
+        </>
+      )}
+
       <div className="form-row">
         <div className="form-group"><label>Bron</label><select value={form.source} onChange={f('source')}>{SOURCES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
         <div className="form-group"><label>Verwachte waarde (€)</label><input type="number" value={form.deal_value} onChange={f('deal_value')} /></div>
       </div>
-      <button className="btn btn-primary" style={{ width: '100%', padding: 12 }} onClick={save} disabled={saving}>{saving ? 'Opslaan…' : 'Prospect aanmaken'}</button>
+      <button className="btn btn-primary" style={{ width: '100%', padding: 12 }} onClick={save} disabled={saving}>{saving ? 'Opslaan…' : 'Deal aanmaken'}</button>
     </div>
   )
 }

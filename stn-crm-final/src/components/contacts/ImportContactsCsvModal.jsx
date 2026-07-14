@@ -3,7 +3,7 @@ import * as db from '../../lib/db'
 import { showToast } from '../Dashboard.jsx'
 
 const FIELDS = [
-  { key: 'name', label: 'Bedrijfsnaam', required: true, synonyms: ['company', 'bedrijf', 'bedrijfsnaam', 'organization', 'naam', 'name'] },
+  { key: 'company', label: 'Bedrijfsnaam', required: true, synonyms: ['company', 'bedrijf', 'bedrijfsnaam', 'organization', 'naam', 'name'] },
   { key: 'email', label: 'E-mailadres', synonyms: ['email', 'e-mail', 'emailaddress', 'e-mailadres', 'mail'] },
   { key: 'website', label: 'Website', synonyms: ['website', 'site', 'url', 'domain', 'domein'] },
   { key: 'phone', label: 'Telefoon', synonyms: ['phone', 'telefoon', 'telefoonnummer', 'mobile', 'tel'] },
@@ -44,7 +44,7 @@ function guessMapping(headers) {
   return mapping
 }
 
-export default function ImportCsvModal({ organizationId, onClose, onDone }) {
+export default function ImportContactsCsvModal({ organizationId, onClose, onDone }) {
   const [parsed, setParsed] = useState(null) // { headers, data }
   const [mapping, setMapping] = useState({})
   const [importing, setImporting] = useState(false)
@@ -66,18 +66,18 @@ export default function ImportCsvModal({ organizationId, onClose, onDone }) {
   }
 
   async function doImport() {
-    if (mapping.name === '' || mapping.name === undefined) { setError('Kies minimaal een kolom voor Bedrijfsnaam.'); return }
+    if (mapping.company === '' || mapping.company === undefined) { setError('Kies minimaal een kolom voor Bedrijfsnaam.'); return }
     setImporting(true); setError('')
     try {
       const rows = parsed.data.map(cols => ({
-        name: mapping.name !== '' ? cols[mapping.name] : '',
+        company: mapping.company !== '' ? cols[mapping.company] : '',
         email: mapping.email !== '' ? cols[mapping.email] : '',
         website: mapping.website !== '' ? cols[mapping.website] : '',
         phone: mapping.phone !== '' ? cols[mapping.phone] : '',
         sector: mapping.sector !== '' ? cols[mapping.sector] : '',
-      })).filter(r => r.name?.trim())
-      const res = await db.outreachImportProspectsCsv(organizationId, rows)
-      showToast(`${res.inserted} prospects geïmporteerd${res.duplicates ? ` (${res.duplicates} mogelijke duplicaten gemarkeerd)` : ''}${res.emailsAdded ? `, ${res.emailsAdded} met e-mailadres` : ''}${res.failed ? `, ${res.failed} overgeslagen` : ''}`)
+      })).filter(r => r.company?.trim())
+      const created = await db.importContactsCsv(organizationId, rows)
+      showToast(`${created.length} contacten geïmporteerd${rows.length !== created.length ? ` (${rows.length - created.length} overgeslagen, al bekend)` : ''}`)
       onDone()
       onClose()
     } catch (e) { setError(e.message) }
@@ -87,10 +87,10 @@ export default function ImportCsvModal({ organizationId, onClose, onDone }) {
   return (
     <div className="modal-bg open" onClick={onClose}>
       <div className="modal" style={{ width: 620 }} onClick={e => e.stopPropagation()}>
-        <h3>Prospects importeren uit CSV</h3>
+        <h3>Contacten importeren uit CSV</h3>
         {!parsed ? (
           <div className="form-group">
-            <label>CSV-bestand (bijv. export vanuit Mailmeteor)</label>
+            <label>CSV-bestand</label>
             <input type="file" accept=".csv,text/csv" onChange={onFile} />
           </div>
         ) : (
@@ -113,7 +113,7 @@ export default function ImportCsvModal({ organizationId, onClose, onDone }) {
         {error && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 10 }}>{error}</div>}
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuleren</button>
-          {parsed && <button type="button" className="btn btn-primary" disabled={importing} onClick={doImport}>{importing ? 'Importeren…' : `Importeer ${parsed.data.length} prospects`}</button>}
+          {parsed && <button type="button" className="btn btn-primary" disabled={importing} onClick={doImport}>{importing ? 'Importeren…' : `Importeer ${parsed.data.length} contacten`}</button>}
         </div>
       </div>
     </div>

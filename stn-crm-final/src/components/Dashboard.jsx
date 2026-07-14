@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import * as db from '../lib/db'
 import ProfileView from './ProfileView.jsx'
 import PipelineView from './PipelineView.jsx'
-import OutreachView from './OutreachView.jsx'
+import ContactsView from './ContactsView.jsx'
 import OnboardingWizard, { ONBOARDING_STEPS } from './OnboardingWizard.jsx'
 import MonitorTab from './websites/MonitorTab.jsx'
 import LicensesTab from './websites/LicensesTab.jsx'
@@ -204,10 +204,7 @@ function SkeletonScreen() {
 }
 
 export default function Dashboard({ session, isPlatformAdmin, onOpenAdmin }) {
-  // Google's OAuth-redirect (Gmail-koppeling) landt op '/', met ?code=... in
-  // de URL — forceer dan de Team-pagina zodat TeamView kan mounten en de
-  // callback kan afhandelen, in plaats van standaard op Overzicht te landen.
-  const [view, setView] = useState(() => new URLSearchParams(window.location.search).get('gmail_oauth') === 'callback' ? 'team' : 'overview')
+  const [view, setView] = useState('overview')
   const [profile, setProfile] = useState(null)
   const [myOrganizations, setMyOrganizations] = useState([])
   const [activeOrgId, setActiveOrgId] = useState(null)
@@ -933,6 +930,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdmin }) {
         <div className="sidebar2-section">
           <div className="sidebar2-section-label">Overzicht</div>
           {navItem('overview', 'Dashboard', view==='overview')}
+          {navItem('contacts', 'Contacten', view==='contacts')}
           {navItem('clients', 'Klanten', ['clients','client-detail'].includes(view))}
           {navItem('projects', 'Projecten', ['projects','project-detail'].includes(view))}
           {navItem('tasks', 'Taken', view==='tasks')}
@@ -945,7 +943,6 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdmin }) {
         <div className="sidebar2-section">
           <div className="sidebar2-section-label">Beheer</div>
           {navItem('pipeline', 'Pipeline', view==='pipeline')}
-          {navItem('outreach', 'Outreach', view==='outreach')}
           {navItem('finance', 'Financiën', view==='finance')}
           {navItem('hosting', 'Websites', view==='hosting')}
         </div>
@@ -994,7 +991,7 @@ export default function Dashboard({ session, isPlatformAdmin, onOpenAdmin }) {
             {view==='hosting' && <WebsitesView allHosting={allHosting} clients={clients} projects={projects} showView={showView} onRefresh={loadAll} activeOrgId={activeOrgId} />}
             {view==='profile' && <ProfileView session={session} onProfileUpdate={p => { setProfile(p); applyProfileTheme(p) }} myRole={myRole} onRestartOnboarding={restartOnboardingWizard} />}
             {view==='pipeline' && <PipelineView showView={showView} onRefresh={loadAll} organizationId={activeOrgId} />}
-            {view==='outreach' && <OutreachView organizationId={activeOrgId} />}
+            {view==='contacts' && <ContactsView organizationId={activeOrgId} />}
             {view==='team' && myRole === 'owner' && <TeamView members={orgMembers} onRefresh={loadMembers} myProfile={profile} activeOrgId={activeOrgId} />}
             {view==='company-settings' && myRole === 'owner' && <CompanySettingsView activeOrgId={activeOrgId} orgName={orgName} settings={companySettings} onRefresh={() => { loadCompanySettings(); loadOrganizations() }} onAddWorkspace={() => setShowNewWorkspace(true)} />}
           </motion.div>
@@ -2077,95 +2074,50 @@ function ProjectDetailView({ project, clients, clientName, showView, onRefresh, 
   )
 }
 
-const FLOW_QUEUE_TABS = [['due', 'Due'], ['upcoming', 'Upcoming'], ['done', 'Done']]
-const FLOW_DONE_LABEL = { completed: 'Afgerond', stopped: 'Gestopt' }
-
-function OutreachFlowQueue({ activeOrgId }) {
-  const [tab, setTab] = useState('due')
-  const [queue, setQueue] = useState([])
+function ContactTasksQueue({ activeOrgId }) {
+  const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
-  const [everUsed, setEverUsed] = useState(false)
-  const [busyId, setBusyId] = useState(null)
 
   const refresh = useCallback(() => {
     if (!activeOrgId) return
     setLoading(true)
-    db.outreachGetFlowQueue(activeOrgId, tab).then(d => { setQueue(d.queue); if (d.queue.length) setEverUsed(true) }).catch(() => {}).finally(() => setLoading(false))
-  }, [activeOrgId, tab])
+    db.getAllContactTasks(activeOrgId).then(setTasks).catch(() => {}).finally(() => setLoading(false))
+  }, [activeOrgId])
   useEffect(() => { refresh() }, [refresh])
 
-  async function approve(flowStateId) {
-    setBusyId(flowStateId)
-    try {
-      const res = await db.outreachApproveFlowStep(activeOrgId, flowStateId)
-      showToast(res.queued ? res.reason : 'Mail verstuurd')
-      refresh()
-    } catch (e) { showToast(e.message, 'error') }
-    finally { setBusyId(null) }
-  }
-  async function skip(flowStateId) {
-    setBusyId(flowStateId)
-    try { await db.outreachSkipFlowStep(activeOrgId, flowStateId); showToast('Stap overgeslagen'); refresh() }
+  async function toggleDone(task) {
+    try { await db.updateContactTask(task.id, { status: 'done' }); refresh() }
     catch (e) { showToast(e.message, 'error') }
-    finally { setBusyId(null) }
-  }
-  async function stop(flowStateId) {
-    if (!confirm('Deze flow stopzetten voor deze prospect?')) return
-    setBusyId(flowStateId)
-    try { await db.outreachStopFlow(activeOrgId, flowStateId); showToast('Flow gestopt'); refresh() }
-    catch (e) { showToast(e.message, 'error') }
-    finally { setBusyId(null) }
   }
 
-  if (!everUsed && !queue.length && tab === 'due' && !loading) return null
+  if (!loading && !tasks.length) return null
 
   return (
     <div className="sc" style={{ marginBottom: 20 }}>
-      <div className="sc-head">
-        <span className="sc-title">📨 Outreach — goedkeuringen</span>
-        <div className="tabs" style={{ marginBottom: -14 }}>
-          {FLOW_QUEUE_TABS.map(([k, label]) => (
-            <button key={k} className={`tab${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>{label}</button>
-          ))}
-        </div>
-      </div>
+      <div className="sc-head"><span className="sc-title">🧑‍💼 Contact-taken</span></div>
       <div className="sc-body" style={{ padding: 0 }}>
-        {loading ? <div style={{ padding: 16, fontSize: 13, color: 'var(--text-muted)' }}>Laden…</div> : !queue.length ? (
-          <div style={{ padding: 16, fontSize: 13, color: 'var(--text-faint)' }}>
-            {tab === 'due' ? 'Niets klaar om goed te keuren.' : tab === 'upcoming' ? 'Niets gepland.' : 'Nog niets afgerond.'}
-          </div>
-        ) : (
+        {loading ? <div style={{ padding: 16, fontSize: 13, color: 'var(--text-muted)' }}>Laden…</div> : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
-                {['Prospect', 'Flow', 'Stap', 'Voorbeeld', 'Due date', ''].map(h => (
+                {['Contact', 'Taak', 'Deadline', ''].map(h => (
                   <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {queue.map(fs => {
-                const busy = busyId === fs.id
-                return (
-                  <tr key={fs.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '12px 14px', fontWeight: 500 }}>{fs.outreach_prospects.name}</td>
-                    <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{fs.outreach_flows.name}</td>
-                    <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{fs.current_step}{fs.stepPreview?.isLastStep ? ' (laatste)' : ''}</td>
-                    <td style={{ padding: '12px 14px', color: 'var(--text-muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {tab === 'done' ? (FLOW_DONE_LABEL[fs.status] || fs.status) : (fs.stepPreview?.subject || '—')}
-                    </td>
-                    <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{fdate(fs.scheduled_send_at?.slice(0, 10))}</td>
-                    <td style={{ padding: '12px 14px' }}>
-                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                        {tab === 'due' && fs.status !== 'queued' && <button className="btn btn-primary btn-xs" disabled={busy} onClick={() => approve(fs.id)}>Goedkeuren</button>}
-                        {tab === 'due' && fs.status !== 'queued' && <button className="btn btn-ghost btn-xs" disabled={busy} onClick={() => skip(fs.id)}>Overslaan</button>}
-                        {tab === 'due' && fs.status === 'queued' && <span style={{ fontSize: 11, color: 'var(--amber-text)' }}>Wacht op verzendruimte</span>}
-                        {tab !== 'done' && <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red-text)' }} disabled={busy} onClick={() => stop(fs.id)}>Flow stoppen</button>}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
+              {tasks.map(t => (
+                <tr key={t.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '12px 14px', fontWeight: 500 }}>{t.contacts?.company || t.contacts?.contact_name || '—'}</td>
+                  <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{t.title}</td>
+                  <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{t.deadline ? fdate(t.deadline) : '—'}</td>
+                  <td style={{ padding: '12px 14px' }}>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <button className="btn btn-ghost btn-xs" onClick={() => toggleDone(t)}>Afronden</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
@@ -2208,7 +2160,7 @@ function TasksView({ allTasks, showView, activeOrgId }) {
         </select>
       </div>
       <div className="content">
-        <OutreachFlowQueue activeOrgId={activeOrgId} />
+        <ContactTasksQueue activeOrgId={activeOrgId} />
         <div className="sc"><div className="sc-body">
           {!filtered.length ? (
             <EmptyState icon={EmptyIcons.tasks} title="Geen open taken" sub="Alle taken zijn afgerond, of er zijn er nog geen. Taken voeg je toe vanuit een project."
@@ -2852,70 +2804,12 @@ function TeamView({ members, onRefresh, myProfile, activeOrgId }) {
   const [email, setEmail] = useState('')
   const [inviting, setInviting] = useState(false)
   const ownerCount = members.filter(m => m.role === 'owner').length
-  const [gmailStatus, setGmailStatus] = useState(null)
-  const [gmailBusy, setGmailBusy] = useState(false)
-  const [sendSettings, setSendSettings] = useState({ outreach_daily_send_limit: 30, outreach_throttle_seconds: 60 })
-  const [sendSettingsSaving, setSendSettingsSaving] = useState(false)
+  const [webhook, setWebhook] = useState(null)
 
-  const refreshGmailStatus = useCallback(() => {
-    if (!activeOrgId) return
-    db.outreachGmailStatus(activeOrgId).then(setGmailStatus).catch(() => {})
-  }, [activeOrgId])
-
-  useEffect(() => { refreshGmailStatus() }, [refreshGmailStatus])
   useEffect(() => {
     if (!activeOrgId) return
-    db.getCompanySettings(activeOrgId).then(s => {
-      if (s) setSendSettings({ outreach_daily_send_limit: s.outreach_daily_send_limit ?? 30, outreach_throttle_seconds: s.outreach_throttle_seconds ?? 60 })
-    }).catch(() => {})
+    db.getWebhookEndpoint(activeOrgId).then(setWebhook).catch(() => {})
   }, [activeOrgId])
-
-  async function saveSendSettings(patch) {
-    const next = { ...sendSettings, ...patch }
-    setSendSettings(next)
-    setSendSettingsSaving(true)
-    try { await db.upsertCompanySettings(activeOrgId, patch) }
-    catch (e) { showToast('Fout bij opslaan: ' + e.message, 'error') }
-    finally { setSendSettingsSaving(false) }
-  }
-
-  // Google stuurt na de OAuth-toestemming terug naar deze pagina met ?code=...
-  // in de URL — dat ruilen we hier in voor tokens, éénmalig bij het laden.
-  // redirectUri moet EXACT gelijk zijn aan wat in connectGmail() naar Google
-  // is gestuurd, anders weigert Google's tokendienst de uitwisseling.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('gmail_oauth') !== 'callback' || !activeOrgId) return
-    const code = params.get('code')
-    window.history.replaceState({}, '', window.location.pathname)
-    if (!code) return
-    setGmailBusy(true)
-    db.outreachGmailOAuthExchange(activeOrgId, code, `${window.location.origin}/?gmail_oauth=callback`)
-      .then(res => {
-        if (res.watchWarning) showToast(`Gmail gekoppeld, maar reply-tracking nog niet actief: ${res.watchWarning}`, 'error')
-        else showToast('Gmail gekoppeld')
-        refreshGmailStatus()
-      })
-      .catch(e => showToast('Koppelen mislukt: ' + e.message, 'error'))
-      .finally(() => setGmailBusy(false))
-  }, [activeOrgId, refreshGmailStatus])
-
-  function connectGmail() {
-    const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID
-    if (!clientId) return showToast('VITE_GOOGLE_OAUTH_CLIENT_ID is niet ingesteld.', 'error')
-    const redirectUri = `${window.location.origin}/?gmail_oauth=callback`
-    const scope = 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly'
-    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`
-    window.location.href = url
-  }
-
-  async function disconnectGmail() {
-    if (!confirm('Gmail-koppeling verwijderen? Outreach-flows kunnen dan niet meer versturen.')) return
-    setGmailBusy(true)
-    try { await db.outreachGmailDisconnect(activeOrgId); refreshGmailStatus() }
-    catch (e) { showToast(e.message, 'error') }
-    finally { setGmailBusy(false) }
-  }
 
   async function invite() {
     if (!email.trim()) return
@@ -2962,47 +2856,15 @@ function TeamView({ members, onRefresh, myProfile, activeOrgId }) {
           </div>
         </div>
         <div className="sc">
-          <div className="sc-head"><span className="sc-title">Gmail-koppeling voor Outreach</span></div>
+          <div className="sc-head"><span className="sc-title">Mailmeteor-webhook</span></div>
           <div className="sc-body">
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-              Outreach-flows versturen mails namens dit gekoppelde Gmail/Google Workspace-account. Eén koppeling voor de hele werkruimte.
+              Zet in Zapier een webhook-stap die bij elk Mailmeteor-event (verstuurd/geopend/geklikt/beantwoord) een POST doet naar deze URL, met in de body <code>{'{ "email": ..., "event": ..., "timestamp": ... }'}</code>. De CRM zoekt/maakt het Contact en werkt tijdlijn, leadscore en status bij.
             </p>
-            {gmailStatus?.connected ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 13 }}>✅ Gekoppeld als <strong>{gmailStatus.gmailEmail}</strong></span>
-                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red-text)' }} disabled={gmailBusy} onClick={disconnectGmail}>Loskoppelen</button>
-              </div>
-            ) : (
-              <button className="btn btn-primary btn-sm" disabled={gmailBusy} onClick={connectGmail}>{gmailBusy ? 'Bezig…' : 'Gmail koppelen'}</button>
-            )}
-          </div>
-        </div>
-        <div className="sc">
-          <div className="sc-head"><span className="sc-title">Verzendinstellingen</span></div>
-          <div className="sc-body">
-            <div className="form-row">
-              <div className="form-group">
-                <label>Dagelijks maximum aantal mails</label>
-                <input type="number" min="1" value={sendSettings.outreach_daily_send_limit}
-                  onChange={e => setSendSettings(s => ({ ...s, outreach_daily_send_limit: Number(e.target.value) }))}
-                  onBlur={e => saveSendSettings({ outreach_daily_send_limit: Number(e.target.value) })} />
-              </div>
-              <div className="form-group">
-                <label>Tijd tussen verzendingen</label>
-                <select value={sendSettings.outreach_throttle_seconds} onChange={e => saveSendSettings({ outreach_throttle_seconds: Number(e.target.value) })}>
-                  <option value={0}>Direct</option>
-                  <option value={60}>1 minuut</option>
-                  <option value={300}>5 minuten</option>
-                  <option value={900}>15 minuten</option>
-                </select>
-              </div>
-            </div>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-              Deze instelling staat klaar, maar heeft nu nog geen zichtbaar effect: onze automatische verzending draait op een dagelijkse cron-taak
-              (Vercel Hobby-plan draait taken hoogstens 1x per dag). Pas bij een upgrade naar Vercel Pro (die vaker per dag kan draaien) gaat verzending
-              ook echt gespreid over de dag plaatsvinden. Het dagelijkse maximum hierboven werkt wel al.
-            </p>
-            {sendSettingsSaving && <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 6 }}>Opslaan…</div>}
+            {webhook ? (
+              <input readOnly value={`${window.location.origin}/api/webhooks?org=${webhook.organization_id}&secret=${webhook.secret}`}
+                onFocus={e => e.target.select()} style={{ fontSize: 12, fontFamily: 'monospace' }} />
+            ) : <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>Laden…</div>}
           </div>
         </div>
         <div className="sc">

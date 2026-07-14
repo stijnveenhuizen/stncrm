@@ -280,8 +280,14 @@ function ProspectCard({ prospect: p, stage, activityCount, onClick, onRefresh })
         {p.snoozed_until && (
           <div style={{ position: 'absolute', top: 8, right: 8, fontSize: 11, color: 'var(--text-muted-tok)', display: 'flex', alignItems: 'center', gap: 3, zIndex: 1 }}>🌙</div>
         )}
-        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{p.fname} {p.lname}</div>
-        {p.company && <div style={{ fontSize: 12, color: 'var(--text-muted-tok)', marginBottom: 6 }}>{p.company}</div>}
+        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{p.contacts?.company || p.company || `${p.fname} ${p.lname}`}</div>
+        {(p.contacts?.contact_name || p.company) && <div style={{ fontSize: 12, color: 'var(--text-muted-tok)', marginBottom: 6 }}>{p.contacts?.contact_name || p.company}</div>}
+        {p.contacts && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-muted-tok)', marginBottom: 6 }}>
+            <span title="Leadscore">🔥 {p.contacts.leadscore}</span>
+            {p.contacts.last_activity_at && <span>· {fdate(p.contacts.last_activity_at.slice(0, 10))}</span>}
+          </div>
+        )}
         {p.snoozed_until ? (
           <div style={{ fontSize: 11, color: 'var(--text-muted-tok)', marginTop: 6 }}>Actief op {fdate(p.snoozed_until)}</div>
         ) : (
