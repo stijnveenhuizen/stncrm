@@ -23,5 +23,6 @@ alter table company_settings drop column if exists outreach_daily_send_limit;
 alter table company_settings drop column if exists outreach_throttle_seconds;
 
 -- Storage-bucket voor afbeeldingen in flow-mailteksten (OUTREACH_FLOW_CANVAS_SETUP.sql).
-delete from storage.objects where bucket_id = 'outreach-images';
-delete from storage.buckets where id = 'outreach-images';
+-- Supabase blokkeert directe deletes op storage.objects/storage.buckets via
+-- SQL (protect_delete-trigger) — verwijder de bucket "outreach-images"
+-- handmatig via Dashboard → Storage, dit script raakt 'm niet meer aan.
